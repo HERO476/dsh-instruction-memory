@@ -1,0 +1,7 @@
+# dsh-instruction-memory bundle patch: mount the Host row under its package
+# name, resolved through the profile's node_modules. The Client half is picked
+# up automatically from the package's `dsh.client` declaration.
+
+- insert:
+    - id: instruction-memory
+      name: dsh-instruction-memory
