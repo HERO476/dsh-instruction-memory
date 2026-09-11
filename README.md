@@ -57,11 +57,10 @@ DSH 就会得到第二份空记忆，看起来像"记忆消失"。
 ## 发布（维护者）
 
 ```sh
-# 1. 替换占位符：package.json 的 repository / homepage / bugs / author，以及 LICENSE 版权行
-# 2. 自检（prepublishOnly 也会自动跑，占位符未替换会中止发布）
+# 1. 自检（prepublishOnly 也会自动跑，占位符未替换会中止发布）
 npm test
 node check-metadata.mjs
-# 3. 发布（需先 npm login）
+# 2. 发布（需先 npm login）
 npm publish
 ```
 
