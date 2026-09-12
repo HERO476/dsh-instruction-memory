@@ -2,6 +2,18 @@
 
 在 DSH 设置界面中维护**长期指令记忆**：保存后自动注入此后每一轮对话的系统提示词。
 
+## 安装
+
+```sh
+dsh plugin --profile web add dsh-instruction-memory
+```
+
+装完重启 DSH，设置页会出现「指令记忆」入口。卸载：
+
+```sh
+dsh plugin --profile web remove dsh-instruction-memory
+```
+
 ## 只由用户本人维护
 
 **这份记忆的内容只属于用户。** 本插件刻意**不注册任何面向模型的工具**——模型没有任何
