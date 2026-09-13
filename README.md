@@ -83,6 +83,11 @@ major.minor.patch 且自身带预发布标签的比较符"。因此看起来很�
 
 **未验证范围**：macOS / Linux、`headless` 与 `tui` profile、以及上表之外的其他 DSH 版本均未实测。
 
+**同一串范围写在两处**：`dsh.compatibility.dsh`（插件自己的字段）与 `dsh.engines.dsh`（插件市场**实际读取**的位置）。
+市场只读 `engines.dsh` / `dsh.engines.dsh` 以及 `@deepseek-ai/dsh*` 的 `peerDependencies`，并不读 `dsh.compatibility.dsh`。
+从 1.0.4 起宿主要求会真实出现在市场卡片上，并生效于安装前的校验：**范围之外的宿主上，市场会把本插件从列表中隐藏并拒绝安装/更新**
+（市场只隐藏"确认不兼容"的条目；"未声明"或"无法确认"的条目照常显示）。范围之外的宿主仍可自行用 `dsh plugin add` 安装，只是不再被市场担保。
+
 ## 发布（维护者）
 
 ```sh
