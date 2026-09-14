@@ -2,17 +2,21 @@
  * Pre-restart verification: load both halves the way DSH will.
  *   node verify.mjs
  *
- * Host  half: imported through the profile junction, asserted for export shape.
+ * Host  half: imported from the repo (the profile junction links to it, see
+ *             install.mjs), asserted for export shape.
  * Client half: executed against a stub ModuleLoader / slots service, asserting
  *              that it registers the settings page without throwing.
  */
-const PROFILE_NM = 'file:///C:/Users/34332/.dsh/profiles/web/node_modules/dsh-instruction-memory'
+import { fileURLToPath } from 'node:url'
+
+// The repo files are what the profile junction points at (install.mjs links
+// them), so loading locally keeps `npm test` working on a fresh clone.
+const HOST_URL = new URL('./lib/index.js', import.meta.url).href
+const CLIENT_URL = new URL('./lib/client.js', import.meta.url).href
 
 // The Host resolves its data file under the harness home; pin it to a scratch
 // directory so this suite can never read or write the user's real store.
-process.env.DSH_HOME = decodeURIComponent(
-  new URL('./.test-dsh-home/', import.meta.url).pathname.replace(/^\//, ''),
-)
+process.env.DSH_HOME = fileURLToPath(new URL('./.test-dsh-home/', import.meta.url))
 
 let failures = 0
 const check = (label, ok, detail) => {
@@ -22,7 +26,7 @@ const check = (label, ok, detail) => {
 
 /* ---------------- Host half ---------------- */
 
-const host = await import(PROFILE_NM + '/lib/index.js')
+const host = await import(HOST_URL)
 check('host: exports name', host.name === 'instruction-memory', String(host.name))
 check('host: inject declares every consumed service (regression: a one-shot ctx.get lost webServer)',
   Array.isArray(host.inject)
@@ -115,7 +119,7 @@ const requireStub = (id) => {
   throw new Error('unexpected require: ' + id)
 }
 
-await import(PROFILE_NM + '/lib/client.js')
+await import(CLIENT_URL)
 
 check('client: called window.__ModuleLoader__.load', captured !== null)
 check('client: module id matches package name', captured && captured.id === 'dsh-instruction-memory',

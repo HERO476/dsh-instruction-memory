@@ -1,6 +1,6 @@
 {
   "name": "dsh-instruction-memory",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "DSH 指令记忆：在设置界面中维护可增删改的长期指令，并自动注入此后每一轮对话的系统提示词。",
   "license": "MIT",
   "type": "module",

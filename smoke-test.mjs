@@ -100,7 +100,6 @@ check('truncation is labelled', huge, (v) => v.includes('被截断'))
   check('budget sweep: never over ceiling, never empty', bad, (v) => v === null)
 }
 
-console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')
 // ---- storage location: the harness home, never the working directory ----
 //
 // Regression guard. The first build resolved its data file against the harness

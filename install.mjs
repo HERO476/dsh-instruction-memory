@@ -12,10 +12,18 @@
  * The profile package.json is backed up before the first modification.
  */
 import { existsSync, readFileSync, writeFileSync, symlinkSync, rmSync, unlinkSync, copyFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { homedir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const PROF = 'C:\\Users\\34332\\.dsh\\profiles\\web'
-const SRC = 'D:\\Users\\34332\\AI\\dsh-instruction-memory'
+// Profile location follows the same precedence as @deepseek-ai/dsh-home-paths
+// (and this plugin's own store resolution): explicit $DSH_HOME, else ~/.dsh.
+const DSH_HOME = typeof process.env.DSH_HOME === 'string' && process.env.DSH_HOME.trim() !== ''
+  ? process.env.DSH_HOME.trim()
+  : join(homedir(), '.dsh')
+const PROF = join(DSH_HOME, 'profiles', 'web')
+// This script lives in the package root, so the source is wherever it runs from.
+const SRC = dirname(fileURLToPath(import.meta.url))
 const NAME = 'dsh-instruction-memory'
 
 const remove = process.argv.includes('--remove')
@@ -66,6 +74,11 @@ if (remove) {
 // ---- install ----
 if (!existsSync(SRC)) {
   console.error('source package not found: ' + SRC)
+  process.exit(1)
+}
+
+if (!existsSync(join(PROF, 'package.json'))) {
+  console.error('web profile not found at ' + PROF + '（DSH 尚未初始化该 profile？）')
   process.exit(1)
 }
 
