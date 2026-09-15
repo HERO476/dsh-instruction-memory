@@ -1,7 +1,7 @@
 {
   "name": "dsh-instruction-memory",
-  "version": "1.0.5",
-  "description": "DSH 指令记忆：在设置界面中维护可增删改的长期指令，并自动注入此后每一轮对话的系统提示词。",
+  "version": "1.0.6",
+  "description": "User-only instruction memory for DSH: long-term instructions maintained in the settings UI and auto-injected into every conversation — the model has no write access. 指令记忆：只由用户在设置页维护的长期指令，自动注入此后每轮对话；模型没有任何写入口。",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -33,10 +33,15 @@
     "dsh",
     "dsh-plugin",
     "deepseek-harness",
-    "cordis",
     "instruction-memory",
+    "memory",
+    "记忆",
+    "instructions",
+    "custom-instructions",
+    "persistent-instructions",
     "system-prompt",
-    "settings"
+    "settings",
+    "cordis"
   ],
   "engines": {
     "node": ">=20"

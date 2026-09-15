@@ -107,12 +107,19 @@ check('truncation is labelled', huge, (v) => v.includes('被截断'))
 // another directory then produced a second, empty store and the user's
 // memories appeared to vanish.
 
-const FAKE_HOME = join('C:', 'Users', 'example')
+// Path fixtures are built with join() on platform-appropriate roots, so the
+// same assertions hold on Windows CI and a POSIX checkout.
+const FAKE_HOME = process.platform === 'win32'
+  ? join('C:', 'Users', 'example')
+  : join('/', 'home', 'example')
+const ALT_ROOT = process.platform === 'win32'
+  ? join('D:', 'harness-home')
+  : join('/', 'opt', 'harness-home')
 const EXPECTED = join('instruction-memory', 'memory.json')
 
 check('store path honours an explicit $DSH_HOME',
-  resolveStorePath({ DSH_HOME: join('D:', 'harness-home') }, FAKE_HOME),
-  (v) => v === join('D:', 'harness-home', EXPECTED))
+  resolveStorePath({ DSH_HOME: ALT_ROOT }, FAKE_HOME),
+  (v) => v === join(ALT_ROOT, EXPECTED))
 
 check('blank $DSH_HOME falls back to ~/.dsh, never to cwd',
   resolveStorePath({ DSH_HOME: '   ' }, FAKE_HOME),
@@ -174,4 +181,5 @@ check('a multi-line 适用场景 is collapsed',
     header, (v) => v === '[始终｜优先级 普通] 第一行')
 }
 
+console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')
 process.exit(failures === 0 ? 0 : 1)

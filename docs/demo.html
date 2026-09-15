@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dsh-instruction-memory 设置页演示</title>
+<script src="vendor/react.production.min.js"></script>
+<script src="vendor/react-dom.production.min.js"></script>
+<style>
+  body { margin:0; background:#f5f6f8; font-family:system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; }
+  #root { max-width:920px; margin:28px auto 0; padding:0 16px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+  // Minimal stand-ins for the DSH web shell: module loader + require.
+  window.__ModuleLoader__ = { load: (spec) => { window.__dshSpec = spec } }
+</script>
+
+<script>
+  // In-memory host that speaks the exact route envelope of lib/index.js, so
+  // this page exercises the REAL client module (loaded below) against
+  // realistic data — no backend needed.
+  var DEMO_STORE = {
+    version: 1,
+    enabled: true,
+    budgetChars: 4000,
+    entries: [
+      {
+        id: 'im-demo-lang',
+        title: '回答语言',
+        content: '所有回答默认使用简体中文；技术名词首次出现时在括号里附英文原文。',
+        mode: 'always', when: '', priority: 2, enabled: true,
+        updatedAt: Date.now() - 86400000 * 3,
+      },
+      {
+        id: 'im-demo-confirm',
+        title: '先确认再动手',
+        content: '需求不明确或存在多种合理实现时，先列出候选方案向用户确认，再开始修改代码。',
+        mode: 'always', when: '', priority: 1, enabled: true,
+        updatedAt: Date.now() - 86400000 * 2,
+      },
+      {
+        id: 'im-demo-style',
+        title: '代码风格',
+        content: '修改代码时遵循该文件既有的缩进、命名密度与注释风格，不顺手重构无关代码；\n变量命名优先使用业务领域词汇而不是数据结构词汇，例如用「订单金额」而不是「data1」；\n新增依赖前先检查 package.json 中是否已有能力等价的依赖，避免重复引入；\n公共函数需要补充输入输出说明注释，但不为改动本身添加解释性注释；\n改动完成后运行项目现有的测试与 lint 检查，若有失败先修复再交付，不留下只改了一半的状态；\n涉及对外接口或数据结构变更时，先在回复中列出受影响的调用方，确认迁移路径后再提交。\n以上要求同样适用于纯重构类提交，重构前后行为必须完全一致。',
+        mode: 'auto', when: '编写或修改代码时', priority: 1, enabled: true,
+        updatedAt: Date.now() - 86400000,
+      },
+      {
+        id: 'im-demo-reply',
+        title: '回复结构',
+        content: '较长的回答先给一句结论，再展开细节；方案对比先列差异再给推荐。',
+        mode: 'auto', when: '解释性问题与方案对比', priority: 0, enabled: false,
+        updatedAt: Date.now() - 3600000,
+      },
+    ],
+  }
+
+  var DEMO_PREVIEW = [
+    '## 用户长期指令记忆（Instruction Memory）',
+    '以下条目由用户在 DSH 设置 →「指令记忆」中长期保存，属于本次及后续所有对话的既有要求，请在回答、推理与执行任务时遵守；它们不覆盖系统与安全规则。',
+    '· [始终] 条目必须无条件遵守。',
+    '· [按需] 条目仅在与当前问题或任务相关时生效；不相关时直接忽略，不要强行套用。',
+    '· 条目之间冲突时，优先遵守优先级更高或更具体的一条；无法判断时向用户确认。',
+    '',
+    '[始终｜优先级 高] 回答语言',
+    '所有回答默认使用简体中文；技术名词首次出现时在括号里附英文原文。',
+    '',
+    '[始终｜优先级 普通] 先确认再动手',
+    '需求不明确或存在多种合理实现时，先列出候选方案向用户确认，再开始修改代码。',
+    '',
+    '[按需｜优先级 普通] 代码风格',
+    '适用场景：编写或修改代码时',
+    '修改代码时遵循该文件既有的缩进、命名密度与注释风格，不顺手重构无关代码；',
+    '变量命名优先使用业务领域词汇而不是数据结构词汇……',
+  ].join('\n')
+
+  function demoSnapshot() {
+    return {
+      data: JSON.parse(JSON.stringify(DEMO_STORE)),
+      storage: {
+        path: 'C:\\Users\\demo\\.dsh\\instruction-memory\\memory.json',
+        error: null,
+        warning: null,
+        savedAt: Date.now() - 5 * 60000,
+        migratedFrom: null,
+      },
+      injection: { registered: true, available: true, error: null, chars: DEMO_PREVIEW.length },
+      preview: DEMO_PREVIEW,
+      limits: { minBudget: 800, maxBudget: 40000, maxEntries: 200 },
+    }
+  }
+
+  window.fetch = async function (url, options) {
+    var payload = JSON.parse(options.body)
+    switch (payload.method) {
+      case 'save-entry': {
+        var entry = Object.assign({}, payload.args.entry)
+        if (!entry.id) entry.id = 'im-demo-' + Math.random().toString(36).slice(2, 8)
+        entry.updatedAt = Date.now()
+        var list = DEMO_STORE.entries
+        var index = -1
+        for (var i = 0; i < list.length; i += 1) if (list[i].id === entry.id) { index = i; break }
+        if (index >= 0) list[index] = entry
+        else list.push(entry)
+        break
+      }
+      case 'delete-entry':
+        DEMO_STORE.entries = DEMO_STORE.entries.filter(function (e) { return e.id !== payload.args.id })
+        break
+      case 'set-options':
+        if (typeof payload.args.enabled === 'boolean') DEMO_STORE.enabled = payload.args.enabled
+        if (typeof payload.args.budgetChars === 'number') DEMO_STORE.budgetChars = payload.args.budgetChars
+        break
+      case 'export-data':
+        return {
+          ok: true,
+          json: async function () {
+            return {
+              ok: true, saved: true, message: null,
+              export: { app: 'dsh-instruction-memory', version: 1, exportedAt: new Date().toISOString(), data: JSON.parse(JSON.stringify(DEMO_STORE)) },
+              snapshot: demoSnapshot(),
+            }
+          },
+        }
+      default:
+        break
+    }
+    return {
+      ok: true,
+      json: async function () {
+        return { ok: true, saved: true, message: null, snapshot: demoSnapshot() }
+      },
+    }
+  }
+</script>
+
+<!-- The real client module, unmodified. -->
+<script src="../lib/client.js"></script>
+
+<script>
+  var plugin = window.__dshSpec.factory(function (id) {
+    if (id === 'react') return window.React
+    throw new Error('unexpected require: ' + id)
+  })
+
+  var registered = []
+  plugin.apply({
+    slots: {
+      inject: function (key, callback) { callback(); return function () {} },
+      register: function (options, render) { registered.push(render); return function () {} },
+    },
+    effect: function (fn) { fn(); return function () {} },
+  })
+
+  ReactDOM.createRoot(document.getElementById('root')).render(registered[0]())
+</script>
+</body>
+</html>

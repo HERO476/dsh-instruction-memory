@@ -13,7 +13,7 @@
  * directory under .test-dsh-home, seeded with an over-cap memory.json so the
  * dropped-entries warning path is exercised too.
  */
-import { readdir, rm, writeFile } from 'node:fs/promises'
+import { readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -35,10 +35,11 @@ await rm(SCRATCH_HOME, { recursive: true, force: true })
 
 /* ---------------- minimal req/res doubles ---------------- */
 
-function makeRequest(body) {
+function makeRequest(body, headers) {
   const listeners = {}
   return {
     method: 'POST',
+    headers: headers || { 'content-type': 'application/json' },
     setEncoding() {},
     destroy() {},
     on(event, callback) {
@@ -215,6 +216,76 @@ for (const scenario of scenarios) {
     JSON.stringify(rejected.message))
 }
 
+// Rolling backup recovery: a corrupt memory.json must fall back to
+// memory.json.bak (the previous good version) instead of presenting an empty
+// memory — and the corrupt file itself stays on disk until the next save.
+{
+  // The last host write before this point renamed the previous state into
+  // .bak, so a usable backup exists here.
+  await writeFile(STORE_FILE, '{corrupted', 'utf8')
+
+  const recovered = normalize(await callRoute(handler, { method: 'reload', args: null }))
+  check('corrupt store: reload recovers from .bak', recovered.ok === true, JSON.stringify(recovered.message))
+  check('corrupt store: recovery is disclosed',
+    typeof recovered.snapshot.storage.warning === 'string' && recovered.snapshot.storage.warning.includes('回退'),
+    JSON.stringify(recovered.snapshot.storage.warning))
+  check('corrupt store: the backup data is usable',
+    Array.isArray(recovered.snapshot.data.entries) && recovered.snapshot.data.entries.length >= 1,
+    String(recovered.snapshot.data.entries.length))
+  check('corrupt store: the broken file is preserved on disk',
+    (await readFile(STORE_FILE, 'utf8')) === '{corrupted')
+
+  // The next save must overwrite the corrupt file and clear the recovery note.
+  const entry = recovered.snapshot.data.entries[0]
+  const resaved = normalize(await callRoute(handler, {
+    method: 'save-entry',
+    args: { entry: { ...entry, content: entry.content + ' (recovered)' } },
+  }))
+  check('corrupt store: saving after recovery reports ok', resaved.ok === true, JSON.stringify(resaved.message))
+  const cleared = normalize(await callRoute(handler, { method: 'reload', args: null }))
+  check('corrupt store: warning cleared once the file is good again',
+    cleared.snapshot.storage.warning === null, JSON.stringify(cleared.snapshot.storage.warning))
+}
+
+// Export must produce a self-describing payload; importing it back adds
+// nothing (duplicate detection); importing new entries merges them in —
+// import can never wipe what is already there.
+{
+  // Note: the export envelope travels on the RAW response — normalize() only
+  // carries { snapshot, ok, message }, exactly like the Client's doExport()
+  // reads result.export off the un-normalized JSON.
+  const raw = await callRoute(handler, { method: 'export-data', args: null })
+  check('export-data: ok with a self-describing payload',
+    raw.ok === true && raw.export !== undefined
+    && raw.export.app === 'dsh-instruction-memory'
+    && Array.isArray(raw.export.data.entries),
+    JSON.stringify(Object.keys(raw)))
+  const exported = normalize(raw)
+  check('export-data: normalized snapshot still consumable', exported !== null)
+
+  const again = normalize(await callRoute(handler, { method: 'import-data', args: { payload: raw.export } }))
+  check('import-data: re-importing the export adds nothing',
+    again.ok === true && again.message.includes('没有新增'), JSON.stringify(again.message))
+
+  const fresh = { entries: [
+    { title: 'IMPORTED-1', content: 'imported content one' },
+    { title: 'IMPORTED-2', content: 'imported content two' },
+    { title: 'IMPORTED-1', content: 'imported content one' },
+  ] }
+  const imported = normalize(await callRoute(handler, { method: 'import-data', args: { payload: fresh } }))
+  check('import-data: new entries merge in with minted ids',
+    imported.ok === true && imported.message.includes('新增 2 条'), JSON.stringify(imported.message))
+  const st = normalize(await callRoute(handler, { method: 'state', args: null }))
+  const importedEntries = st.snapshot.data.entries
+    .filter((e) => e.title === 'IMPORTED-1' || e.title === 'IMPORTED-2')
+  check('import-data: exactly two imported entries persisted with ids',
+    importedEntries.length === 2 && importedEntries.every((e) => typeof e.id === 'string' && e.id !== ''),
+    JSON.stringify(importedEntries.map((e) => e.title)))
+
+  const empty = normalize(await callRoute(handler, { method: 'import-data', args: { payload: { entries: [] } } }))
+  check('import-data: an empty file is refused with a message', empty.ok === false, JSON.stringify(empty.message))
+}
+
 // A body over the 1 MB ceiling must come back as a clean 413 the Client can
 // render, not a destroyed socket it can only report as a network failure.
 {
@@ -224,11 +295,25 @@ for (const scenario of scenarios) {
     'status=' + out.status)
 }
 
-// Atomic writes: the temp file must be gone after successful saves.
+// The route only speaks application/json: a cross-site form post (or any
+// other content type) must get a readable 415, not a confusing parse
+// failure. The 415 branch answers synchronously, before the body is read.
+{
+  const req = makeRequest('{}', { 'content-type': 'text/plain' })
+  const res = makeResponse()
+  handler(req, res)
+  req.fire()
+  check('non-JSON content-type answers 415',
+    res.read().status === 415 && JSON.parse(res.read().body).ok === false,
+    'status=' + res.read().status)
+}
+
+// Atomic writes: no temp leftovers, and the rolling backup is in place.
 {
   const files = await readdir(join(SCRATCH_HOME, 'instruction-memory'))
   check('no .tmp leftovers after saves',
     !files.some((name) => name.endsWith('.tmp')), JSON.stringify(files))
+  check('rolling backup memory.json.bak exists', files.includes('memory.json.bak'), JSON.stringify(files))
 }
 
 console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')

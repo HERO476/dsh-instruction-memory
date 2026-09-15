@@ -101,6 +101,7 @@ const ReactStub = {
   createElement: (type, props, ...children) => ({ type, props, children }),
   useState: (initial) => [initial, () => {}],
   useEffect: () => {},
+  useRef: () => ({ current: null }),
 }
 
 globalThis.window = {
