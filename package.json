@@ -1,6 +1,6 @@
 {
   "name": "dsh-instruction-memory",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "User-only instruction memory for DSH: long-term instructions maintained in the settings UI and auto-injected into every conversation — the model has no write access. 指令记忆：只由用户在设置页维护的长期指令，自动注入此后每轮对话；模型没有任何写入口。",
   "license": "MIT",
   "type": "module",
@@ -27,7 +27,8 @@
     "lib",
     "cordis.patch.yml",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "docs/screenshot.png"
   ],
   "keywords": [
     "dsh",

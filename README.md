@@ -4,7 +4,7 @@
 
 ![设置页截图](docs/screenshot.png)
 
-> 想先看看界面？`docs/demo.html` 无需安装 DSH，浏览器直接打开即可体验真实设置页（内置演示数据）。
+> 想先看看界面？在 [GitHub 仓库](https://github.com/HERO476/dsh-instruction-memory)中打开 `docs/demo.html`，无需安装 DSH，浏览器直接体验真实设置页（内置演示数据）。
 
 ## 安装
 
