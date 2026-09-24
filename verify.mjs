@@ -169,6 +169,13 @@ if (captured && typeof captured.factory === 'function') {
       check('client: registered into settings.section', options.name === 'settings.section', options.name)
       check('client: section id is instruction-memory', options.id === 'instruction-memory', options.id)
       check('client: section carries a label', options.label === '指令记忆', String(options.label))
+      // Regression guard: the order used to be 26, one above the official tail
+      // (archived-sessions 25). `settings.section` is a list slot, so a
+      // collision does not throw — it silently ties the render order. Pinning
+      // it high keeps this plugin clear of both official and third-party
+      // sections.
+      check('client: section order sits above every official and known third-party section',
+        typeof options.order === 'number' && options.order >= 1000, String(options.order))
       let rendered = null
       let renderThrew = null
       try {

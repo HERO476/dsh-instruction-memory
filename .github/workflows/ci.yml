@@ -19,5 +19,31 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # `npm test` runs host-range-test.mjs first, which pins the declared DSH
+      # compatibility range against a fixed version matrix under BOTH npm's
+      # default prerelease semantics and `includePrerelease: true`. Those two
+      # modes disagreeing on the installed host is exactly how the 0.1.6
+      # false negative shipped unnoticed — dshmarket reads the range with
+      # `includePrerelease: true` and said "compatible" while plain semver
+      # said "incompatible" for the same version.
       - run: npm test
       - run: node check-metadata.mjs
+
+  # The suite above installs no dependencies and resolves `semver` from the
+  # machine. Guard the range on the semver versions the ecosystem actually
+  # evaluates with, so a change in npm's gate handling cannot slip through on
+  # a runner that happens to resolve a different implementation.
+  host-range:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        semver: ['7.6.0', '7.8.5']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-save semver@${{ matrix.semver }}
+      - run: node host-range-test.mjs

@@ -3,3 +3,8 @@ node_modules/
 *.migrated
 .DS_Store
 Thumbs.db
+
+# Local agent/tooling state — not part of the package, never published
+# (`files` in package.json already excludes them from the tarball).
+.workbuddy/
+.zcode/
