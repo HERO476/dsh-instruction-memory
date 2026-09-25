@@ -13,7 +13,8 @@
  * directory under .test-dsh-home, seeded with an over-cap memory.json so the
  * dropped-entries warning path is exercised too.
  */
-import { readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -35,11 +36,17 @@ await rm(SCRATCH_HOME, { recursive: true, force: true })
 
 /* ---------------- minimal req/res doubles ---------------- */
 
+// A real HTTP/1.1 client always sends `Host`, and the route now requires a
+// loopback one whenever the server is bound to loopback (see the DNS-rebinding
+// note on requestOriginVerdict in lib/index.js). The doubles must therefore
+// carry it, or every scenario below would be answered with 403.
+const DEFAULT_HEADERS = { 'content-type': 'application/json', host: '127.0.0.1:8080' }
+
 function makeRequest(body, headers) {
   const listeners = {}
   return {
     method: 'POST',
-    headers: headers || { 'content-type': 'application/json' },
+    headers: headers || { ...DEFAULT_HEADERS },
     setEncoding() {},
     destroy() {},
     on(event, callback) {
@@ -65,8 +72,8 @@ function makeResponse() {
   }
 }
 
-async function rawRoute(handler, rawBody) {
-  const req = makeRequest(rawBody)
+async function rawRoute(handler, rawBody, headers) {
+  const req = makeRequest(rawBody, headers)
   const res = makeResponse()
   handler(req, res)
   req.fire()
@@ -89,12 +96,37 @@ async function callRoute(handler, payload) {
 const host = await import(new URL('./lib/index.js', import.meta.url).href)
 
 let handler = null
+// Captured so the regression guards at the end can assert what would actually
+// be injected, not just what the route reported.
+const sections = []
+const injectedText = () => sections
+  .map((section) => (typeof section.text === 'function' ? section.text({}) : section.text))
+  .filter((text) => text.length > 0)
+  .join('\n\n')
 {
   const ctx = {
-    systemPrompt: { section: () => () => {} },
-    get: (name) => (name === 'webServer'
-      ? { register: (route) => { handler = route.handler; return () => {} } }
-      : undefined),
+    systemPrompt: {
+      section: (spec) => {
+        sections.push(spec)
+        return () => {
+          const i = sections.indexOf(spec)
+          if (i >= 0) sections.splice(i, 1)
+        }
+      },
+    },
+    // `ctx.inject(deps, cb)` is how the route is registered; model the real
+    // child fiber by running the callback because webServer exists here.
+    inject: (deps, callback) => {
+      const names = Array.isArray(deps) ? deps : Object.keys(deps)
+      if (names.includes('webServer')) {
+        callback({
+          webServer: { register: (route) => { handler = route.handler; return () => {} } },
+          effect: (fn) => { fn(); return () => {} },
+        })
+      }
+      return null
+    },
+    get: () => undefined,
     effect: (fn) => { fn(); return () => {} },
   }
   host.apply(ctx)
@@ -286,10 +318,38 @@ for (const scenario of scenarios) {
   check('import-data: an empty file is refused with a message', empty.ok === false, JSON.stringify(empty.message))
 }
 
-// A body over the 1 MB ceiling must come back as a clean 413 the Client can
+// The body ceiling must exceed the largest payload this plugin can produce.
+// It used to be a hard-coded 1,000,000 while MAX_ENTRIES × MAX_CONTENT is
+// already 1.2 M characters of content — so a maximal store could be exported by
+// this plugin and then never imported back into it: the route answered the
+// plugin's own export with 413. The ceiling is derived from the entry limits
+// now, and this guard is what keeps the two from drifting apart again.
+//
+// A body over the ceiling must still come back as a clean 413 the Client can
 // render, not a destroyed socket it can only report as a network failure.
 {
-  const out = await rawRoute(handler, 'x'.repeat(1_000_001))
+  const worstCase = JSON.stringify({
+    method: 'import-data',
+    args: {
+      payload: {
+        entries: Array.from({ length: 200 }, (_, i) => ({
+          id: 'worst-' + i,
+          title: 'T'.repeat(120),
+          content: 'C'.repeat(6000),
+          mode: 'always',
+          when: 'W'.repeat(200),
+          priority: 2,
+          enabled: true,
+          updatedAt: Date.now(),
+        })),
+      },
+    },
+  })
+  check('body ceiling exceeds the largest legal payload (own export must re-import)',
+    worstCase.length < host.MAX_BODY_CHARS,
+    worstCase.length + ' vs ' + host.MAX_BODY_CHARS)
+
+  const out = await rawRoute(handler, 'x'.repeat(host.MAX_BODY_CHARS + 1))
   check('oversized body answers 413 with a JSON error',
     out.status === 413 && JSON.parse(out.body).ok === false,
     'status=' + out.status)
@@ -299,7 +359,7 @@ for (const scenario of scenarios) {
 // other content type) must get a readable 415, not a confusing parse
 // failure. The 415 branch answers synchronously, before the body is read.
 {
-  const req = makeRequest('{}', { 'content-type': 'text/plain' })
+  const req = makeRequest('{}', { 'content-type': 'text/plain', host: '127.0.0.1:8080' })
   const res = makeResponse()
   handler(req, res)
   req.fire()
@@ -308,12 +368,134 @@ for (const scenario of scenarios) {
     'status=' + res.read().status)
 }
 
+// Origin/Host guard. The 415 rule above assumes the browser sees the request as
+// cross-origin; DNS rebinding removes that assumption, because a page on
+// evil.com pointed at 127.0.0.1 is same-origin with the server it then calls —
+// no preflight, JSON content-type allowed, and this route would rewrite the
+// instructions injected into every later prompt. Only the Host header still
+// gives the attacker away.
+async function statusFor(headers, body) {
+  const out = await rawRoute(handler, body, headers)
+  return out.status
+}
+{
+  const hostile = JSON.stringify({ method: 'save-entry', args: { entry: { id: '', title: 'PWNED', content: 'via rebinding', mode: 'always', when: '', priority: 2, enabled: true, updatedAt: 0 } } })
+  const before = await callRoute(handler, { method: 'state', args: null })
+
+  check('a foreign Host is refused with 403',
+    await statusFor({ 'content-type': 'application/json', host: 'evil.com:8080' }, hostile) === 403)
+  check('a foreign Host is refused even when Origin matches it',
+    await statusFor({ 'content-type': 'application/json', host: 'evil.com:8080', origin: 'http://evil.com:8080' }, hostile) === 403)
+  check('a cross-origin Origin is refused with 403',
+    await statusFor({ 'content-type': 'application/json', host: '127.0.0.1:8080', origin: 'http://evil.com' }, hostile) === 403)
+  check('Origin: null is refused with 403',
+    await statusFor({ 'content-type': 'application/json', host: '127.0.0.1:8080', origin: 'null' }, hostile) === 403)
+  check('a loopback Host with a same-origin Origin is accepted',
+    await statusFor({ 'content-type': 'application/json', host: '127.0.0.1:8080', origin: 'http://127.0.0.1:8080' }, JSON.stringify({ method: 'state' })) === 200)
+  check('a localhost Host is accepted',
+    await statusFor({ 'content-type': 'application/json', host: 'localhost:8080' }, JSON.stringify({ method: 'state' })) === 200)
+
+  const after = await callRoute(handler, { method: 'state', args: null })
+  check('a refused rebinding write left the store untouched',
+    after.snapshot.data.entries.length === before.snapshot.data.entries.length
+    && after.snapshot.data.entries.every((e) => e.title !== 'PWNED'))
+  check('the refused entry was never injected',
+    !injectedText().includes('PWNED'))
+}
+
 // Atomic writes: no temp leftovers, and the rolling backup is in place.
 {
   const files = await readdir(join(SCRATCH_HOME, 'instruction-memory'))
   check('no .tmp leftovers after saves',
     !files.some((name) => name.endsWith('.tmp')), JSON.stringify(files))
   check('rolling backup memory.json.bak exists', files.includes('memory.json.bak'), JSON.stringify(files))
+}
+
+/* ==================================================================== *
+ * Regression guards for the defects fixed in 1.0.10.
+ * These mutate the scratch store destructively, so they run last.
+ * ==================================================================== */
+
+// --- A no-op import must not claim it saved anything. ---------------------
+{
+  const before = await callRoute(handler, { method: 'state', args: null })
+  const raw = await callRoute(handler, { method: 'export-data', args: null })
+  const again = await callRoute(handler, { method: 'import-data', args: { payload: raw.export } })
+  check('no-op import reports saved:false (it wrote nothing)',
+    again.ok === true && again.saved === false && again.message.includes('没有新增'),
+    JSON.stringify({ ok: again.ok, saved: again.saved, message: again.message }))
+  const after = await callRoute(handler, { method: 'state', args: null })
+  check('no-op import left the store untouched',
+    after.snapshot.data.entries.length === before.snapshot.data.entries.length)
+}
+
+// --- An over-long entry must be reported as truncated, not silently cut. ---
+{
+  const long = await callRoute(handler, {
+    method: 'import-data',
+    args: { payload: { entries: [{ title: 'TOO-LONG', content: 'L'.repeat(7000) }] } },
+  })
+  check('an over-long import discloses the truncation',
+    long.ok === true && typeof long.message === 'string' && long.message.includes('截断'),
+    JSON.stringify(long.message))
+  check('the stored content really is the capped length',
+    long.snapshot.data.entries.some((e) => e.title === 'TOO-LONG' && e.content.length === 6000))
+  check('the truncated entry is still injected (it was saved, not dropped)',
+    injectedText().includes('TOO-LONG'))
+}
+
+// --- A failed disk write must roll the in-memory state back. --------------
+//
+// The write is the commit point. Before this guard, a failed save correctly
+// left memory.json alone and told the user so — while the injected prompt kept
+// carrying the unsaved edit for the rest of the process lifetime, so the model
+// obeyed an instruction the user had been told was not saved.
+{
+  const tmpDir = join(SCRATCH_HOME, 'instruction-memory', 'memory.json.tmp')
+  await mkdir(tmpDir, { recursive: true })
+
+  const failed = await callRoute(handler, {
+    method: 'save-entry',
+    args: { entry: { id: '', title: 'NEVER-SAVED', content: 'IM-NEVER-SAVED', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 } },
+  })
+  check('a failed save reports ok:false', failed.ok === false, JSON.stringify(failed.message))
+  check('a failed save is not injected',
+    !injectedText().includes('IM-NEVER-SAVED'),
+    injectedText().includes('IM-NEVER-SAVED') ? 'injection still carries the unsaved edit' : 'clean')
+  check('a failed save leaves the stored entries unchanged',
+    failed.snapshot.data.entries.every((e) => e.title !== 'NEVER-SAVED'))
+  check('a failed set-options also rolls back',
+    (await callRoute(handler, { method: 'set-options', args: { enabled: false } })).snapshot.data.enabled === true)
+
+  await rm(tmpDir, { recursive: true, force: true })
+}
+
+// --- A missing primary with a good backup must recover, not go empty. -----
+//
+// The backup step used to rename the live file away before the replace, so a
+// failure in between left no memory.json at all; the next boot then found no
+// file, materialised an EMPTY store, and silently presented the user with no
+// memory while their real data sat in .bak. The backup is a copy now, and this
+// path recovers rather than starting over.
+{
+  const before = await callRoute(handler, { method: 'state', args: null })
+  check('precondition: the store has entries to lose',
+    before.snapshot.data.entries.length > 0, String(before.snapshot.data.entries.length))
+
+  await rm(STORE_FILE, { force: true })                      // memory.json gone
+  check('precondition: the rolling backup survives', existsSync(STORE_FILE + '.bak'))
+
+  const recovered = normalize(await callRoute(handler, { method: 'reload', args: null }))
+  check('missing primary: recovers from the backup instead of an empty store',
+    recovered.snapshot.data.entries.length > 0,
+    'entries=' + recovered.snapshot.data.entries.length)
+  check('missing primary: the recovery is disclosed',
+    typeof recovered.snapshot.storage.warning === 'string' && recovered.snapshot.storage.warning.includes('memory.json.bak'),
+    JSON.stringify(recovered.snapshot.storage.warning))
+  check('missing primary: the recovered data is injected',
+    injectedText().length > 0)
+  check('missing primary: memory.json was written back',
+    existsSync(STORE_FILE))
 }
 
 console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')

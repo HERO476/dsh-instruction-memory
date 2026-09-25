@@ -8,3 +8,8 @@ Thumbs.db
 # (`files` in package.json already excludes them from the tarball).
 .workbuddy/
 .zcode/
+.mnemon/
+
+# Verification evidence. The reports, scripts and captured logs are kept in the
+# tree on purpose; the scratch harness homes are re-created on every run.
+dsh-memory-verification/tmp/

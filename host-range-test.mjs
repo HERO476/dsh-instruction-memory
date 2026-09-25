@@ -52,6 +52,66 @@ check('package.json declares dsh.compatibility.dsh', typeof compatibility === 's
 check('the two declarations are identical', declared === compatibility,
   JSON.stringify({ engines: declared, compatibility }))
 
+/* ---------------- the range's single source of truth ---------------- */
+
+// Enumerating one `||` segment per prerelease tuple IS the fix for the two
+// shipped false negatives — but it is also a maintenance trap: 1.0.8 stopped
+// enumerating at 0.1.6, so DSH's 0.1.7-rc.2 was silently judged incompatible.
+// Hand-editing a long `||` string is how that happens.
+//
+// So the segments are declared here as data, and the string in package.json is
+// GENERATED from them. Adding a DSH minor means adding one line to this list;
+// the drift check below then prints the exact string to paste.
+const COVERED_LINES = [
+  // Each line covers [floor, below); RANGE_TAIL is the unbounded tail.
+  { floor: '0.1.3-alpha.2', below: '0.1.4' },
+  { floor: '0.1.4-0', below: '0.1.5-0' },
+  { floor: '0.1.5-alpha.1', below: '0.1.6-0' },
+  { floor: '0.1.6-alpha.0', below: '0.1.7-0' },
+  { floor: '0.1.7-alpha.0', below: '0.2.0-0' },
+]
+const RANGE_TAIL = '>=0.2.0-0'
+
+const generateRange = (lines, tail) =>
+  [...lines.map((line) => '>=' + line.floor + ' <' + line.below), tail].join(' || ')
+
+const generated = generateRange(COVERED_LINES, RANGE_TAIL)
+
+check('package.json range equals the range generated from COVERED_LINES',
+  declared === generated,
+  declared === generated
+    ? ''
+    : 'package.json has:  ' + declared + '   the list generates:  ' + generated)
+
+/**
+ * The exact edit that would cover a host version this range does not admit.
+ *
+ * A range edit is unavoidable: npm's prerelease gate matches the
+ * [major, minor, patch] tuple exactly, so no range can reach `0.1.8-rc.1` while
+ * also reaching `0.1.8`. What this removes is the guesswork — it names the line
+ * to append and the bound to move, and the LIVE GUARD below proves the
+ * suggestion actually admits the version before printing it.
+ */
+function remedyFor(version) {
+  const parsed = /^(\d+)\.(\d+)\.(\d+)/.exec(version)
+  if (parsed === null) return null
+  const major = Number(parsed[1])
+  const minor = Number(parsed[2])
+  const patch = Number(parsed[3])
+  const tuple = major + '.' + minor + '.' + patch
+  const previousBelow = tuple + '-0'
+  const appended = { floor: tuple + '-alpha.0', below: major + '.' + (minor + 1) + '.0-0' }
+  return {
+    hint: 'append { floor: \'' + appended.floor + '\', below: \'' + appended.below + '\' } to COVERED_LINES '
+      + 'and set the preceding line\'s below to \'' + previousBelow + '\'',
+    applied: [
+      ...COVERED_LINES.slice(0, -1),
+      { ...COVERED_LINES[COVERED_LINES.length - 1], below: previousBelow },
+      appended,
+    ],
+  }
+}
+
 /* ---------------- load a semver ---------------- */
 
 // Prefer the profile's own semver (the one every DSH host actually evaluates
@@ -83,6 +143,28 @@ if (semver === null) {
   process.exit(0)
 }
 console.log('#       semver ' + semver.SEMVER_SPEC_VERSION + ' semantics\n')
+
+/* ---------------- the enumerated lines must be live and ordered ---------------- */
+
+// Every declared line must actually be reachable, and the lines must ascend.
+// This is the meaningful form of "no gaps": a line no version can satisfy is
+// dead weight, and a line whose floor sits below the previous line's floor
+// means the enumeration drifted out of order (how 1.0.8 missed 0.1.7).
+{
+  const unreachable = COVERED_LINES
+    .filter((line) => semver.satisfies(line.floor, generated) !== true)
+    .map((line) => line.floor)
+  check('every enumerated line is reachable from the generated range',
+    unreachable.length === 0, unreachable.join(', '))
+
+  const outOfOrder = []
+  for (let i = 1; i < COVERED_LINES.length; i += 1) {
+    if (semver.gt(COVERED_LINES[i].floor, COVERED_LINES[i - 1].floor) !== true) {
+      outOfOrder.push(COVERED_LINES[i].floor + ' after ' + COVERED_LINES[i - 1].floor)
+    }
+  }
+  check('the enumerated lines ascend strictly', outOfOrder.length === 0, outOfOrder.join('; '))
+}
 
 /* ---------------- locate the DSH actually installed here ---------------- */
 
@@ -206,10 +288,53 @@ for (const host of ['0.1.6-alpha.2', '0.1.7-rc.2']) {
   } else {
     const plain = semver.satisfies(installed, declared)
     const pre = semver.satisfies(installed, declared, { includePrerelease: true })
+    const admitted = plain === true && pre === true
+
+    // When this fails, say exactly what to change — the 1.0.8 and 1.0.9 misses
+    // were both "the guard knew but told nobody how to fix it".
+    let detail = 'default=' + plain + ' includePrerelease=' + pre
+    const remedy = admitted ? null : remedyFor(installed)
+    if (remedy !== null) {
+      detail += '  -> NOT COVERED. Fix: ' + remedy.hint
+      // Prove the suggested edit works before recommending it, so the advice
+      // can never be stale or wrong.
+      const patched = generateRange(remedy.applied, RANGE_TAIL)
+      const patchedOk = semver.satisfies(installed, patched) === true
+        && semver.satisfies(installed, patched, { includePrerelease: true }) === true
+      detail += patchedOk
+        ? '  [verified: that edit admits ' + installed + ']'
+        : '  [WARNING: that suggested edit does NOT admit ' + installed + ' — fix remedyFor()]'
+    }
     check('LIVE GUARD: the installed host ' + installed + ' is admitted by both modes',
-      plain === true && pre === true,
-      'default=' + plain + ' includePrerelease=' + pre)
+      admitted, admitted ? '' : detail)
   }
+}
+
+/* ---------------- the remedy recipe is itself verified ---------------- */
+
+// The one hard limit: a prerelease on an UNDECLARED future minor can never be
+// reached by any range, because npm matches the [major, minor, patch] tuple
+// exactly. `0.1.8-rc.1` is unreachable today. That cannot be fixed — but the
+// remedy for it can be, so it is exercised here instead of trusted: if the
+// recipe ever stops working, this fails before a user hits it.
+{
+  const hypothetical = '0.1.8-rc.1'
+  check('0.1.8-rc.1 is unreachable from the current range (the documented limit)',
+    semver.satisfies(hypothetical, declared) === false,
+    'it was unexpectedly admitted')
+
+  const remedy = remedyFor(hypothetical)
+  const patched = generateRange(remedy.applied, RANGE_TAIL)
+  check('the documented remedy makes 0.1.8-rc.1 reachable (both modes)',
+    semver.satisfies(hypothetical, patched) === true
+    && semver.satisfies(hypothetical, patched, { includePrerelease: true }) === true,
+    remedy.hint)
+  check('the remedied range still rejects everything below the floor',
+    semver.satisfies('0.1.3-alpha.1', patched) === false
+    && semver.satisfies('0.0.9', patched) === false)
+  check('the remedied range still admits every currently covered version',
+    MUST_PASS.every((version) => semver.satisfies(version, patched) === true),
+    MUST_PASS.filter((version) => semver.satisfies(version, patched) !== true).join(', '))
 }
 
 /* ---------------- the two modes must agree on every declared line ---------------- */

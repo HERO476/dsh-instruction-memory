@@ -8,7 +8,8 @@
  *              that it registers the settings page without throwing.
  */
 import { fileURLToPath } from 'node:url'
-import { readFileSync } from 'node:fs'
+import { readFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 
 // The repo files are what the profile junction points at (install.mjs links
 // them), so loading locally keeps `npm test` working on a fresh clone.
@@ -30,11 +31,16 @@ const check = (label, ok, detail) => {
 
 const host = await import(HOST_URL)
 check('host: exports name', host.name === 'instruction-memory', String(host.name))
-check('host: inject declares every consumed service (regression: a one-shot ctx.get lost webServer)',
+check('host: inject declares systemPrompt but NOT webServer',
   Array.isArray(host.inject)
     && host.inject.includes('systemPrompt')
-    && host.inject.includes('webServer')
+    && !host.inject.includes('webServer')
     && !host.inject.includes('fs'), JSON.stringify(host.inject))
+// Why webServer must not be listed: a declared dependency is a PRECONDITION.
+// Listing it kept this whole row pending in any profile without a web server
+// (headless, tui), so apply() never ran and the user lost the settings page AND
+// the prompt injection — even though memory needs no web server at all. The
+// route is registered from a non-blocking ctx.inject() child fiber instead.
 check('host: no longer depends on the harness fs service (data lives under DSH_HOME)',
   typeof host.resolveStorePath === 'function', typeof host.resolveStorePath)
 check('host: exports apply()', typeof host.apply === 'function', typeof host.apply)
@@ -82,6 +88,21 @@ if (Array.isArray(clientInject)) {
 
 // The host half must not throw when its optional services are all missing:
 // that is the degradation path if webServer or fs is unavailable.
+/**
+ * Minimal stand-in for Cordis's `ctx.inject(deps, callback)`: exactly like the
+ * real child fiber, the callback runs only once every requested service exists
+ * — and never blocks the caller. `services` is what has been published.
+ */
+function fakeInject(services) {
+  return (deps, callback) => {
+    const names = Array.isArray(deps) ? deps : Object.keys(deps)
+    if (names.every((name) => services[name] !== undefined)) {
+      callback({ ...services, effect: (fn) => { fn(); return () => {} } })
+    }
+    return null
+  }
+}
+
 {
   let threw = null
   const effects = []
@@ -92,6 +113,8 @@ if (Array.isArray(clientInject)) {
         return () => {}
       },
     },
+    // Nothing is published: no webServer, no fs.
+    inject: fakeInject({}),
     get: () => undefined,
     effect: (fn) => { fn(); return () => {} },
   }
@@ -105,6 +128,85 @@ if (Array.isArray(clientInject)) {
     effects.length === 0, 'registered ' + effects.length)
 }
 
+// Regression guard for the "memory must not be gated on the UI" rule: with no
+// web server anywhere, the prompt section must still be registered.
+{
+  const store = fileURLToPath(new URL('./.test-dsh-home/instruction-memory/memory.json', import.meta.url))
+  mkdirSync(dirname(store), { recursive: true })
+  writeFileSync(store, JSON.stringify({
+    version: 1,
+    enabled: true,
+    budgetChars: 4000,
+    entries: [{
+      id: 'no-web', title: 'NO-WEB', content: 'memory without a web server',
+      mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 1,
+    }],
+  }), 'utf8')
+
+  const sections = []
+  const fakeCtx = {
+    systemPrompt: { section: (spec) => { sections.push(spec); return () => {} } },
+    inject: fakeInject({}),          // the web server never appears
+    get: () => undefined,
+    effect: (fn) => { fn(); return () => {} },
+  }
+  let threw = null
+  try {
+    host.apply(fakeCtx)
+  } catch (err) {
+    threw = err
+  }
+  await new Promise((resolve) => setTimeout(resolve, 60))
+  check('host: prompt section registers with NO web server at all', threw === null && sections.length === 1,
+    'threw=' + (threw && threw.message) + ' sections=' + sections.length)
+}
+
+// Diagnostics must be LOG-ONLY. The plugin used to be silent on success, which
+// made "is memory doing anything?" unanswerable from logs; the fix adds a mount
+// line plus per-operation debug detail on the harness logger. The hard
+// requirement is that none of it can change what gets injected — the same store
+// must render byte-identically with and without a logger attached.
+{
+  const store = fileURLToPath(new URL('./.test-dsh-home/instruction-memory/memory.json', import.meta.url))
+  mkdirSync(dirname(store), { recursive: true })
+  writeFileSync(store, JSON.stringify({
+    version: 1,
+    enabled: true,
+    budgetChars: 4000,
+    entries: [{ id: 'log', title: 'LOG', content: 'IM-LOG-ONLY', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 1 }],
+  }), 'utf8')
+
+  async function mountWith(logger) {
+    const sections = []
+    const ctx = {
+      systemPrompt: { section: (spec) => { sections.push(spec); return () => {} } },
+      inject: fakeInject({}),
+      get: () => undefined,
+      effect: (fn) => { fn(); return () => {} },
+    }
+    if (logger !== null) ctx.logger = logger
+    host.apply(ctx)
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    return sections.map((s) => (typeof s.text === 'function' ? s.text({}) : s.text)).join('')
+  }
+
+  const captured = { info: [], debug: [] }
+  const withLogger = await mountWith(() => ({
+    info: (message) => captured.info.push(String(message)),
+    debug: (message) => captured.debug.push(String(message)),
+  }))
+  const withoutLogger = await mountWith(null)
+
+  check('diagnostics: mounting emits one info line on the harness logger',
+    captured.info.some((line) => line.startsWith('mounted:')), JSON.stringify(captured.info))
+  check('diagnostics: the info line names the store and the injected size',
+    captured.info.some((line) => line.includes('injected=') && line.includes('entries=')),
+    JSON.stringify(captured.info))
+  check('diagnostics: the injected text is byte-identical with and without a logger',
+    withLogger === withoutLogger && withLogger.includes('IM-LOG-ONLY'),
+    'with=' + withLogger.length + ' without=' + withoutLogger.length)
+}
+
 // Regression guard: with webServer present the row MUST register the API route.
 // The shipped bug mounted before the web server published, read webServer as
 // undefined, and silently lost the route for the life of the process.
@@ -112,9 +214,8 @@ if (Array.isArray(clientInject)) {
   const routes = []
   const fakeCtx = {
     systemPrompt: { section: () => () => {} },
-    get: (name) => (name === 'webServer'
-      ? { register: (route) => { routes.push(route); return () => {} } }
-      : undefined),
+    inject: fakeInject({ webServer: { register: (route) => { routes.push(route); return () => {} } } }),
+    get: () => undefined,
     effect: (fn) => { fn(); return () => {} },
   }
   let threw = null
