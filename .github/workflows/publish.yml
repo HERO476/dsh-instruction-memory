@@ -1,0 +1,100 @@
+name: Publish
+
+# Publishes to npm via Trusted Publishing (OIDC) — no long-lived token anywhere.
+#
+# npm permanently revoked all classic tokens on 2025-12-09, and granular tokens
+# are capped at a 90-day lifetime, so a token-in-a-secret setup is both fragile
+# and a standing liability. OIDC removes the secret entirely: GitHub proves the
+# workflow's identity to npm, and npm issues short-lived credentials for the
+# duration of the job.
+#
+# Requirements (per https://docs.npmjs.com/trusted-publishers):
+#   - npm CLI >= 11.5.1 and Node >= 22.14.0
+#   - GitHub-hosted runners only (self-hosted runners are not supported)
+#   - package.json `repository.url` must match the GitHub repo exactly
+#
+# One-time setup on npmjs.com, required BEFORE this can publish:
+#   Package -> Settings -> Trusted publishing -> Add trusted publisher
+#     Organization or user : HERO476
+#     Repository           : dsh-instruction-memory
+#     Workflow filename    : publish.yml   (filename only; must match exactly)
+#     Environment name     : (leave blank)
+#     Allowed actions      : tick "npm publish"
+#
+#   Note: trusted publishers created after 2026-09-03 default to allowing only
+#   `npm stage publish`. Direct publishing must be explicitly enabled, so the
+#   "Allowed actions" choice above is required, not optional.
+#
+#   npm does not validate these fields when you save them — a typo surfaces only
+#   as an ENEEDAUTH failure at the first publish attempt.
+#
+# To release: push a tag matching the package.json version (e.g. v1.0.9), or run
+# this workflow from the Actions tab.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The one hard requirement: lets the job mint the OIDC token that npm
+      # exchanges for short-lived publish credentials.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing needs npm >= 11.5.1; the npm bundled with Node 22 is
+      # older. Without this the publish falls back to token-based auth, which no
+      # longer exists.
+      - run: npm install -g npm@latest
+
+      - name: Assert npm is new enough for trusted publishing
+        run: |
+          need="11.5.1"
+          have="$(npm --version)"
+          echo "npm $have (need >= $need)"
+          # `sort -V` gives an exact semver-ish comparison; a hand-rolled
+          # major/minor test would wrongly admit 11.5.0, which is below the floor.
+          if [ "$(printf '%s\n%s\n' "$need" "$have" | sort -V | head -1)" != "$need" ]; then
+            echo "::error::npm $have is too old; trusted publishing requires >= $need"
+            exit 1
+          fi
+
+      # host-range-test.mjs resolves `semver` from a local DSH profile and skips
+      # itself when absent, so `npm test` stays green on a bare checkout.
+      # Install it here so the compatibility-range gate actually runs before a
+      # release. --no-package-lock keeps this repo lockfile-free.
+      - run: npm install --no-save --no-package-lock semver@7.8.5
+
+      - run: npm test
+
+      # npm never allows a version to be reused, so publishing the wrong one is
+      # permanent. Compare against the tag before it reaches the registry.
+      - name: Check package.json version matches the tag
+        if: github.event_name == 'push'
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "package.json=$PKG  tag=$TAG"
+          if [ "$PKG" != "$TAG" ]; then
+            echo "::error::package.json version ($PKG) does not match tag ($TAG); refusing to publish"
+            exit 1
+          fi
+
+      # No NODE_AUTH_TOKEN and no --provenance flag: npm detects the OIDC
+      # environment, and because this is a public repo publishing a public
+      # package it attaches the provenance attestation automatically.
+      - run: npm publish --access public
