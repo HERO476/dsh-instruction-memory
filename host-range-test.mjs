@@ -20,6 +20,13 @@
  * (never a copy — a hand-kept duplicate is how the two drifted) and asserts
  * the full version matrix under BOTH modes.
  *
+ * It happened AGAIN, one minor later: DSH shipped 0.1.7-rc.2 against a range
+ * whose last prerelease tuple was 0.1.6. Same silent false negative, same
+ * masking by includePrerelease. Two lessons are baked into this file now —
+ * (1) the matrix enumerates every line the range claims, and (2) a LIVE guard
+ * reads whatever host is actually installed and asserts it, so the next
+ * uncovered prerelease line fails here rather than shipping.
+ *
  * Runs on the semver instance the profile ships, falling back to node's own
  * resolution, so it needs no dependency of its own.
  */
@@ -77,16 +84,47 @@ if (semver === null) {
 }
 console.log('#       semver ' + semver.SEMVER_SPEC_VERSION + ' semantics\n')
 
+/* ---------------- locate the DSH actually installed here ---------------- */
+
+// The profile's own dependency tree is the authoritative "what is running"
+// answer when a profile exists; the editor-bundled copy is the other way DSH
+// reaches a machine. Both are probed, in that order, because a profile can
+// pin an older host than the editor ships.
+//
+// Returns null (→ SKIP, not FAIL) when neither is present: this suite has to
+// stay runnable on a bare checkout and in CI, where no DSH is installed.
+function readInstalledHostVersion() {
+  const candidates = [
+    join(homedir(), '.dsh', 'profiles', 'web', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'),
+    join(homedir(), '.dsh', 'profiles', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'),
+    // Windows: the TRAE-packaged runtime. Kept as a literal rather than a scan
+    // so a failing lookup costs one stat, not a directory walk.
+    join(homedir(), 'AppData', 'Roaming', 'TRAE SOLO CN', 'ModularData', 'ai-agent',
+      'vm', 'tools', 'node', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'),
+  ]
+  for (const path of candidates) {
+    try {
+      const parsed = JSON.parse(readFileSync(path, 'utf8'))
+      if (typeof parsed.version === 'string' && semver.valid(parsed.version) !== null) {
+        return parsed.version
+      }
+    } catch {
+      // try the next candidate
+    }
+  }
+  return null
+}
+
 /* ---------------- the matrix ---------------- */
 
 // Every host version this plugin has actually been exercised against, plus the
 // surrounding prereleases that the old range silently rejected. All must pass.
 //
-// Only the 0.1.3 / 0.1.4 / 0.1.5 / 0.1.6 prerelease lines can be listed here.
-// npm's gate matches the [major, minor, patch] tuple EXACTLY, so a prerelease
-// on a line that has no comparator of its own is unreachable from any range —
-// `0.1.7-rc.1` cannot be admitted while `0.1.7` itself is admitted, just as
-// `^0.1.0` can never match `0.1.7-rc.1`. Future prerelease lines therefore
+// Only the 0.1.3 … 0.1.7 prerelease lines can be listed here. npm's gate
+// matches the [major, minor, patch] tuple EXACTLY, so a prerelease on a line
+// that has no comparator of its own is unreachable from any range —
+// `0.1.8-rc.1` cannot be admitted while `0.1.8` itself is admitted, just as
+// `^0.1.0` can never match `0.1.8-rc.1`. Future prerelease lines therefore
 // require a range edit; the released forms below need no such care.
 const MUST_PASS = [
   // verified on Windows / Node 22 (README's tested table)
@@ -100,19 +138,25 @@ const MUST_PASS = [
   '0.1.4-1',
   '0.1.4-alpha.0',
   '0.1.4',
-  // the exact host that exposed the bug: 0.1.6 prereleases
+  // the exact host that exposed the first bug: 0.1.6 prereleases
   '0.1.6-alpha.0',
   '0.1.6-alpha.2',
+  // the 0.1.7 line — the second occurrence of the same bug, and the reason
+  // this file enumerates tuples instead of trusting one `>=` tail
+  '0.1.7-alpha.0',
+  '0.1.7-rc.1',
+  '0.1.7-rc.2',
   // released forms and the unbounded tail the README promises.
-  // `0.1.7-rc.1` is deliberately absent — see the note above.
+  // `0.1.8-rc.1` is deliberately absent — see the note above.
   '0.1.3',
   '0.1.5',
   '0.1.6',
+  '0.1.7',
   '0.2.0-alpha.1',
   '0.2.0',
   '0.3.0',
   '1.0.0',
-  // `2.0.0-rc.1` is deliberately absent for the same reason as `0.1.7-rc.1`:
+  // `2.0.0-rc.1` is deliberately absent for the same reason as `0.1.8-rc.1`:
   // its tuple has no comparator, so no range can reach it.
 ]
 
@@ -134,18 +178,38 @@ for (const version of MUST_FAIL) {
     'default=' + plain + ' includePrerelease=' + pre)
 }
 
-/* ---------------- the shipped host must never regress ---------------- */
+/* ---------------- the shipped hosts must never regress ---------------- */
 
-// The concrete false negative this suite was written for. Pinned by name so a
+// The concrete false negatives this suite was written for. Pinned by name so a
 // future edit that reintroduces the tail-only `>=0.1.5-alpha.1` form fails here
 // with an unmistakable label.
-{
-  const host = '0.1.6-alpha.2'
+//
+// 0.1.6-alpha.2 was the first occurrence (fixed in 1.0.8). 0.1.7-rc.2 was the
+// second (fixed in 1.0.9) — the same bug, one minor later, which is why the
+// matrix above now enumerates every line the range claims.
+for (const host of ['0.1.6-alpha.2', '0.1.7-rc.2']) {
   const plain = semver.satisfies(host, declared)
   const pre = semver.satisfies(host, declared, { includePrerelease: true })
-  check('REGRESSION GUARD: the installed host ' + host + ' is admitted by both modes',
+  check('REGRESSION GUARD: the shipped host ' + host + ' is admitted by both modes',
     plain === true && pre === true,
     'default=' + plain + ' includePrerelease=' + pre)
+}
+
+// The strongest form of the guard: read whatever DSH is actually installed on
+// this machine and assert it directly. The named guards above are frozen
+// facts; this one is a live check, so a host upgrade to an uncovered
+// prerelease line fails here instead of shipping as a false negative.
+{
+  const installed = readInstalledHostVersion()
+  if (installed === null) {
+    console.log('SKIP  no installed DSH found to check against')
+  } else {
+    const plain = semver.satisfies(installed, declared)
+    const pre = semver.satisfies(installed, declared, { includePrerelease: true })
+    check('LIVE GUARD: the installed host ' + installed + ' is admitted by both modes',
+      plain === true && pre === true,
+      'default=' + plain + ' includePrerelease=' + pre)
+  }
 }
 
 /* ---------------- the two modes must agree on every declared line ---------------- */
@@ -158,7 +222,7 @@ for (const version of MUST_FAIL) {
 {
   const disagreeing = []
   const sweep = []
-  for (const minor of [3, 4, 5, 6]) {
+  for (const minor of [3, 4, 5, 6, 7]) {
     for (const tag of ['-alpha.0', '-alpha.1', '-alpha.2', '-beta.0', '-rc.1', '-rc.9', '']) {
       sweep.push('0.1.' + minor + tag)
     }
@@ -168,7 +232,7 @@ for (const version of MUST_FAIL) {
     const pre = semver.satisfies(version, declared, { includePrerelease: true })
     if (plain !== pre) disagreeing.push(version + ' (default=' + plain + ' pre=' + pre + ')')
   }
-  check('no disagreement on the covered 0.1.3-0.1.6 lines (' + sweep.length + ' swept)',
+  check('no disagreement on the covered 0.1.3-0.1.7 lines (' + sweep.length + ' swept)',
     disagreeing.length === 0, disagreeing.join(', '))
 }
 
@@ -176,10 +240,10 @@ for (const version of MUST_FAIL) {
 
 // Guard against a future edit that drops a tuple: every prerelease on the
 // 0.1.3+ covered lines must be admitted, and nothing below 0.1.3-alpha.2 may
-// sneak in. 0.1.7+ is intentionally out of scope (see MUST_PASS note).
+// sneak in. 0.1.8+ is intentionally out of scope (see MUST_PASS note).
 {
   const admitted = []
-  for (const minor of [3, 4, 5, 6]) {
+  for (const minor of [3, 4, 5, 6, 7]) {
     for (const tag of ['-alpha.1', '-alpha.2', '-rc.1', '']) {
       admitted.push('0.1.' + minor + tag)
     }
@@ -187,7 +251,7 @@ for (const version of MUST_FAIL) {
   const gaps = admitted
     .filter((version) => !semver.satisfies(version, declared))
     .filter((version) => version !== '0.1.3-alpha.1')
-  check('the covered 0.1.3-0.1.6 lines have no gaps', gaps.length === 0, gaps.join(', '))
+  check('the covered 0.1.3-0.1.7 lines have no gaps', gaps.length === 0, gaps.join(', '))
 }
 
 console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')

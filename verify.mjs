@@ -8,11 +8,13 @@
  *              that it registers the settings page without throwing.
  */
 import { fileURLToPath } from 'node:url'
+import { readFileSync } from 'node:fs'
 
 // The repo files are what the profile junction points at (install.mjs links
 // them), so loading locally keeps `npm test` working on a fresh clone.
 const HOST_URL = new URL('./lib/index.js', import.meta.url).href
 const CLIENT_URL = new URL('./lib/client.js', import.meta.url).href
+const PKG = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
 
 // The Host resolves its data file under the harness home; pin it to a scratch
 // directory so this suite can never read or write the user's real store.
@@ -37,6 +39,46 @@ check('host: no longer depends on the harness fs service (data lives under DSH_H
   typeof host.resolveStorePath === 'function', typeof host.resolveStorePath)
 check('host: exports apply()', typeof host.apply === 'function', typeof host.apply)
 check('host: exports buildBlock()', typeof host.buildBlock === 'function', typeof host.buildBlock)
+
+/* ---------------- dsh.client declaration ---------------- */
+
+// `dsh.client.inject` is a list of PACKAGE NAMES. The client module system
+// loads each one before us when it appears in the module graph and SILENTLY
+// SKIPS it when it does not (`dsh-client-modules/lib/client.js`, arriveGraphRow:
+// `const dependency = this.graphRows.get(packageName); if (dependency !== void 0) …`).
+// Nothing validates the names, so a stale entry is a dead declaration: not an
+// error, just a no-op that misleads the next reader.
+//
+// That is exactly what shipped through 1.0.8 — `@deepseek-ai/dsh-client-runtime`,
+// which DSH removed in 0.1.7 (it was split into dsh-client-connection /
+// -modules / -store / -locale). The first fix (to dsh-client-ui-slots) was also
+// wrong for a subtler reason: that package is types-only and declares no
+// `dsh.client`, so it never enters the module graph either.
+const clientInject = PKG.dsh?.client?.inject
+
+check('package.json declares dsh.client.inject as a string array',
+  Array.isArray(clientInject) && clientInject.every((n) => typeof n === 'string'),
+  JSON.stringify(clientInject))
+
+/** Package names DSH no longer ships. A declaration naming one is dead weight. */
+const RETIRED_PACKAGES = [
+  '@deepseek-ai/dsh-client-runtime',
+]
+
+if (Array.isArray(clientInject)) {
+  const retired = clientInject.filter((n) => RETIRED_PACKAGES.includes(n))
+  check('dsh.client.inject names no retired package', retired.length === 0, retired.join(', '))
+
+  // The services this client actually consumes: `slots` (register + inject) and
+  // the `settings.section` slot contract. Each is declared by exactly one
+  // package, and that package is what has to be listed — not the types-only
+  // core. Asserted by name so a future edit cannot quietly swap a real
+  // provider for a package that is merely related.
+  check('dsh.client.inject lists the renderer that provides the slots service',
+    clientInject.includes('@deepseek-ai/dsh-client-ui-renderer'), JSON.stringify(clientInject))
+  check('dsh.client.inject lists the package owning the settings.section contract',
+    clientInject.includes('@deepseek-ai/dsh-client-ui-settings'), JSON.stringify(clientInject))
+}
 
 // The host half must not throw when its optional services are all missing:
 // that is the degradation path if webServer or fs is unavailable.
