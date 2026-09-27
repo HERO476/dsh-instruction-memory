@@ -498,5 +498,109 @@ async function statusFor(headers, body) {
     existsSync(STORE_FILE))
 }
 
+/* ==================================================================== *
+ * Lazy first run: starting up with no store must not create one.
+ *
+ * The plugin used to materialise an empty memory.json the moment the host
+ * booted — no session, no turn, no user action. That is the one side effect a
+ * behaviour audit can fairly call "running with nothing to do", so the file is
+ * now created by the first action that genuinely needs it: a save, or the
+ * settings page reading `state`.
+ * ==================================================================== */
+{
+  const LAZY_HOME = fileURLToPath(new URL('./.test-dsh-home-lazy/', import.meta.url))
+  await rm(LAZY_HOME, { recursive: true, force: true })
+
+  const previousHome = process.env.DSH_HOME
+  process.env.DSH_HOME = LAZY_HOME
+
+  let lazyHandler = null
+  const logLines = []
+  const lazySections = []
+  const lazyCtx = {
+    systemPrompt: {
+      section: (spec) => {
+        lazySections.push(spec)
+        return () => {
+          const i = lazySections.indexOf(spec)
+          if (i >= 0) lazySections.splice(i, 1)
+        }
+      },
+    },
+    inject: (deps, callback) => {
+      const names = Array.isArray(deps) ? deps : Object.keys(deps)
+      if (names.includes('webServer')) {
+        callback({
+          webServer: { register: (route) => { lazyHandler = route.handler; return () => {} } },
+          effect: (fn) => { fn(); return () => {} },
+        })
+      }
+      return null
+    },
+    get: () => undefined,
+    effect: (fn) => { fn(); return () => {} },
+    logger: () => ({ info: (m) => logLines.push(String(m)), debug: (m) => logLines.push(String(m)) }),
+  }
+
+  // A separate module instance, so this mount cannot share state with the one
+  // at the top of this file.
+  const lazyHost = await import(new URL('./lib/index.js', import.meta.url).href + '?lazy=' + Date.now())
+  lazyHost.apply(lazyCtx)
+
+  // boot is asynchronous; the mount line is the signal that it has settled.
+  for (let i = 0; i < 300 && !logLines.some((l) => l.startsWith('mounted:')); i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+
+  const storeDir = join(LAZY_HOME, 'instruction-memory')
+  const storeFile = join(storeDir, 'memory.json')
+
+  check('lazy first run: booting writes no store file', !existsSync(storeFile))
+  check('lazy first run: booting does not even create the store directory',
+    !existsSync(storeDir),
+    'workspace contents = ' + JSON.stringify(await readdir(LAZY_HOME).catch(() => [])))
+  // With an empty store there is nothing to prepare, so the wording is
+  // "nothing to inject" — the "pending assembly" wording (content present but
+  // not yet pulled) is guarded in verify.mjs, which seeds a store first.
+  check('lazy first run: the mount line reports onDisk=no, first run, and nothing to inject',
+    logLines.some((l) => l.includes('onDisk=no') && l.includes('from=first run')
+      && l.includes('section=nothing to inject') && !l.includes('injected=')),
+    JSON.stringify(logLines))
+  check('lazy first run: nothing has been pulled into a prompt yet (pulls=0)',
+    logLines.some((l) => l.includes('pulls=0')), JSON.stringify(logLines))
+
+  // Reading `state` is a deliberate user action — the settings page mounting —
+  // and that is what materialises the file.
+  const firstState = await callRoute(lazyHandler, { method: 'state' })
+  check('lazy first run: an empty memory registers NO prompt section',
+    firstState.snapshot.injection.registered === false, JSON.stringify(firstState.snapshot.injection))
+  check('lazy first run: reading state materialises the store',
+    existsSync(storeFile))
+  check('lazy first run: the snapshot reports onDisk=true afterwards',
+    firstState.snapshot.storage.onDisk === true, JSON.stringify(firstState.snapshot.storage))
+  check('lazy first run: pulls is still 0 (prepared nowhere, assembled nowhere)',
+    firstState.snapshot.injection.pulls === 0, String(firstState.snapshot.injection.pulls))
+
+  // `pulls` is the honest "did this reach a prompt" signal: it moves only when
+  // the harness would have evaluated the registered thunk.
+  const saved = await callRoute(lazyHandler, {
+    method: 'save-entry',
+    args: { entry: { id: '', title: 'PULLS', content: 'IM-PULLS-OK', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 } },
+  })
+  check('lazy first run: saving registers the section', saved.snapshot.injection.registered === true)
+  check('lazy first run: registering alone does not move pulls',
+    saved.snapshot.injection.pulls === 0, String(saved.snapshot.injection.pulls))
+
+  const rendered = lazySections[0]?.text({})
+  check('lazy first run: the registered thunk renders the memory',
+    typeof rendered === 'string' && rendered.includes('IM-PULLS-OK'), String(rendered))
+  const afterPull = await callRoute(lazyHandler, { method: 'state' })
+  check('lazy first run: a host assembly moves pulls to 1',
+    afterPull.snapshot.injection.pulls === 1, String(afterPull.snapshot.injection.pulls))
+
+  process.env.DSH_HOME = previousHome
+  await rm(LAZY_HOME, { recursive: true, force: true })
+}
+
 console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')
 process.exit(failures === 0 ? 0 : 1)

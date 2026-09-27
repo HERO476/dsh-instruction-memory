@@ -85,6 +85,22 @@ DSH 就会得到第二份空记忆，看起来像"记忆消失"。
 导出的文件一定能被自己导回**——早先写死的 1,000,000 小于满配导出（200 × 6000 = 1.2 M 字符），
 导致满配记忆导出后无法导入。
 
+### 首次运行不写文件（惰性创建）
+
+全新安装、尚无任何记忆时，插件**不会**在宿主启动那一刻创建空的 `memory.json`。
+
+> 这里曾主动物化一份空存储，只为让设置页有个真实路径可显示。但那意味着插件在**进程启动、
+> 零会话、零任务**的状态下执行了一次磁盘写入——这正是行为审计中唯一能被正当称为
+> "没活干还在动"的副作用。现在文件由**第一个真正需要它的动作**创建：一次保存、一次导入，
+> 或设置页读取 `state`（面板打开时就会读）。
+
+在这之前：`storage.path` 仍会显示路径，但 `storage.onDisk` 为 `false`，设置页显示
+「尚未写入磁盘」（该文案本就存在），`state.injection.registered === false`，`pulls === 0`。
+挂载日志相应为 `from=first run (no store on disk yet) onDisk=no`。
+
+**不受影响**：从 `.bak` 恢复、以及从旧位置迁移——这两条分支只有在**磁盘上已有真实数据**时才会走，
+它们仍然会立即写回。
+
 ## 无 Web 服务器时依然生效
 
 `systemPrompt` 是本插件唯一的硬依赖。**Web 服务器不是前置条件**：设置页那部分路由通过
@@ -103,11 +119,27 @@ DSH 就会得到第二份空记忆，看起来像"记忆消失"。
 `info`，过程细节写 `debug`（走宿主的 `ctx.logger`）：
 
 ```
-[instruction-memory] mounted: store=<DSH_HOME>\instruction-memory\memory.json from=memory.json entries=2 enabled=true injected=437 chars
+[instruction-memory] mounted: store=<DSH_HOME>\instruction-memory\memory.json from=memory.json onDisk=yes entries=2 enabled=true section=437 chars (pending assembly) pulls=0
 ```
 
-挂载行含**数据来源**（`memory.json` / `memory.json.bak (main file missing)` / `legacy cwd file (migrated)`
-/ `first run (empty store created)`）、条目数、总开关状态、实际注入字符数，以及读取错误。
+挂载行含**数据来源**（`memory.json` / `memory.json.bak (main file missing)` / `memory.json.bak (main file corrupt)`
+/ `legacy cwd file (migrated)` / `first run (no store on disk yet)`）、**是否已在磁盘上**（`onDisk`）、
+条目数、总开关状态、段落就绪时的字符数，以及 `pulls`。
+
+### 为什么是 `section=… (pending assembly)` 而不是 `injected=…`
+
+**「段落已就绪」≠「已经注入」。** 注入发生在宿主装配提示词时；插件在挂载那一刻**什么都没注入过**，
+打印 `injected=437 chars` 会让人误以为记忆已经进入了某个提示词。这是本插件此前一处会误导排查的措辞。
+
+真正的"到达了提示词"的信号是 **`pulls`**：宿主每次对这段做装配，插件注册的那个 thunk 就被求值一次，
+计数器加一。因此
+
+- `pulls=0` = 已准备、**从未装配**（进程刚起来、或会话空闲）；
+- `pulls=N` = 已被拉进提示词 N 次。
+
+插件看不到会话或轮次，**不会**报告 `sessions=` 之类的数字——那会是编造。它只报告自己能真正观测到的东西。
+`pulls` 同时出现在路由的 `state` 快照里（`injection.pulls`）。每次拉取另有一条 `debug` 行：
+`section pulled into a prompt (pull #N)`。
 
 **这是纯日志，绝不影响注入内容**：同一份存储在"有 logger"和"没有 logger"下渲染出的文本
 **逐字节相同**（`verify.mjs` 有断言锁定这一点）。`debug` 级别由宿主日志级别过滤；

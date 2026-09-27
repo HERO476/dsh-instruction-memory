@@ -199,8 +199,13 @@ function fakeInject(services) {
 
   check('diagnostics: mounting emits one info line on the harness logger',
     captured.info.some((line) => line.startsWith('mounted:')), JSON.stringify(captured.info))
-  check('diagnostics: the info line names the store and the injected size',
-    captured.info.some((line) => line.includes('injected=') && line.includes('entries=')),
+  check('diagnostics: the info line names the store, the size and the pull count',
+    captured.info.some((line) => line.includes('section=') && line.includes('entries=') && line.includes('pulls=')),
+    JSON.stringify(captured.info))
+  // The wording matters: at mount time nothing has been injected yet, so a line
+  // saying "injected=…" reads as if the memory had already reached a prompt.
+  check('diagnostics: the mount line says PENDING ASSEMBLY, never "injected"',
+    captured.info.some((line) => line.includes('pending assembly') && !line.includes('injected=')),
     JSON.stringify(captured.info))
   check('diagnostics: the injected text is byte-identical with and without a logger',
     withLogger === withoutLogger && withLogger.includes('IM-LOG-ONLY'),
