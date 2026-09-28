@@ -245,15 +245,44 @@ FAIL  LIVE GUARD: the installed host 0.1.8-rc.1 is admitted by both modes  -> ..
 
 ## 发布（维护者）
 
+**正规流程是推 tag，由 CI 通过 OIDC（Trusted Publishing）发布**，不需要任何长期令牌：
+
 ```sh
-# 1. 自检（prepublishOnly 也会自动跑，占位符未替换会中止发布）
+# 1. 自检（prepublishOnly 也会自动跑；占位符未替换会中止发布）
 npm test
 node check-metadata.mjs
-# 2. 发布（需先 npm login）
-npm publish
+# 2. 升版本并提交
+#    package.json 的 version 必须与 tag 完全一致，否则工作流会拒绝发布
+git commit -am "1.0.N: ..."
+git push origin main
+# 3. 打 tag 推送 → 触发 .github/workflows/publish.yml
+git tag -a v1.0.N -m "1.0.N: ..."
+git push origin v1.0.N
 ```
 
-发布前自检会拒绝在 `TODO` 占位符残留时发布，避免把空仓库地址或无名版权声明发出去。
+工作流会先跑 `npm test` 与"tag ↔ version 一致"校验，再 `npm publish --access public`；
+公开仓库 + OIDC 会自动附带 **provenance 存证**。
+
+**npm 侧的一次性配置（发布前必须完成，且 npm 不会校验你填了什么）**：
+Package → Settings → Trusted publishing → Add trusted publisher
+
+| 字段 | 值 |
+| --- | --- |
+| Organization or user | `HERO476` |
+| Repository | `dsh-instruction-memory` |
+| Workflow filename | `publish.yml`（**只写文件名**，须完全一致） |
+| Environment name | （留空） |
+| Allowed actions | 勾选 **npm publish** |
+
+> ⚠️ 2026-09-03 之后创建的 trusted publisher **默认只允许 `npm stage publish`**，直发必须显式勾选。
+> 字段填错不会在保存时报错，只会在**第一次发布尝试**时以 `ENEEDAUTH` 之类的错误暴露。
+
+**这就是本仓库 1.0.10 / 1.0.11 / 1.0.12 由本地 `npm publish` 发布的原因**：这三版发布时该配置尚未就绪，
+`Publish` 工作流的唯一失败步骤正是 `npm publish`（其余步骤含 `npm test` 全部通过），因此那三版**没有 provenance**、也没有对应的 git tag。
+**不要为这三个版本补推 tag** —— 版本已被占用，重跑只会再得到一次必红的 CI。从下一个新版本起走上面的正规流程。
+
+**本地兜底发布**（仅在 OIDC 不可用时）：`npm login` 后直接 `npm publish --access public`。
+本机若已有 `~/.npmrc` 令牌即可直接发布，但产物**不含 provenance**。
 
 ## 数据格式
 
