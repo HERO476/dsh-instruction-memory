@@ -47,10 +47,35 @@ const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
 const declared = pkg.dsh?.engines?.dsh
 const compatibility = pkg.dsh?.compatibility?.dsh
 
+// The range is written in three places, and only ONE of them is enforced by the
+// host. `evaluatePluginCompatibility` (dsh-app-boot/lib/index.js) reads
+// `manifest.peerDependencies`, filters the names to `@deepseek-ai/dsh*`, and
+// returns early when the field is absent:
+//
+//     if (!Object.hasOwn(fields, "peerDependencies")) return void 0;
+//
+// So without the peer entry the range is pure documentation — the host will
+// happily start on a version this plugin never claimed to support. With it, an
+// out-of-range host is refused (or needs an explicitly acknowledged
+// exact-version exemption). `dsh.engines.dsh` / `dsh.compatibility.dsh` are read
+// by the plugin market for its card verdict, not by dsh itself.
+//
+// Peer names are compared against the RUNTIME version, not the named package's
+// own version, so the name only has to be the service this plugin hard-depends
+// on. Three hand-kept copies of one long `||` string is exactly how the two
+// shipped false negatives began, so all three are pinned to one generated value.
+const PEER_NAME = '@deepseek-ai/dsh-system-prompt'
+const peerNames = Object.keys(pkg.peerDependencies ?? {})
+const peer = pkg.peerDependencies?.[PEER_NAME]
+
 check('package.json declares dsh.engines.dsh', typeof declared === 'string' && declared !== '')
 check('package.json declares dsh.compatibility.dsh', typeof compatibility === 'string' && compatibility !== '')
-check('the two declarations are identical', declared === compatibility,
-  JSON.stringify({ engines: declared, compatibility }))
+check('package.json declares the ENFORCED peerDependencies entry', typeof peer === 'string' && peer !== '',
+  'without it the host skips its compatibility gate entirely')
+check('peerDependencies names exactly ' + PEER_NAME, peerNames.length === 1 && peerNames[0] === PEER_NAME,
+  JSON.stringify(peerNames))
+check('all three declarations are identical', declared === compatibility && declared === peer,
+  JSON.stringify({ engines: declared, compatibility, peer }))
 
 /* ---------------- the range's single source of truth ---------------- */
 
@@ -77,11 +102,21 @@ const generateRange = (lines, tail) =>
 
 const generated = generateRange(COVERED_LINES, RANGE_TAIL)
 
-check('package.json range equals the range generated from COVERED_LINES',
-  declared === generated,
-  declared === generated
+// All three copies are checked against the generated value, so a hand-edit of
+// any one of them — including the peer that the host actually enforces — fails
+// here instead of shipping.
+const drift = [
+  ['dsh.engines.dsh', declared],
+  ['dsh.compatibility.dsh', compatibility],
+  ['peerDependencies', peer],
+].filter(([, value]) => value !== generated)
+
+check('all three package.json ranges equal the range generated from COVERED_LINES',
+  drift.length === 0,
+  drift.length === 0
     ? ''
-    : 'package.json has:  ' + declared + '   the list generates:  ' + generated)
+    : 'the list generates:  ' + generated + '   but these differ:  '
+      + drift.map(([name, value]) => name + ' = ' + value).join(' ; '))
 
 /**
  * The exact edit that would cover a host version this range does not admit.

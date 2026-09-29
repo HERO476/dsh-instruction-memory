@@ -12,6 +12,10 @@
 dsh plugin --profile web add dsh-instruction-memory
 ```
 
+宿主版本必须落在[兼容性](#兼容性)声明的范围内。范围之外**宿主会拒绝安装/启动**（1.0.14 起，
+因为 `peerDependencies` 已声明）；确需强行安装可用 `dsh plugin allow-version` 授予该精确版本的
+豁免，风险自负。
+
 装完重启 DSH，设置页会出现「指令记忆」入口。卸载：
 
 ```sh
@@ -36,7 +40,7 @@ dsh plugin --profile web remove dsh-instruction-memory
 | `contract-test.mjs` | 契约测试：驱动真实路由，验证两半之间的响应格式 |
 | `verify.mjs` | 装载验证：按 DSH 的方式加载两半 |
 | `smoke-test.mjs` | 注入渲染逻辑的单元测试 |
-| `host-range-test.mjs` | 宿主版本范围契约测试：固定矩阵 × 两种 semver 判定模式，锁死兼容性声明 |
+| `host-range-test.mjs` | 宿主版本范围契约测试：固定矩阵 × 两种 semver 判定模式，并把 `peerDependencies`（**被执行的那个**）、`dsh.engines.dsh`、`dsh.compatibility.dsh` 三处声明锁到同一个生成值 |
 | `docs/demo.html` | 离线演示页：桩掉 DSH 外壳、加载真实 Client 半渲染设置页（不随 npm 包发布） |
 
 ## 生效方式
@@ -167,7 +171,17 @@ DNS 重绑定恰好推翻了它**：`evil.com` 解析到 `127.0.0.1` 之后，�
 
 ## 兼容性
 
-`dsh.compatibility.dsh` 与 `dsh.engines.dsh` 声明为同一串：
+同一串范围写在**三处**，而**只有一处会被宿主强制执行**——这一点以前写错过，现在按实测更正：
+
+| 位置 | 谁读它 | 作用 |
+| --- | --- | --- |
+| **`peerDependencies`**（`@deepseek-ai/dsh-system-prompt`） | **宿主**：`evaluatePluginCompatibility()`（`dsh-app-boot/lib/index.js`），在**安装**与 **profile 启动**时执行 | **真正的门禁**。不满足即拒绝（或要求显式授予精确版本豁免：`dsh plugin allow-version`）。门禁把 peer 的**范围值**与宿主版本（`dsh --version`）比较，peer 的**包名不参与解析**，只用来点名报错 |
+| `dsh.engines.dsh` | 插件市场（第三方，服务端读取） | 市场卡片上的兼容性判定与展示 |
+| `dsh.compatibility.dsh` | 未找到读取方（官方文档与 DSH 树内均无） | 仅作人类可读的重复声明 |
+
+**1.0.14 之前这里只有后两处，没有 `peerDependencies`**——而宿主的门禁在读到缺失的 `peerDependencies` 时会直接 `return undefined`（`if (!Object.hasOwn(fields, "peerDependencies")) return void 0`），也就是**跳过检查**。换句话说，范围之外的宿主在此之前可以装上而**没有任何拦截或警告**；那串范围当时只是市场元数据，不是门禁。1.0.14 补上 peer 之后，它才真正生效。
+
+同一串范围（三处逐字节一致，由测试锁定）：
 
 ```
 >=0.1.3-alpha.2 <0.1.4 || >=0.1.4-0 <0.1.5-0 || >=0.1.5-alpha.1 <0.1.6-0 || >=0.1.6-alpha.0 <0.1.7-0 || >=0.1.7-alpha.0 <0.2.0-0 || >=0.2.0-0
@@ -177,15 +191,19 @@ DNS 重绑定恰好推翻了它**：`evil.com` 解析到 `127.0.0.1` 之后，�
 
 | 等级 | 证明什么 | 覆盖 |
 | --- | --- | --- |
-| ① **真实启动** | 在该宿主版本上真的把 DSH 跑起来：插件装载、注入真的进入**组装后的提示**、插件 HTTP 路由可应答、客户端设置页模块被下发（Windows / Node 22） | `0.1.3-alpha.2` · `0.1.5-alpha.1` · `0.1.5-alpha.2` · `0.1.5-rc.1` · `0.1.5-rc.2` |
-| ② **契约核验** | 抓该版本**真实发布的源码**，逐个核验本插件实际用到的每个符号：`systemPrompt.section()`、`assemble()` 是否求值**函数型** `text`、`FILE_REFERENCE=900` / `TOOL_BASH=1000` 仍在（决定 order 950 是否空档）、重名注册是否抛错、`webServer.register()` / `get host()`、`ctx.inject()` / `ctx.effect()`、`dsh.client.inject` 两包在该版本是否存在且声明了 `dsh.client` | 声明范围接住的**全部 12 个已发布版本**（`0.1.3-alpha.2` → `0.1.7-rc.2`） |
+| ① **真实启动** | 在该宿主版本上真的把 DSH 跑起来：插件装载、注入真的进入**组装后的提示**、插件 HTTP 路由可应答、客户端设置页模块被下发（Windows / Node 22） | `0.1.3-alpha.2` · `0.1.5-alpha.1` · `0.1.5-alpha.2` · `0.1.5-rc.1` · `0.1.5-rc.2` · **`0.2.0-rc.1`** ⁽*⁾ |
+| ② **契约核验** | 抓该版本**真实发布的源码**，逐个核验本插件实际用到的每个符号：`systemPrompt.section()`、`assemble()` 是否求值**函数型** `text`、`FILE_REFERENCE=900` / `TOOL_BASH=1000` 仍在（决定 order 950 是否空档）、重名注册是否抛错、`webServer.register()` / `get host()`、`ctx.inject()` / `ctx.effect()`、`dsh.client.inject` 两包在该版本是否存在且声明了 `dsh.client` | 声明范围接住的**全部 13 个已发布版本**（`0.1.3-alpha.2` → `0.2.0-rc.1`） |
 | ③ **真实执行** | 把插件**真的挂载**进该版本的 `@deepseek-ai/cordis`，跑装载 / 路由注册 / 卸载共 9 项断言 | cordis `4.0.2` 与 `4.0.4`（各 9/9） |
 
-此外 `host-range-test.mjs` 的固定矩阵覆盖 `0.1.6-alpha.2` 与 `0.1.7-rc.2`，并会**读取本机实际安装的宿主版本**做实时断言。
+⁽*⁾ **`0.2.0-rc.1` 的①档有一条要说明**：插件装载、注入进入组装后的提示、HTTP 路由可应答三项**均已实测**（路由 `HTTP 200`；`injection.registered=true`、`chars=437`、**`pulls=38`**——即 0.2.0-rc.1 的 agent loop 真的求值了 38 次函数型 `text`）。第四项"客户端模块被下发"**没有直接抓取**：首页需要鉴权（`/` 返回 `401`），我无法取到 `window.__DSH_BOOT__`。这一项的支撑是间接但强的两条：① `dsh-client-modules` 在合成阶段对 `dsh.client` 声明做硬校验，不合格会抛 `ClientPackageCompositionError` 直接导致启动失败——宿主正常启动即说明声明通过了 0.2.0-rc.1 的校验；② 本插件用到的三个客户端契约包（`-slots` / `-renderer` / `-settings`）相对升级前真正在跑的 `0.1.7-rc.2` **逐字节未变**。**未做人工视觉确认**（没有打开设置页看）。
+
+此外 `host-range-test.mjs` 的固定矩阵覆盖 `0.1.6-alpha.2`、`0.1.7-rc.2` 与 `0.2.0-rc.1`，并会**读取本机实际安装的宿主版本**做实时断言。
 
 **关于 1.0.10 新增的 `ctx.inject`。** 这是新版唯一的硬依赖增量：`inject` 去掉了 `webServer`，设置页路由改为非阻塞的 `ctx.inject(['webServer'], …)` 子 fiber（原因见上）。为此逐个核验了 **cordis 全部 6 个已发布版本**（`4.0.1-rc.1` → `4.0.4`）——**每一个都具备 `ctx.inject`**，因此声明范围内不存在因它而失效的宿主版本。
 
-**关于声明范围是否"超范围承诺"。** 已对全部 **27 个**已发布宿主版本穷举核验：范围内 12 个版本的 API 面**全部齐备，超范围承诺 0 项**。范围外的 15 个版本（`0.0.1-rc.1` → `0.1.2-rc.1`）API 面**同样齐备**，但它们**从未真实启动验证过**，所以下限维持不动、不向外放宽——不把没验证过的东西写进声明。
+**关于声明范围是否"超范围承诺"。** 已对全部 **28 个**已发布宿主版本穷举核验：范围内 **13 个**版本的 API 面**全部齐备，超范围承诺 0 项**。范围外的 15 个版本（`0.0.1-rc.1` → `0.1.2-rc.1`）API 面**同样齐备**，但它们**从未真实启动验证过**，所以下限维持不动、不向外放宽——不把没验证过的东西写进声明。
+
+**`0.2.0-rc.1` 的核验口径**（2026-09-29 增补）：基准取 npm 上**真实发布的 `0.1.7-rc.2`**（升级前本机真正在跑的版本），逐文件 SHA256 与 `0.2.0-rc.1` 比对。本插件的 6 个耦合点里 **6 个逐字节未变**（`dsh-system-prompt` 4/4、`dsh-client-ui-slots` 4/4、`-renderer` 12/12、`-settings` 11/11、`dsh-host-webserver` 3/3、`dsh-client-modules` 10/10）；变动的只有 `dsh-agent-loop`（注入通路 `preStep` / `assemble` 逐行等同）与 `dsh-app-boot`（兼容门禁函数逐字节等同）。方法带**阴性对照**：同法比对 `0.1.6-alpha.2` 得到的哈希**不同**，证明这套比对确实能检出变化，而不是恒真。
 
 **一个运维上值得知道的事实。** 早期 DSH 用 caret 范围声明同族依赖（如 `^0.1.5-alpha.2`），范围会随时间"往前漂"：**今天**安装旧版 DSH，npm 在 `includePrerelease` 语义下会把同族子包解析到**当前最新的 `0.1.x`**，而不是当年那份（实测 7/10 个采样版本会漂移，3 个因精确锁定不会）。这不影响本插件的结论——漂移目标同样在已核验范围内——但"今天装出来的树"与"当年装出来的树"可能不同。
 
@@ -199,9 +217,24 @@ major.minor.patch 且自身带预发布标签的比较符"。这条规则是**�
 - **每段的上界不能省**：省略会被上一段的比较符"续接"。例如单写 `>=0.1.5-alpha.1`（不封顶），
   在把 `0.1.3` 当 token 时会放行 `0.1.3-alpha.0/1`。
 
-⚠️ **一个必须知道的上限**：**未声明的未来 minor 的预发布版本，无法被任何范围覆盖。**
-`0.1.8-rc.1` 这类版本 tuple 与所有比较符都不同，在 npm 语义下**永远匹配不到**——与
+⚠️ **一个必须知道的上限（注意它是"模式相关"的，别当成普适结论）：未声明的未来 minor 的预发布版本，在 npm 的默认语义下无法被任何范围覆盖。**
+`0.1.8-rc.1` 这类版本 tuple 与所有比较符都不同，在 **npm 默认语义**下**永远匹配不到**——与
 `^0.1.0` 无法匹配 `0.1.8-rc.1` 是同一个限制。正式版（`0.1.8`、`0.2.0`、`1.0.0` 等）不受影响。
+
+**但在 `includePrerelease: true` 下这条上限不成立。** 实测同一串范围：`0.1.8-rc.1` 在默认语义下 `false`、
+在 `includePrerelease: true` 下 **`true`**（已用 DSH 自带的 semver 7.8.5 验证）。而这个区别是**有后果**的，
+因为两条消费路径用的模式不同：
+
+| 消费方 | 模式 | `0.1.8-rc.1` 会被放行吗 |
+| --- | --- | --- |
+| npm / pnpm 解析 `peerDependencies`（**包管理器**） | 默认 | **否** |
+| **宿主门禁** `evaluatePluginCompatibility` | **`includePrerelease: true`**（`dsh-app-boot` L300） | **是** |
+| 插件市场（第三方，服务端） | `includePrerelease: true` | **是** |
+
+也就是说：对**包管理器**而言那个上限成立，对**宿主门禁**而言它其实已经被宽松模式接住了。
+所以"未声明的新 minor 预发布版会不会被拒"**不能只看一句话**，要问清楚是哪种模式。
+（`host-range-test.mjs` 里那条 `0.1.8-rc.1 is unreachable` 的断言取的是**默认模式**，其用例名
+因此容易被误读成普适结论——这一点已在 1.0.14 的核验里记录。）
 
 **这个限制无法用代码消除，但它的后果已经被消掉了。** 范围现在是**生成出来的**：
 `host-range-test.mjs` 顶部的 `COVERED_LINES` 是唯一事实来源，package.json 里那串长字符串必须
@@ -234,14 +267,29 @@ FAIL  LIVE GUARD: the installed host 0.1.8-rc.1 is admitted by both modes  -> ..
 两次都因为插件市场传入 `includePrerelease: true` 而侥幸放行，但任何标准 semver 判定
 （`npm` / `pnpm` 的依赖解析）都会拒绝。现在 `host-range-test.mjs` 同时具备固定矩阵与实时守卫。
 
-**未验证范围**：macOS / Linux、`headless` 与 `tui` profile，以及**除上表等级①那 5 个之外的任何版本的真实启动**，均未实测。
+**未验证范围**：macOS / Linux、`headless` 与 `tui` profile，以及**除上表等级①那几个之外的任何版本的真实启动**，均未实测。
 等级②只证明"该版本里有这些 API"，**不证明端到端可用**。
 
-**同一串范围写在两处**：`dsh.compatibility.dsh`（插件自己的字段）与 `dsh.engines.dsh`（插件市场**实际读取**的位置）。
-市场只读 `engines.dsh` / `dsh.engines.dsh` 以及 `@deepseek-ai/dsh*` 的 `peerDependencies`，并不读 `dsh.compatibility.dsh`。
-从 1.0.4 起宿主要求会真实出现在市场卡片上，并生效于安装前的校验：**范围之外的宿主上，市场会把本插件从列表中隐藏并拒绝安装/更新**
-（市场只隐藏"确认不兼容"的条目；"未声明"或"无法确认"的条目照常显示）。范围之外的宿主仍可自行用 `dsh plugin add` 安装，只是不再被市场担保。
-`host-range-test.mjs` 会断言这两处字段逐字节一致。
+**关于"市场读哪个字段"这条的证据等级。** 这里说的是**插件市场（第三方）**的行为，不是 `dsh` 自身：
+市场从已发布的 npm manifest 读 `engines.dsh`（顶层优先）或 `dsh.engines.dsh`，与 `@deepseek-ai/dsh*` 的
+`peerDependencies`（若有）**求交**，再用 `semver` + `includePrerelease: true` 与宿主版本比较，据此在卡片上
+显示兼容性；`dsh.compatibility.dsh` **不是**市场读取的那个字段。
+
+需要如实说明它的**来源等级**：这一条**在官方文档里没有**，树内也没有可核验的市场客户端
+（`dshmarket` / `alldsh` 均为第三方，读取发生在服务端）。它的依据是一份独立的第三方实证记录
+——本机安装的 `dsh-vibe-math@2.3.16` 在其 `dsh.compatNote` 里逐字写明了上述读取路径与"自用的
+`dsh.compatibility.dshReleases` 市场不读"。所以请把它当作**第三方实证**，不要当成官方保证。
+（1.0.14 之前这段把它与官方事实并列陈述，措辞已按证据分级修正。）
+
+**范围之外的宿主会发生什么（1.0.14 起变了）。** 在此之前，本插件没有 `peerDependencies`，宿主门禁
+直接跳过检查，范围外宿主**可以装上且没有警告**。1.0.14 起 peer 生效：
+
+- **宿主**（`dsh plugin add` / profile 启动）会拒绝，除非用户显式授予该精确版本的豁免
+  （`dsh plugin allow-version`），这正是 DSH 设计的正常流程；
+- **市场**会把"确认不兼容"的条目隐藏并拒绝安装/更新（"未声明"或"无法确认"的条目照常显示）。
+
+`host-range-test.mjs` 会断言 `peerDependencies` 与另外两处字段**逐字节一致**，并断言 peer 只声明这一个包名——
+三处任一被手改都会在测试里失败。
 
 ## 发布（维护者）
 
