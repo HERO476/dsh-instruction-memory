@@ -81,6 +81,12 @@ lint、host-range、smoke、contract、verify）。
   `importSizeVerdict` 纯函数断言，`normalizeResult` 的信封边界用例（冲突信封、缺省
   字段、不可用形态），以及 i18n 断言（zh/en 键集一致、占位符对齐、回退与插值行为）
   与撤销 TTL 钉死。
+- **修复测试桩的环境泄漏（首个 CI 矩阵运行抓到的真实缺陷）**：`verify.mjs` 伪造了
+  `window` 却沿用 Node 自带的 `navigator`（Node ≥ 21 报告**机器**语言），面板语言
+  随运行机器漂移——中文开发机上碰巧绿、CI 的 en_US 运行器上必红（Node 20 因尚无
+  navigator 全局而侥幸通过）。现在测试桩用 `Object.defineProperty` 钉死伪浏览器的
+  navigator（zh-CN），并以带查询串的二次 import 实例化英文浏览器，把两条字典选取
+  路径都变成显式断言。
 
 ## [1.0.14] — 2026-09-29
 

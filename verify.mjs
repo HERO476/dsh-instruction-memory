@@ -261,6 +261,17 @@ globalThis.document = {
   createElement: () => ({ setAttribute() {}, textContent: '', parentNode: null }),
   head: { appendChild() {} },
 }
+// The fake browser needs a fake navigator too. Node ≥ 21 ships a global
+// navigator reporting the MACHINE's language, and this half-browser
+// environment inherited it: the zh label assertion below passed on a zh
+// dev box and failed on CI's en_US runners — ambient luck, not a test.
+// defineProperty, because Node's navigator is a getter-only global and a
+// plain assignment throws. The en path is pinned by the second client
+// instance near the end of this file.
+Object.defineProperty(globalThis, 'navigator', {
+  value: { language: 'zh-CN', languages: ['zh-CN', 'zh', 'en'] },
+  configurable: true,
+})
 
 const requireStub = (id) => {
   requireCalls.push(id)
@@ -506,6 +517,43 @@ if (captured && typeof captured.factory === 'function') {
   } else {
     check('client: exposes __undoTtlMs for this test', false, 'missing export')
   }
+}
+
+/* ------- Client half, second instance: an English browser ------- */
+
+// The section label is resolved from the browser language at registration
+// time, so the en fallback needs a fresh module instance — the query string
+// busts the module cache (same file, distinct module record). Together with
+// the zh pin above, both dictionary picks are now asserted, not assumed.
+{
+  captured = null
+  const enRegistered = []
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { language: 'en-US', languages: ['en-US', 'en'] },
+    configurable: true,
+  })
+  globalThis.window.__ModuleLoader__.load = (spec) => { captured = spec }
+  await import(CLIENT_URL + '?navigator=en-US')
+  let enThrew = null
+  try {
+    const enPlugin = captured.factory(requireStub)
+    enPlugin.apply({
+      get: (name) => (name === 'slots'
+        ? {
+            inject: (key, callback) => { callback(); return () => {} },
+            register: (options, render) => { enRegistered.push({ options, render }); return () => {} },
+          }
+        : undefined),
+      effect: (fn) => { fn(); return () => {} },
+    })
+  } catch (err) {
+    enThrew = err
+  }
+  check('client: an English browser gets the English label (regression: ambient Node navigator)',
+    enThrew === null && enRegistered.length === 1
+      && enRegistered[0].options.label === 'Instruction Memory',
+    enThrew !== null ? enThrew.message
+      : 'count=' + enRegistered.length + ' label=' + (enRegistered[0] && String(enRegistered[0].options.label)))
 }
 
 console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')
