@@ -7,7 +7,7 @@
 > 1.0.13 起由 CI 经 OIDC Trusted Publishing 发布（首个带 provenance 的版本）。
 > 这些历史 tag **不应回填**——npm 上的版本号已被占用。
 
-## [未发布]
+## [1.0.15] — 2026-10-03
 
 本轮为一次系统性缺陷清查后的批量修复，每一项都有对应的回归测试（`npm test` 五套件全绿：
 lint、host-range、smoke、contract、verify）。
