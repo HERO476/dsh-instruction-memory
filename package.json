@@ -27,6 +27,7 @@
     "lib",
     "cordis.patch.yml",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE",
     "docs/screenshot.png"
   ],
@@ -55,7 +56,8 @@
   },
   "author": "huangpeiyan",
   "scripts": {
-    "test": "node host-range-test.mjs && node smoke-test.mjs && node contract-test.mjs && node verify.mjs",
+    "lint": "node lint.mjs",
+    "test": "node lint.mjs && node host-range-test.mjs && node smoke-test.mjs && node contract-test.mjs && node verify.mjs",
     "prepublishOnly": "node check-metadata.mjs"
   },
   "dsh": {

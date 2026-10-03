@@ -336,6 +336,176 @@ if (captured && typeof captured.factory === 'function') {
       check('client: render() returns an element', rendered !== null && rendered !== undefined)
     }
   }
+
+  // Editor cancel guard: 取消 must not silently throw away typed text. The
+  // panel only asks for confirmation when this predicate says the draft
+  // carries edits, so the predicate itself is pinned here.
+  if (plugin && typeof plugin.__draftIsDirty === 'function') {
+    const dirty = plugin.__draftIsDirty
+    const entry = { id: 'e1', title: 'T', content: 'C', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 1 }
+    const list = [entry]
+    check('client: a blank new draft is not dirty (cancel stays silent)',
+      dirty({ id: '', title: '', content: '', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 }, list) === false)
+    check('client: a typed new draft is dirty', dirty({ id: '', title: 'T', content: '', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 }, list) === true)
+    check('client: an untouched copy of an existing entry is not dirty',
+      dirty({ ...entry }, list) === false)
+    check('client: an edited copy of an existing entry is dirty',
+      dirty({ ...entry, content: 'changed' }, list) === true)
+    check('client: updatedAt alone does not make a draft dirty (the Host stamps it)',
+      dirty({ ...entry, updatedAt: 999 }, list) === false)
+    check('client: a draft whose base entry vanished is dirty (confirm is the safe direction)',
+      dirty({ ...entry, id: 'gone' }, list) === true)
+  } else {
+    check('client: exposes __draftIsDirty for this test', false, 'missing export')
+  }
+
+  // SSE echo guard: the Host pushes every persisted change to every open
+  // panel, and the initiating window drops the frame of its own write by
+  // comparing it with what it already absorbed. The comparison itself is
+  // pinned here; contract-test.mjs pins that the pushed frame really is
+  // byte-identical to the response snapshot.
+  if (plugin && typeof plugin.__sameSnapshot === 'function') {
+    const same = plugin.__sameSnapshot
+    const snap = { data: { entries: [], rev: 3 }, storage: { onDisk: true } }
+    check('client: an identical snapshot is recognised as the echo of our own write',
+      same(snap, { data: { entries: [], rev: 3 }, storage: { onDisk: true } }) === true)
+    check('client: a different rev is a real change and must be absorbed',
+      same(snap, { data: { entries: [], rev: 4 }, storage: { onDisk: true } }) === false)
+    check('client: a changed entry list is a real change',
+      same(snap, { data: { entries: [{ id: 'x' }], rev: 3 }, storage: { onDisk: true } }) === false)
+    check('client: a null on either side never counts as an echo (null view = first absorb)',
+      same(snap, null) === false && same(null, snap) === false && same(null, null) === false)
+  } else {
+    check('client: exposes __sameSnapshot for this test', false, 'missing export')
+  }
+
+  // Normalizer edge cases, distinct from contract-test.mjs's seam tests: here
+  // the shapes come from the spec, not from what the current Host happens to
+  // answer — an older/newer Host must degrade the same way.
+  if (plugin && typeof plugin.__normalizeResult === 'function') {
+    const norm = plugin.__normalizeResult
+    const snap = { data: { entries: [], rev: 1 }, storage: {}, limits: {}, injection: {}, preview: '' }
+    const envelope = (over) => Object.assign({ ok: true, message: null, snapshot: snap }, over)
+    check('client: normalizer keeps a conflict envelope\'s ok:false and conflict:true',
+      (() => { const r = norm(envelope({ ok: false, message: 'rev 冲突', conflict: true }))
+        return r !== null && r.ok === false && r.conflict === true && r.message === 'rev 冲突' })())
+    check('client: normalizer defaults ok to true when the envelope omits it',
+      (() => { const r = norm({ snapshot: snap }); return r !== null && r.ok === true })())
+    check('client: normalizer defaults a non-string message to empty (never undefined)',
+      (() => { const r = norm(envelope({ message: 42 })); return r !== null && r.message === '' })())
+    check('client: normalizer flags conflict:false when the key is absent',
+      (() => { const r = norm(envelope({})); return r !== null && r.conflict === false })())
+    check('client: an envelope whose snapshot is null is unusable',
+      norm(envelope({ snapshot: null })) === null)
+    check('client: a snapshot without data is unusable (absorb must show an error, not blank the panel)',
+      norm(envelope({ snapshot: { storage: {} } })) === null)
+    check('client: an array response is unusable',
+      norm([snap]) === null)
+    check('client: null is unusable',
+      norm(null) === null)
+  } else {
+    check('client: exposes __normalizeResult for this test', false, 'missing export')
+  }
+
+  // Cancel guard fallback: the discard confirmation must never trap the user
+  // in the editor. No window.confirm (bare webview) → allow the cancel.
+  if (plugin && typeof plugin.__confirmDiscard === 'function') {
+    const confirmFn = plugin.__confirmDiscard
+    const originalConfirm = globalThis.window.confirm
+    try {
+      globalThis.window.confirm = () => false
+      check('client: confirmDiscard honours a refusal',
+        confirmFn() === false)
+      globalThis.window.confirm = () => true
+      check('client: confirmDiscard honours an approval',
+        confirmFn() === true)
+      delete globalThis.window.confirm
+      check('client: confirmDiscard falls back to allowing cancel without window.confirm',
+        confirmFn() === true)
+    } finally {
+      if (originalConfirm === undefined) delete globalThis.window.confirm
+      else globalThis.window.confirm = originalConfirm
+    }
+  } else {
+    check('client: exposes __confirmDiscard for this test', false, 'missing export')
+  }
+
+  // Import size gate: refuse an obviously wrong file BEFORE reading it, but
+  // never reject anything the plugin itself could have exported (a maximal
+  // store exports to ≈4 MB of pretty-printed UTF-8; the gate sits at ×4 of
+  // the published body ceiling, ≈10 MB).
+  if (plugin && typeof plugin.__importSizeVerdict === 'function') {
+    const gate = plugin.__importSizeVerdict
+    const MAX_BODY_CHARS = 200 * (6000 + 120 + 200 + 200) * 2 + 100000
+    check('client: a normal export file passes the size gate',
+      gate(3 * 1048576, MAX_BODY_CHARS).ok === true)
+    check('client: a maximal own export (≈4 MB pretty-printed) still passes',
+      gate(4.2 * 1048576, MAX_BODY_CHARS).ok === true)
+    check('client: a clearly oversized file (50 MB) is refused with numbers in the message',
+      (() => { const v = gate(50 * 1048576, MAX_BODY_CHARS)
+        return v.ok === false && v.message.includes('50') && v.message.includes('10') })())
+    check('client: the gate is disabled without a published ceiling (older Host)',
+      gate(500 * 1048576, undefined).ok === true)
+    check('client: the gate tolerates a missing size (non-File callers)',
+      gate(NaN, MAX_BODY_CHARS).ok === true && gate(undefined, MAX_BODY_CHARS).ok === true)
+  } else {
+    check('client: exposes __importSizeVerdict for this test', false, 'missing export')
+  }
+
+  // i18n: the panel ships both locales from one dictionary pair. The lookup
+  // chain falls back to zh, so a key missing from zh renders as the raw key;
+  // a key missing from en silently degrades that user to Chinese. Placeholder
+  // parity matters just as much: interpolate() only fills a name the template
+  // actually contains, so an entry that drops {title} shows a half-rendered
+  // string rather than a translated one.
+  if (plugin && plugin.__strings && plugin.__ns) {
+    const { zh, en } = plugin.__strings
+    const zhKeys = Object.keys(zh).sort()
+    const enKeys = Object.keys(en).sort()
+    check('i18n: zh and en dictionaries carry the identical key set',
+      zhKeys.join(',') === enKeys.join(','),
+      'only-zh=' + zhKeys.filter((k) => !(k in en)).join(',') + ' only-en=' + enKeys.filter((k) => !(k in zh)).join(','))
+    check('i18n: the namespace is a non-empty dot-free identifier',
+      typeof plugin.__ns === 'string' && plugin.__ns.length > 0 && !plugin.__ns.includes('.'),
+      String(plugin.__ns))
+    const names = (tpl) => Array.from(String(tpl).matchAll(/\{(\w+)\}/g)).map((m) => m[1]).sort().join(',')
+    const drifted = zhKeys.filter((k) => names(zh[k]) !== names(en[k]))
+    check('i18n: every key interpolates the same placeholders in both locales',
+      drifted.length === 0,
+      drifted.map((k) => k + ' zh=[' + names(zh[k]) + '] en=[' + names(en[k]) + ']').join('; '))
+    check('i18n: the undo bar copy exists in both locales',
+      ['undo.deleted', 'undo.restore', 'undo.dismiss', 'undo.restored'].every((k) => k in zh && k in en),
+      'missing: ' + ['undo.deleted', 'undo.restore', 'undo.dismiss', 'undo.restored'].filter((k) => !(k in zh) || !(k in en)).join(','))
+
+    // dictionaryT is the built-in translator that carries the panel until the
+    // official locale service publishes — and forever on hosts without it.
+    if (typeof plugin.__dictionaryT === 'function') {
+      const tz = plugin.__dictionaryT('zh')
+      const te = plugin.__dictionaryT('en')
+      check('i18n: dictionaryT interpolates params in both locales',
+        tz('undo.deleted', { title: 'X' }) === '已删除「X」' && te('undo.deleted', { title: 'X' }) === 'Deleted “X”',
+        tz('undo.deleted', { title: 'X' }) + ' / ' + te('undo.deleted', { title: 'X' }))
+      check('i18n: dictionaryT falls back to zh for a locale it does not ship',
+        plugin.__dictionaryT('fr')('panel.title', {}) === zh['panel.title'])
+      check('i18n: dictionaryT leaves an unfilled placeholder untouched',
+        tz('undo.deleted', {}) === zh['undo.deleted'])
+      check('i18n: a missing key surfaces as the key itself, never a blank',
+        tz('no.such.key', {}) === 'no.such.key')
+    } else {
+      check('i18n: exposes __dictionaryT for this test', false, 'missing export')
+    }
+  } else {
+    check('i18n: plugin exposes __strings and __ns for validation', false, 'missing exports')
+  }
+
+  // Undo bar lifetime: the delete offer must lapse on its own, so the TTL is
+  // pinned here — a silently longer window resurrects long-dead entries, a
+  // shorter one makes the button effectively unclickable.
+  if (plugin && typeof plugin.__undoTtlMs === 'number') {
+    check('client: undo TTL is 10 seconds', plugin.__undoTtlMs === 10000, String(plugin.__undoTtlMs))
+  } else {
+    check('client: exposes __undoTtlMs for this test', false, 'missing export')
+  }
 }
 
 console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')

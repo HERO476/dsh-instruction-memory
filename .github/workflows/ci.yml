@@ -13,16 +13,23 @@ jobs:
         # The plugin is developed on Windows and DSH also runs on macOS/Linux;
         # both a POSIX and a Windows run must stay green.
         os: [ubuntu-latest, windows-latest]
+        # engines.node declares >=20: the floor (20) must stay green because a
+        # user may legitimately run it, 22 is the development line, and 24 is
+        # the current LTS. If 20 ever breaks, the honest fix is compat code or
+        # raising engines — never dropping the floor from the matrix silently.
+        node: [20, 22, 24]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-      # `npm test` runs host-range-test.mjs first, which pins the declared DSH
-      # compatibility range against a fixed version matrix under BOTH npm's
-      # default prerelease semantics and `includePrerelease: true`, plus a LIVE
-      # guard over whatever host is installed here.
+          node-version: ${{ matrix.node }}
+      # `npm test` runs lint.mjs first — a syntax gate over every shipped and
+      # repo-run file (node --check, no ESLint by design) — then
+      # host-range-test.mjs, which pins the declared DSH compatibility range
+      # against a fixed version matrix under BOTH npm's default prerelease
+      # semantics and `includePrerelease: true`, plus a LIVE guard over
+      # whatever host is installed here.
       #
       # Those two modes disagreeing on the installed host is exactly how the
       # false negatives shipped unnoticed — dshmarket reads the range with

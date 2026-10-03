@@ -264,6 +264,8 @@ for (const scenario of scenarios) {
   check('corrupt store: the backup data is usable',
     Array.isArray(recovered.snapshot.data.entries) && recovered.snapshot.data.entries.length >= 1,
     String(recovered.snapshot.data.entries.length))
+  check('corrupt store: the corrupt primary keeps onDisk=true (the file IS on disk)',
+    recovered.snapshot.storage.onDisk === true, JSON.stringify(recovered.snapshot.storage.onDisk))
   check('corrupt store: the broken file is preserved on disk',
     (await readFile(STORE_FILE, 'utf8')) === '{corrupted')
 
@@ -318,6 +320,112 @@ for (const scenario of scenarios) {
   check('import-data: an empty file is refused with a message', empty.ok === false, JSON.stringify(empty.message))
 }
 
+// Optimistic concurrency: a mutating command may carry the rev its caller last
+// saw (`baseRev`). Without it, two settings pages sharing one store could
+// blind-overwrite each other — tab A holding a stale snapshot would push back
+// entries tab B had just deleted, and neither tab would ever know.
+{
+  const raw1 = await callRoute(handler, { method: 'state', args: null })
+  const rev1 = raw1.snapshot.data.rev
+  check('rev: the snapshot carries a numeric rev', typeof rev1 === 'number', JSON.stringify(rev1))
+
+  const saved = await callRoute(handler, {
+    method: 'save-entry',
+    args: {
+      baseRev: rev1,
+      entry: { id: '', title: 'REV-ENTRY', content: 'rev content', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 },
+    },
+  })
+  check('rev: a save carrying the current rev succeeds', saved.ok === true, JSON.stringify(saved.message))
+  check('rev: a committed write advanced the rev by exactly one',
+    saved.snapshot.data.rev === rev1 + 1, rev1 + ' -> ' + saved.snapshot.data.rev)
+
+  // A second window still holding rev1 must be refused with a conflict — and
+  // the refusal must carry the FRESH snapshot so its panel can resync.
+  const stale = await callRoute(handler, {
+    method: 'save-entry',
+    args: {
+      baseRev: rev1,
+      entry: { id: '', title: 'STALE-WINDOW', content: 'must not land', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 },
+    },
+  })
+  check('rev: a stale baseRev is refused with conflict:true',
+    stale.ok === false && stale.conflict === true, JSON.stringify({ ok: stale.ok, conflict: stale.conflict }))
+  check('rev: the conflict response carries the fresh snapshot',
+    stale.snapshot.data.rev === saved.snapshot.data.rev
+    && !stale.snapshot.data.entries.some((e) => e.title === 'STALE-WINDOW'))
+  const after = await callRoute(handler, { method: 'state', args: null })
+  check('rev: the stale write never reached the store',
+    !after.snapshot.data.entries.some((e) => e.title === 'STALE-WINDOW'))
+
+  // delete-entry and set-options must be guarded by the same check.
+  const staleDelete = await callRoute(handler, { method: 'delete-entry', args: { id: 'whatever', baseRev: rev1 } })
+  check('rev: a stale delete is refused with conflict:true',
+    staleDelete.ok === false && staleDelete.conflict === true, JSON.stringify(staleDelete.conflict))
+  const staleOptions = await callRoute(handler, { method: 'set-options', args: { enabled: false, baseRev: rev1 } })
+  check('rev: a stale set-options is refused with conflict:true',
+    staleOptions.ok === false && staleOptions.conflict === true, JSON.stringify(staleOptions.conflict))
+  check('rev: the stale set-options did not flip the master switch',
+    staleOptions.snapshot.data.enabled === true, String(staleOptions.snapshot.data.enabled))
+
+  // Legacy clients send no baseRev; they keep the old unconditional behaviour.
+  const legacy = await callRoute(handler, {
+    method: 'save-entry',
+    args: { entry: { id: '', title: 'LEGACY-CLIENT', content: 'no baseRev', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 } },
+  })
+  check('rev: a save without baseRev is still accepted (legacy clients)',
+    legacy.ok === true, JSON.stringify(legacy.message))
+}
+
+// A store declaring a FUTURE format version must be refused, not best-effort
+// parsed as v1: fields could mean something else, and the next save would
+// rewrite the file in the wrong shape. Mutations must be paused while the
+// file is in that state — the file itself stays untouched on disk.
+{
+  await writeFile(STORE_FILE, JSON.stringify({
+    version: 2, rev: 9, enabled: true, budgetChars: 4000,
+    entries: [{ id: 'v2-e', title: 'FROM-THE-FUTURE', content: 'v2 payload', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 1 }],
+  }), 'utf8')
+
+  const refused = await callRoute(handler, { method: 'reload', args: null })
+  check('future version: reload is refused with a readable error',
+    refused.ok === false && typeof refused.message === 'string' && refused.message.includes('版本'),
+    JSON.stringify(refused.message))
+  check('future version: the future-format entry is NOT loaded',
+    !refused.snapshot.data.entries.some((e) => e.title === 'FROM-THE-FUTURE'))
+  check('future version: the panel is told the file is on disk (it is)',
+    refused.snapshot.storage.onDisk === true, JSON.stringify(refused.snapshot.storage))
+
+  const saveRefused = await callRoute(handler, {
+    method: 'save-entry',
+    args: { entry: { id: '', title: 'MUST-NOT-SAVE', content: 'x', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 } },
+  })
+  check('future version: saving is paused while the format is unknown',
+    saveRefused.ok === false && typeof saveRefused.message === 'string' && saveRefused.message.includes('版本'),
+    JSON.stringify(saveRefused.message))
+  const optionsRefused = await callRoute(handler, { method: 'set-options', args: { enabled: false } })
+  check('future version: set-options is paused too',
+    optionsRefused.ok === false, JSON.stringify(optionsRefused.message))
+  check('future version: the file on disk is untouched (still version 2)',
+    JSON.parse(await readFile(STORE_FILE, 'utf8')).version === 2)
+
+  // Restoring a v1 file and reloading lifts the pause.
+  await writeFile(STORE_FILE, JSON.stringify({
+    version: 1, enabled: true, budgetChars: 4000,
+    entries: [{ id: 'back-to-v1', title: 'RESTORED', content: 'v1 again', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 1 }],
+  }), 'utf8')
+  const healed = await callRoute(handler, { method: 'reload', args: null })
+  check('future version: a restored v1 file loads normally',
+    healed.ok === true && healed.snapshot.data.entries.some((e) => e.title === 'RESTORED'),
+    JSON.stringify(healed.message))
+  const healedSave = await callRoute(handler, {
+    method: 'save-entry',
+    args: { entry: { id: '', title: 'AFTER-HEAL', content: 'works again', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 } },
+  })
+  check('future version: saving works again after the restore',
+    healedSave.ok === true, JSON.stringify(healedSave.message))
+}
+
 // The body ceiling must exceed the largest payload this plugin can produce.
 // It used to be a hard-coded 1,000,000 while MAX_ENTRIES × MAX_CONTENT is
 // already 1.2 M characters of content — so a maximal store could be exported by
@@ -353,6 +461,14 @@ for (const scenario of scenarios) {
   check('oversized body answers 413 with a JSON error',
     out.status === 413 && JSON.parse(out.body).ok === false,
     'status=' + out.status)
+
+  // The ceiling is published in the snapshot so the Client can refuse an
+  // oversized import file before reading it. Pin the wiring: same value the
+  // route enforces, or the Client-side gate would drift from the real 413.
+  const stateNow = await callRoute(handler, { method: 'state', args: null })
+  check('body ceiling: limits.maxBodyChars is published and equals the enforced ceiling',
+    stateNow.snapshot.limits.maxBodyChars === host.MAX_BODY_CHARS,
+    JSON.stringify(stateNow.snapshot.limits))
 }
 
 // The route only speaks application/json: a cross-site form post (or any
@@ -395,12 +511,93 @@ async function statusFor(headers, body) {
   check('a localhost Host is accepted',
     await statusFor({ 'content-type': 'application/json', host: 'localhost:8080' }, JSON.stringify({ method: 'state' })) === 200)
 
+  // Fetch Metadata: a modern browser stamps Sec-Fetch-Site on every request,
+  // even ones that managed to drop Origin — a page on evil.com is still
+  // labelled cross-site. Only cross-site is refused; same-site must pass
+  // (schemeful same-site ignores ports), and absence passes because curl,
+  // Node and pre-2020 browsers never send it.
+  check('Sec-Fetch-Site: cross-site is refused with 403',
+    await statusFor({ 'content-type': 'application/json', host: '127.0.0.1:8080', 'sec-fetch-site': 'cross-site' }, hostile) === 403)
+  check('Sec-Fetch-Site: the refusal carries a readable reason',
+    (await rawRoute(handler, hostile,
+      { 'content-type': 'application/json', host: '127.0.0.1:8080', 'sec-fetch-site': 'cross-site' }))
+      .body.includes('Sec-Fetch-Site'))
+  check('Sec-Fetch-Site: same-origin is accepted',
+    await statusFor({ 'content-type': 'application/json', host: '127.0.0.1:8080', 'sec-fetch-site': 'same-origin' }, JSON.stringify({ method: 'state' })) === 200)
+  check('Sec-Fetch-Site: same-site is accepted (same-site ignores ports)',
+    await statusFor({ 'content-type': 'application/json', host: '127.0.0.1:8080', 'sec-fetch-site': 'same-site' }, JSON.stringify({ method: 'state' })) === 200)
+  check('Sec-Fetch-Site: none is accepted (user-driven navigation)',
+    await statusFor({ 'content-type': 'application/json', host: '127.0.0.1:8080', 'sec-fetch-site': 'none' }, JSON.stringify({ method: 'state' })) === 200)
+
   const after = await callRoute(handler, { method: 'state', args: null })
   check('a refused rebinding write left the store untouched',
     after.snapshot.data.entries.length === before.snapshot.data.entries.length
     && after.snapshot.data.entries.every((e) => e.title !== 'PWNED'))
   check('the refused entry was never injected',
     !injectedText().includes('PWNED'))
+}
+
+// The Host allowlist must track the BIND, not the literal string `0.0.0.0`.
+// Binding `::` (IPv6 all-interfaces) or a concrete address such as
+// `192.168.1.5` publishes the server just as deliberately as `0.0.0.0` does,
+// and the old `boundHost !== '0.0.0.0'` comparison left those deployments
+// 403-ing every legitimate client that reached them by hostname.
+{
+  async function mountWithHost(boundHost) {
+    let h = null
+    const ctx = {
+      systemPrompt: { section: () => () => {} },
+      inject: (deps, callback) => {
+        const names = Array.isArray(deps) ? deps : Object.keys(deps)
+        if (names.includes('webServer')) {
+          callback({
+            // `host: undefined` exercises the "server did not say" default,
+            // which must behave as loopback (the server default bind).
+            webServer: {
+              ...(boundHost === '' ? {} : { host: boundHost }),
+              register: (route) => { h = route.handler; return () => {} },
+            },
+            effect: (fn) => { fn(); return () => {} },
+          })
+        }
+        return null
+      },
+      get: () => undefined,
+      effect: (fn) => { fn(); return () => {} },
+      logger: () => ({ info: () => {}, debug: () => {} }),
+    }
+    const mod = await import(new URL('./lib/index.js', import.meta.url).href
+      + '?bind=' + encodeURIComponent(boundHost === '' ? 'unset' : boundHost)
+      + '-' + Date.now() + Math.random().toString(36).slice(2))
+    mod.apply(ctx)
+    if (h === null) throw new Error('route not registered for bind ' + boundHost)
+    return h
+  }
+
+  async function statusOn(h, headers, body) {
+    const out = await rawRoute(h, body, headers)
+    return out.status
+  }
+
+  // A published deployment: the client legitimately arrives with the address
+  // it dialed, which is not a loopback name.
+  for (const bound of ['::', '0.0.0.0', '192.168.1.5']) {
+    const h = await mountWithHost(bound)
+    const status = await statusOn(h,
+      { 'content-type': 'application/json', host: '192.168.1.5:8080' },
+      JSON.stringify({ method: 'state' }))
+    check('host guard: bind ' + bound + ' accepts a non-loopback Host (published deployment)',
+      status === 200, 'status=' + status)
+  }
+  // A loopback (or unset — the server default) bind must keep the allowlist.
+  for (const bound of ['127.0.0.1', 'localhost', '::1', '']) {
+    const h = await mountWithHost(bound)
+    const status = await statusOn(h,
+      { 'content-type': 'application/json', host: '192.168.1.5:8080' },
+      JSON.stringify({ method: 'state' }))
+    check('host guard: bind ' + (bound === '' ? '(unset)' : bound) + ' still refuses a non-loopback Host',
+      status === 403, 'status=' + status)
+  }
 }
 
 // Atomic writes: no temp leftovers, and the rolling backup is in place.
@@ -485,10 +682,13 @@ async function statusFor(headers, body) {
   await rm(STORE_FILE, { force: true })                      // memory.json gone
   check('precondition: the rolling backup survives', existsSync(STORE_FILE + '.bak'))
 
-  const recovered = normalize(await callRoute(handler, { method: 'reload', args: null }))
+  const recoveredRaw = await callRoute(handler, { method: 'reload', args: null })
+  const recovered = normalize(recoveredRaw)
   check('missing primary: recovers from the backup instead of an empty store',
     recovered.snapshot.data.entries.length > 0,
     'entries=' + recovered.snapshot.data.entries.length)
+  check('missing primary: the promoting reload reports saved:true (it wrote memory.json back)',
+    recoveredRaw.saved === true, JSON.stringify(recoveredRaw.saved))
   check('missing primary: the recovery is disclosed',
     typeof recovered.snapshot.storage.warning === 'string' && recovered.snapshot.storage.warning.includes('memory.json.bak'),
     JSON.stringify(recovered.snapshot.storage.warning))
@@ -496,6 +696,181 @@ async function statusFor(headers, body) {
     injectedText().length > 0)
   check('missing primary: memory.json was written back',
     existsSync(STORE_FILE))
+}
+
+// --- Hand-edited options must be corrected loudly, not silently. ------------
+//
+// The loader has always clamped budgetChars and defaulted a non-boolean
+// enabled, but the fix used to be invisible: the next save rewrote the file
+// with the corrected values and the user never learned their edit had been
+// ignored. Now every correction is named in the load warning.
+{
+  await writeFile(STORE_FILE, JSON.stringify({
+    version: 1, enabled: 'yes', budgetChars: 100,
+    entries: [{ id: 'hand-1', title: 'HAND', content: 'hand edited', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 1 }],
+  }), 'utf8')
+
+  const reloaded = normalize(await callRoute(handler, { method: 'reload', args: null }))
+  check('hand-edited options: reload reports ok', reloaded.ok === true, JSON.stringify(reloaded.message))
+  check('hand-edited options: values are corrected',
+    reloaded.snapshot.data.budgetChars === 800 && reloaded.snapshot.data.enabled === true,
+    'budgetChars=' + reloaded.snapshot.data.budgetChars + ' enabled=' + reloaded.snapshot.data.enabled)
+  check('hand-edited options: both corrections are disclosed',
+    typeof reloaded.snapshot.storage.warning === 'string'
+      && reloaded.snapshot.storage.warning.includes('budgetChars')
+      && reloaded.snapshot.storage.warning.includes('enabled'),
+    JSON.stringify(reloaded.snapshot.storage.warning))
+  check('hand-edited options: warning names the next-save consequence',
+    reloaded.snapshot.storage.warning.includes('下次保存'),
+    JSON.stringify(reloaded.snapshot.storage.warning))
+
+  // The next save persists the corrected values, and the disclosure ends.
+  const saved = normalize(await callRoute(handler, {
+    method: 'save-entry',
+    args: { entry: { id: '', title: 'AFTER-FIX', content: 'x', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 } },
+  }))
+  check('hand-edited options: saving after corrections reports ok', saved.ok === true, JSON.stringify(saved.message))
+  const onDisk = JSON.parse(await readFile(STORE_FILE, 'utf8'))
+  check('hand-edited options: the corrected values are what got persisted',
+    onDisk.budgetChars === 800 && onDisk.enabled === true,
+    'budgetChars=' + onDisk.budgetChars + ' enabled=' + onDisk.enabled)
+  const cleared = normalize(await callRoute(handler, { method: 'reload', args: null }))
+  check('hand-edited options: warning cleared once the file is clean again',
+    cleared.snapshot.storage.warning === null, JSON.stringify(cleared.snapshot.storage.warning))
+}
+
+// --- Read-only responses must not claim they saved anything. ---------------
+//
+// `saved` in the response envelope means "this operation persisted the store".
+// Before the fix, `state`, `reload` and even `export-data` — which never
+// writes a byte — answered saved:true, so the field carried no information a
+// caller could rely on. Raw responses are asserted because the Client's
+// normalizer deliberately drops the field.
+{
+  const stateRes = await callRoute(handler, { method: 'state', args: null })
+  check('read-only: state on an existing store reports saved:false',
+    stateRes.ok === true && stateRes.saved === false,
+    JSON.stringify({ ok: stateRes.ok, saved: stateRes.saved }))
+
+  const reloadRes = await callRoute(handler, { method: 'reload', args: null })
+  check('read-only: reload of an unchanged store reports saved:false',
+    reloadRes.ok === true && reloadRes.saved === false,
+    JSON.stringify({ ok: reloadRes.ok, saved: reloadRes.saved }))
+
+  const exportRes = await callRoute(handler, { method: 'export-data', args: null })
+  check('read-only: export-data never claims a save',
+    exportRes.ok === true && exportRes.saved === false,
+    JSON.stringify({ ok: exportRes.ok, saved: exportRes.saved }))
+
+  const savedRes = await callRoute(handler, {
+    method: 'save-entry',
+    args: { entry: { id: '', title: 'REAL-SAVE', content: 'x', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 } },
+  })
+  check('read-only: a real save still reports saved:true',
+    savedRes.ok === true && savedRes.saved === true,
+    JSON.stringify({ ok: savedRes.ok, saved: savedRes.saved }))
+}
+
+/* ==================================================================== *
+ * SSE live updates: an open settings page must see store changes that
+ * happened without it — another window saving through the same host, or
+ * memory.json changing on disk underneath the process.
+ * ==================================================================== */
+{
+  // Minimal EventSource stand-in: a GET carrying `Accept: text/event-stream`
+  // (exactly what a browser EventSource sends) against a response double that
+  // records every chunk written.
+  const openStream = (headers) => {
+    const listeners = {}
+    const out = { status: 0, chunks: [], ended: false }
+    const req = {
+      method: 'GET',
+      headers: headers || { accept: 'text/event-stream', host: '127.0.0.1:8080' },
+      on(event, cb) { (listeners[event] = listeners[event] || []).push(cb); return this },
+      fire(name) { for (const cb of listeners[name] || []) cb() },
+    }
+    const res = {
+      writeHead(status) { out.status = status },
+      write(chunk) { out.chunks.push(String(chunk)) },
+      end() { out.ended = true },
+      on() {},
+    }
+    handler(req, res)
+    return { req, out }
+  }
+  const framesOf = (out) => out.chunks
+    .join('')
+    .split('\n\n')
+    .filter((block) => block.startsWith('data: '))
+    .map((block) => JSON.parse(block.slice('data: '.length)))
+
+  const hostile = openStream({ accept: 'text/event-stream', host: '127.0.0.1:8080', 'sec-fetch-site': 'cross-site' })
+  check('sse: a cross-site stream request is refused (403)',
+    hostile.out.status === 403, 'status=' + hostile.out.status)
+
+  const stream = openStream()
+  check('sse: a stream request is answered 200 with a retry hint',
+    stream.out.status === 200
+      && typeof stream.out.chunks[0] === 'string' && stream.out.chunks[0].startsWith('retry: '),
+    'status=' + stream.out.status + ' first=' + JSON.stringify(stream.out.chunks[0]))
+  check('sse: connecting immediately delivers the current snapshot',
+    framesOf(stream.out).length === 1, 'frames=' + framesOf(stream.out).length)
+  const firstFrame = normalize(framesOf(stream.out)[0])
+  check('sse: the frame is the bare snapshot the Client normalizer accepts',
+    firstFrame !== null && Array.isArray(firstFrame.snapshot.data.entries),
+    'raw keys = ' + JSON.stringify(Object.keys(framesOf(stream.out)[0] || {})))
+
+  // Same host, second window: a mutation by one panel must reach the other.
+  const savedRes = await callRoute(handler, {
+    method: 'save-entry',
+    args: { entry: { id: '', title: 'SSE-PUSH', content: 'pushed to other windows', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 } },
+  })
+  let pushed = null
+  for (let i = 0; i < 200 && pushed === null; i += 1) {
+    const frames = framesOf(stream.out)
+    pushed = frames.length > 1 ? frames[frames.length - 1] : null
+    if (pushed === null) await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  check('sse: a mutation through the route is pushed to the open stream',
+    pushed !== null && pushed.data.entries.some((e) => e.title === 'SSE-PUSH'),
+    'pushed=' + (pushed === null ? 'null' : 'no SSE-PUSH entry'))
+  check('sse: the pushed frame matches the response snapshot (so the initiating window drops it as an echo)',
+    pushed !== null && JSON.stringify(pushed) === JSON.stringify(savedRes.snapshot))
+
+  // External change: memory.json rewritten on disk by something else (another
+  // process sharing the file). Watcher + debounce must reload and push.
+  const beforeExternal = framesOf(stream.out).length
+  await writeFile(STORE_FILE, JSON.stringify({
+    version: 1, enabled: true, budgetChars: 2000,
+    entries: [{ id: 'ext-1', title: 'EXTERNAL', content: 'written outside the host', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 2 }],
+  }), 'utf8')
+  let external = null
+  for (let i = 0; i < 400 && external === null; i += 1) {
+    const frames = framesOf(stream.out)
+    for (let j = beforeExternal; j < frames.length; j += 1) {
+      if (frames[j].data.entries.some((e) => e.title === 'EXTERNAL')) external = frames[j]
+    }
+    if (external === null) await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  check('sse: an external disk change is reloaded and pushed (watcher + debounce)',
+    external !== null, 'waited 10s for an EXTERNAL frame')
+  if (external !== null) {
+    check('sse: the external frame reflects the file, not the stale memory',
+      external.data.entries.every((e) => e.title !== 'SSE-PUSH'))
+  }
+
+  // Closing the stream unsubscribes: later pushes reach nobody.
+  stream.req.fire('close')
+  check('sse: closing the request ends the response', stream.out.ended === true)
+  const beforeClose = framesOf(stream.out).length
+  await callRoute(handler, {
+    method: 'save-entry',
+    args: { entry: { id: '', title: 'AFTER-CLOSE', content: 'x', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 } },
+  })
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  check('sse: a closed stream receives no further frames',
+    framesOf(stream.out).length === beforeClose,
+    'frames=' + framesOf(stream.out).length + ' before=' + beforeClose)
 }
 
 /* ==================================================================== *
@@ -576,6 +951,8 @@ async function statusFor(headers, body) {
     firstState.snapshot.injection.registered === false, JSON.stringify(firstState.snapshot.injection))
   check('lazy first run: reading state materialises the store',
     existsSync(storeFile))
+  check('lazy first run: the materialising state reports saved:true (it wrote the file)',
+    firstState.saved === true, JSON.stringify(firstState.saved))
   check('lazy first run: the snapshot reports onDisk=true afterwards',
     firstState.snapshot.storage.onDisk === true, JSON.stringify(firstState.snapshot.storage))
   check('lazy first run: pulls is still 0 (prepared nowhere, assembled nowhere)',
@@ -597,6 +974,8 @@ async function statusFor(headers, body) {
   const afterPull = await callRoute(lazyHandler, { method: 'state' })
   check('lazy first run: a host assembly moves pulls to 1',
     afterPull.snapshot.injection.pulls === 1, String(afterPull.snapshot.injection.pulls))
+  check('lazy first run: a later state read reports saved:false (nothing to write)',
+    afterPull.saved === false, JSON.stringify(afterPull.saved))
 
   process.env.DSH_HOME = previousHome
   await rm(LAZY_HOME, { recursive: true, force: true })
