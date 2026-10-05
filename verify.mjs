@@ -463,6 +463,39 @@ if (captured && typeof captured.factory === 'function') {
     check('client: exposes __importSizeVerdict for this test', false, 'missing export')
   }
 
+  // Stylesheet hygiene: every theme token the panel ships must use the
+  // shell's `--dsw-alias-*` prefix. A single `--dsh-alias-*` typo shipped in
+  // the error-dot rule (it silently fell back to the hard-coded red and
+  // stopped following the host theme); a source scan is the only floor here
+  // because the panel never ships its own CSS parser.
+  {
+    const clientSource = readFileSync(fileURLToPath(CLIENT_URL), 'utf8')
+    const wrongPrefix = Array.from(clientSource.matchAll(/var\(--dsh-[a-z0-9-]*\)/gi)).map((m) => m[0])
+    check('client CSS: no var(--dsh-*) typo (the shell prefix is --dsw-alias-)',
+      wrongPrefix.length === 0, wrongPrefix.join(', '))
+    check('client CSS: the error dot uses the theme error token',
+      /\.im-dot-err\s*\{[^}]*var\(--dsw-alias-state-error-primary,/.test(clientSource),
+      '.im-dot-err does not reference the state-error token')
+  }
+
+  // Budget input vs live pushes: while the user is editing the injection-size
+  // field, an SSE frame from another window must not replace the half-typed
+  // number. The pure decision is pinned here; the component wires it through
+  // a focus ref + onFocus/onBlur.
+  if (plugin && typeof plugin.__nextBudgetText === 'function') {
+    const next = plugin.__nextBudgetText
+    check('client: a push while the budget input is focused keeps the draft',
+      next('12', 4000, true) === '12', String(next('12', 4000, true)))
+    check('client: a push while not focused adopts the committed value as text',
+      next('12', 4000, false) === '4000', String(next('12', 4000, false)))
+    check('client: the incoming value is always stringified (never a number)',
+      typeof next('', 2000, false) === 'string' && next('', 2000, false) === '2000')
+    check('client: an empty draft left alone while focused stays empty',
+      next('', 800, true) === '', JSON.stringify(next('', 800, true)))
+  } else {
+    check('client: exposes __nextBudgetText for this test', false, 'missing export')
+  }
+
   // i18n: the panel ships both locales from one dictionary pair. The lookup
   // chain falls back to zh, so a key missing from zh renders as the raw key;
   // a key missing from en silently degrades that user to Chinese. Placeholder

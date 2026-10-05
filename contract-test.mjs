@@ -14,7 +14,7 @@
  * dropped-entries warning path is exercised too.
  */
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -598,6 +598,48 @@ async function statusFor(headers, body) {
     check('host guard: bind ' + (bound === '' ? '(unset)' : bound) + ' still refuses a non-loopback Host',
       status === 403, 'status=' + status)
   }
+
+  // IPv6 loopback END TO END through the real route. The shipped defect
+  // rejected the GUI when it was opened at http://[::1]:port: the Host parsed
+  // to ::1 but the bracketed Origin parsed to '[::1]', and the two never
+  // compared equal. Also covers the two WHATWG-URL spellings of a mapped
+  // address (dotted-quad Host vs canonical hex Origin).
+  {
+    const h6 = await mountWithHost('::1')
+    const sameOrigin = await statusOn(h6,
+      { 'content-type': 'application/json', host: '[::1]:8080', origin: 'http://[::1]:8080' },
+      JSON.stringify({ method: 'state' }))
+    check('ipv6: [::1] loopback Host with a bracketed same Origin is 200',
+      sameOrigin === 200, 'status=' + sameOrigin)
+    const diffPort = await statusOn(h6,
+      { 'content-type': 'application/json', host: '[::1]:8080', origin: 'http://[::1]:9999' },
+      JSON.stringify({ method: 'state' }))
+    check('ipv6: a different-port same-host Origin is still same-origin',
+      diffPort === 200, 'status=' + diffPort)
+    const mapped = await statusOn(h6,
+      { 'content-type': 'application/json', host: '[::ffff:127.0.0.1]:8080', origin: 'http://[::ffff:7f00:1]:8080' },
+      JSON.stringify({ method: 'state' }))
+    check('ipv6: the mapped-address spelling difference (dotted vs hex) is accepted',
+      mapped === 200, 'status=' + mapped)
+    const rebind = await statusOn(h6,
+      { 'content-type': 'application/json', host: '[::1]:8080', origin: 'http://evil.com' },
+      JSON.stringify({ method: 'state' }))
+    check('ipv6: rebinding through a foreign Origin is still 403',
+      rebind === 403, 'status=' + rebind)
+    // The SSE stream runs the same verdict before upgrading.
+    const sseDenied = await new Promise((resolve) => {
+      const req = {
+        method: 'GET',
+        headers: { accept: 'text/event-stream', host: '[::1]:8080', origin: 'http://evil.com' },
+        on: () => req,
+      }
+      let settled = false
+      const settle = (status) => { if (!settled) { settled = true; resolve(status) } }
+      const res = { writeHead: settle, end: () => settle(0), on() {}, write() {} }
+      h6(req, res)
+    })
+    check('ipv6: a cross-origin EventSource is refused 403 too', sseDenied === 403, 'status=' + sseDenied)
+  }
 }
 
 // Atomic writes: no temp leftovers, and the rolling backup is in place.
@@ -606,6 +648,67 @@ async function statusFor(headers, body) {
   check('no .tmp leftovers after saves',
     !files.some((name) => name.endsWith('.tmp')), JSON.stringify(files))
   check('rolling backup memory.json.bak exists', files.includes('memory.json.bak'), JSON.stringify(files))
+}
+
+// Cross-process write lock ownership. The marker carries a per-attempt token:
+// a finished slow holder must never delete the lock a newer owner took over.
+{
+  const lockPath = STORE_FILE + '.lock'
+  await rm(lockPath, { force: true })
+
+  // A FRESH foreign lock (another process mid-save): the host waits its short
+  // grace period, then writes unlocked BY DESIGN — but the foreign marker must
+  // survive our finally untouched.
+  writeFileSync(lockPath, 'foreign-holder-token')
+  const t0 = Date.now()
+  const unlocked = await callRoute(handler, {
+    method: 'save-entry',
+    args: { entry: { id: '', title: 'LOCK-FRESH', content: 'written past a live lock', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 } },
+  })
+  const waitedMs = Date.now() - t0
+  check('lock: a save blocked by a fresh foreign lock still succeeds (unlocked by design)',
+    unlocked.ok === true && unlocked.saved === true, JSON.stringify(unlocked.message))
+  check('lock: the blocked save waited roughly the 2s grace period, not 0 and not 10s',
+    waitedMs >= 1800 && waitedMs < 8000, waitedMs + 'ms')
+  check('lock: the foreign marker is left owned by the OTHER process (no unlink in finally)',
+    existsSync(lockPath) && readFileSync(lockPath, 'utf8') === 'foreign-holder-token',
+    existsSync(lockPath) ? readFileSync(lockPath, 'utf8') : '(marker missing)')
+  check('lock: the unlocked write landed anyway',
+    unlocked.snapshot.data.entries.some((e) => e.title === 'LOCK-FRESH'))
+
+  // A STALE foreign lock (crashed holder; mtime older than the 10s threshold)
+  // is stolen; the new owner's token is what gets released afterwards, so the
+  // marker ends up gone rather than replaced by our content and abandoned.
+  utimesSync(lockPath, (Date.now() - 30000) / 1000, (Date.now() - 30000) / 1000)
+  const stolen = await callRoute(handler, {
+    method: 'save-entry',
+    args: { entry: { id: '', title: 'LOCK-STALE', content: 'written after stealing a dead lock', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 } },
+  })
+  check('lock: a stale foreign lock is stolen and the save succeeds quickly',
+    stolen.ok === true && stolen.saved === true, JSON.stringify(stolen.message))
+  check('lock: after release no marker remains (we released our own token)',
+    !existsSync(lockPath), 'marker still present')
+  await rm(lockPath, { force: true })
+}
+
+// Deleting an id that is not there changes nothing: no disk write, no rev
+// bump, no push. Previously a missing id still ran the full commit path.
+{
+  const before = await callRoute(handler, { method: 'state', args: null })
+  const revBefore = before.snapshot.data.rev
+  const countBefore = before.snapshot.data.entries.length
+  const missing = await callRoute(handler, { method: 'delete-entry', args: { id: 'no-such-entry-exists' } })
+  check('delete: a missing id reports ok', missing.ok === true, JSON.stringify(missing.message))
+  check('delete: a missing id performs NO save (saved:false)',
+    missing.saved === false, String(missing.saved))
+  check('delete: a missing id does not bump rev',
+    missing.snapshot.data.rev === revBefore, revBefore + ' -> ' + missing.snapshot.data.rev)
+  check('delete: a missing id leaves the entry count alone',
+    missing.snapshot.data.entries.length === countBefore,
+    countBefore + ' -> ' + missing.snapshot.data.entries.length)
+  const after = await callRoute(handler, { method: 'state', args: null })
+  check('delete: a follow-up state read sees the same rev (nothing was written)',
+    after.snapshot.data.rev === revBefore, revBefore + ' -> ' + after.snapshot.data.rev)
 }
 
 /* ==================================================================== *
@@ -780,7 +883,7 @@ async function statusFor(headers, body) {
   // Minimal EventSource stand-in: a GET carrying `Accept: text/event-stream`
   // (exactly what a browser EventSource sends) against a response double that
   // records every chunk written.
-  const openStream = (headers) => {
+  const openStream = (headers, routeHandler = handler) => {
     const listeners = {}
     const out = { status: 0, chunks: [], ended: false }
     const req = {
@@ -795,7 +898,7 @@ async function statusFor(headers, body) {
       end() { out.ended = true },
       on() {},
     }
-    handler(req, res)
+    routeHandler(req, res)
     return { req, out }
   }
   const framesOf = (out) => out.chunks
@@ -837,6 +940,54 @@ async function statusFor(headers, body) {
   check('sse: the pushed frame matches the response snapshot (so the initiating window drops it as an echo)',
     pushed !== null && JSON.stringify(pushed) === JSON.stringify(savedRes.snapshot))
 
+  // A writer whose socket has died: res.write throws on the next broadcast.
+  // pushSnapshot must run that stream's full cleanup (end the response and
+  // unsubscribe) and keep serving the healthy streams — previously it only
+  // deleted the send from a Set, leaving the response open and registered.
+  {
+    const deadListeners = {}
+    const deadOut = { status: 0, chunks: [], ended: false }
+    let writes = 0
+    const deadReq = {
+      method: 'GET',
+      headers: { accept: 'text/event-stream', host: '127.0.0.1:8080' },
+      on(event, cb) { (deadListeners[event] = deadListeners[event] || []).push(cb); return deadReq },
+      fire() {},
+    }
+    const deadRes = {
+      writeHead(status) { deadOut.status = status },
+      // write #1 is the retry hint, #2 the connect frame; the first PUSH (#3)
+      // is the dead socket, so it throws exactly when a broadcast happens.
+      write(chunk) {
+        writes += 1
+        if (writes >= 3) throw new Error('EPIPE')
+        deadOut.chunks.push(String(chunk))
+      },
+      end() { deadOut.ended = true },
+      on() {},
+    }
+    handler(deadReq, deadRes)
+    check('sse: the dead writer\'s connect frame did not throw yet',
+      deadOut.status === 200 && deadOut.ended === false, 'status=' + deadOut.status)
+
+    await callRoute(handler, {
+      method: 'save-entry',
+      args: { entry: { id: '', title: 'SSE-DEAD', content: 'the other end vanished', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 } },
+    })
+    check('sse: a writer that throws on broadcast is fully disposed (response ended)',
+      deadOut.ended === true, 'stream left open')
+    // The healthy stream opened above must still receive broadcasts: the
+    // cleanup of one dead stream never tears down the others.
+    let healthyGotIt = null
+    for (let i = 0; i < 100 && healthyGotIt === null; i += 1) {
+      const frames = framesOf(stream.out)
+      healthyGotIt = frames.some((f) => f.data.entries.some((e) => e.title === 'SSE-DEAD'))
+      if (healthyGotIt !== true) await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    check('sse: disposing the dead writer does not interrupt a healthy stream',
+      healthyGotIt === true, 'the open stream never saw SSE-DEAD')
+  }
+
   // External change: memory.json rewritten on disk by something else (another
   // process sharing the file). Watcher + debounce must reload and push.
   const beforeExternal = framesOf(stream.out).length
@@ -871,6 +1022,65 @@ async function statusFor(headers, body) {
   check('sse: a closed stream receives no further frames',
     framesOf(stream.out).length === beforeClose,
     'frames=' + framesOf(stream.out).length + ' before=' + beforeClose)
+
+  // Connect-frame race: a stream opened in the gap between apply() and the
+  // initial disk read settling must NOT be handed the empty boot state. The
+  // first frame has to wait for boot and describe the SEEDED store. The
+  // discriminator is timing-deterministic: readFile cannot resolve in the same
+  // synchronous tick as apply(), so a pre-fix host always delivered one
+  // (empty) frame immediately.
+  {
+    const BOOT_HOME = fileURLToPath(new URL('./.test-dsh-home-boot/', import.meta.url))
+    await rm(BOOT_HOME, { recursive: true, force: true })
+    await mkdir(join(BOOT_HOME, 'instruction-memory'), { recursive: true })
+    await writeFile(join(BOOT_HOME, 'instruction-memory', 'memory.json'), JSON.stringify({
+      version: 1, enabled: true, budgetChars: 4000,
+      entries: [{ id: 'boot-race', title: 'BOOT-RACE', content: 'loaded before the first frame', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 3 }],
+    }), 'utf8')
+    const previousHome = process.env.DSH_HOME
+    process.env.DSH_HOME = BOOT_HOME
+
+    let bootHandler = null
+    const bootCtx = {
+      systemPrompt: { section: () => () => {} },
+      inject: (deps, callback) => {
+        const names = Array.isArray(deps) ? deps : Object.keys(deps)
+        if (names.includes('webServer')) {
+          callback({
+            webServer: { register: (route) => { bootHandler = route.handler; return () => {} } },
+            effect: (fn) => { fn(); return () => {} },
+          })
+        }
+        return null
+      },
+      get: () => undefined,
+      effect: (fn) => { fn(); return () => {} },
+    }
+    const bootMod = await import(new URL('./lib/index.js', import.meta.url).href + '?boot=' + Date.now())
+    bootMod.apply(bootCtx)
+
+    // Same tick: boot's read is necessarily still pending.
+    const early = openStream(undefined, bootHandler)
+    check('sse: no frame precedes the initial disk read (no empty-store flash)',
+      framesOf(early.out).length === 0, 'frames=' + framesOf(early.out).length)
+
+    let seededFrame = null
+    let observedFrames = []
+    for (let i = 0; i < 200 && seededFrame === null; i += 1) {
+      observedFrames = framesOf(early.out)
+      seededFrame = observedFrames.find((f) => f.data.entries.some((e) => e.title === 'BOOT-RACE')) || null
+      if (seededFrame === null) await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    check('sse: the first frame waits for boot and carries the seeded entry',
+      seededFrame !== null, 'no BOOT-RACE frame within 2s')
+    check('sse: no empty frame was ever sent ahead of the seeded one',
+      seededFrame !== null && observedFrames.indexOf(seededFrame) === 0,
+      'the seeded frame was not the first frame; frames=' + observedFrames.length)
+
+    early.req.fire('close')
+    process.env.DSH_HOME = previousHome
+    await rm(BOOT_HOME, { recursive: true, force: true })
+  }
 }
 
 /* ==================================================================== *

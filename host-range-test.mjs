@@ -94,6 +94,10 @@ const COVERED_LINES = [
   { floor: '0.1.5-alpha.1', below: '0.1.6-0' },
   { floor: '0.1.6-alpha.0', below: '0.1.7-0' },
   { floor: '0.1.7-alpha.0', below: '0.2.0-0' },
+  // 0.2.0 prereleases are reached by the `>=0.2.0-0` tail's own tuple; the
+  // 0.2.1 prereleases need their own tuple (npm's gate matches [maj,min,patch]
+  // exactly), which is why 0.2.1-alpha.1 needed this line in 1.0.16.
+  { floor: '0.2.1-alpha.0', below: '0.3.0-0' },
 ]
 const RANGE_TAIL = '>=0.2.0-0'
 
@@ -136,14 +140,20 @@ function remedyFor(version) {
   const tuple = major + '.' + minor + '.' + patch
   const previousBelow = tuple + '-0'
   const appended = { floor: tuple + '-alpha.0', below: major + '.' + (minor + 1) + '.0-0' }
+  // Insert the new tuple at its sorted position instead of always appending:
+  // remedying an older tuple (e.g. 0.1.8 while 0.2.1 is already enumerated)
+  // must keep the later, already-shipping lines in the generated range. The
+  // direct predecessor's upper bound moves down to the new tuple; lines after
+  // the insertion point are untouched.
+  const index = COVERED_LINES.findIndex((line) => semver.gt(line.floor, appended.floor))
+  const at = index === -1 ? COVERED_LINES.length : index
+  const applied = COVERED_LINES.slice()
+  if (at > 0) applied[at - 1] = { ...applied[at - 1], below: previousBelow }
+  applied.splice(at, 0, appended)
   return {
-    hint: 'append { floor: \'' + appended.floor + '\', below: \'' + appended.below + '\' } to COVERED_LINES '
-      + 'and set the preceding line\'s below to \'' + previousBelow + '\'',
-    applied: [
-      ...COVERED_LINES.slice(0, -1),
-      { ...COVERED_LINES[COVERED_LINES.length - 1], below: previousBelow },
-      appended,
-    ],
+    hint: 'insert { floor: \'' + appended.floor + '\', below: \'' + appended.below + '\' } into COVERED_LINES '
+      + 'at its sorted position and set the preceding line\'s below to \'' + previousBelow + '\'',
+    applied,
   }
 }
 
@@ -269,8 +279,16 @@ const MUST_PASS = [
   '0.1.5',
   '0.1.6',
   '0.1.7',
+  // the 0.2.x line: 0.2.0 prereleases ride the tail tuple, 0.2.1 prereleases
+  // ride the explicitly enumerated 0.2.1 line (added in 1.0.16).
   '0.2.0-alpha.1',
+  '0.2.0-rc.1',
+  '0.2.0-rc.2',
   '0.2.0',
+  '0.2.1-alpha.0',
+  '0.2.1-alpha.1',
+  '0.2.1-rc.2',
+  '0.2.1',
   '0.3.0',
   '1.0.0',
   // `2.0.0-rc.1` is deliberately absent for the same reason as `0.1.8-rc.1`:
@@ -304,7 +322,11 @@ for (const version of MUST_FAIL) {
 // 0.1.6-alpha.2 was the first occurrence (fixed in 1.0.8). 0.1.7-rc.2 was the
 // second (fixed in 1.0.9) — the same bug, one minor later, which is why the
 // matrix above now enumerates every line the range claims.
-for (const host of ['0.1.6-alpha.2', '0.1.7-rc.2']) {
+// 0.2.1-alpha.1 was the third (fixed in 1.0.16): the tail admits the 0.2.0
+// tuple only, so a 0.2.1 prerelease failed under npm's default semantics
+// while the host's includePrerelease gate still admitted it — the exact
+// silent two-mode split this file exists to prevent.
+for (const host of ['0.1.6-alpha.2', '0.1.7-rc.2', '0.2.1-alpha.1']) {
   const plain = semver.satisfies(host, declared)
   const pre = semver.satisfies(host, declared, { includePrerelease: true })
   check('REGRESSION GUARD: the shipped host ' + host + ' is admitted by both modes',
@@ -382,9 +404,12 @@ for (const host of ['0.1.6-alpha.2', '0.1.7-rc.2']) {
 {
   const disagreeing = []
   const sweep = []
-  for (const minor of [3, 4, 5, 6, 7]) {
-    for (const tag of ['-alpha.0', '-alpha.1', '-alpha.2', '-beta.0', '-rc.1', '-rc.9', '']) {
-      sweep.push('0.1.' + minor + tag)
+  const tuples = [['0.1', [3, 4, 5, 6, 7]], ['0.2', [0, 1]]]
+  for (const [majorMinor, patches] of tuples) {
+    for (const patch of patches) {
+      for (const tag of ['-alpha.0', '-alpha.1', '-alpha.2', '-beta.0', '-rc.1', '-rc.9', '']) {
+        sweep.push(majorMinor + '.' + patch + tag)
+      }
     }
   }
   for (const version of sweep) {
@@ -392,7 +417,7 @@ for (const host of ['0.1.6-alpha.2', '0.1.7-rc.2']) {
     const pre = semver.satisfies(version, declared, { includePrerelease: true })
     if (plain !== pre) disagreeing.push(version + ' (default=' + plain + ' pre=' + pre + ')')
   }
-  check('no disagreement on the covered 0.1.3-0.1.7 lines (' + sweep.length + ' swept)',
+  check('no disagreement on the covered 0.1.3-0.2.1 lines (' + sweep.length + ' swept)',
     disagreeing.length === 0, disagreeing.join(', '))
 }
 
@@ -403,15 +428,18 @@ for (const host of ['0.1.6-alpha.2', '0.1.7-rc.2']) {
 // sneak in. 0.1.8+ is intentionally out of scope (see MUST_PASS note).
 {
   const admitted = []
-  for (const minor of [3, 4, 5, 6, 7]) {
-    for (const tag of ['-alpha.1', '-alpha.2', '-rc.1', '']) {
-      admitted.push('0.1.' + minor + tag)
+  const tuples = [['0.1', [3, 4, 5, 6, 7]], ['0.2', [0, 1]]]
+  for (const [majorMinor, patches] of tuples) {
+    for (const patch of patches) {
+      for (const tag of ['-alpha.1', '-alpha.2', '-rc.1', '']) {
+        admitted.push(majorMinor + '.' + patch + tag)
+      }
     }
   }
   const gaps = admitted
     .filter((version) => !semver.satisfies(version, declared))
     .filter((version) => version !== '0.1.3-alpha.1')
-  check('the covered 0.1.3-0.1.7 lines have no gaps', gaps.length === 0, gaps.join(', '))
+  check('the covered 0.1.3-0.2.1 lines have no gaps', gaps.length === 0, gaps.join(', '))
 }
 
 console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')

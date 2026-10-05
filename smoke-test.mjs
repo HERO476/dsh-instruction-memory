@@ -3,7 +3,7 @@
  *   node smoke-test.mjs
  */
 import { isAbsolute, join } from 'node:path'
-import { buildBlock, resolveStorePath, sanitizeEntry } from './lib/index.js'
+import { buildBlock, canonicalIp, hostnameOf, requestOriginVerdict, resolveStorePath, sanitizeEntry } from './lib/index.js'
 
 let failures = 0
 const check = (label, actual, predicate) => {
@@ -179,6 +179,85 @@ check('a multi-line 适用场景 is collapsed',
     .split('\n').find((line) => line.startsWith('[始终｜优先级'))
   check('an un-sanitized multi-line title DOES break the header (so the guard can fail)',
     header, (v) => v === '[始终｜优先级 普通] 第一行')
+}
+
+// ---- IPv6 loopback must not be rejected by the request guard ------------
+//
+// Two shipped defects made the settings page unusable when the GUI was opened
+// through http://[::1]:port:
+//   1. hostnameOf('::1') chopped a bare IPv6 literal at the last colon,
+//      returning ':' which never matched the loopback allowlist;
+//   2. URL.hostname keeps the brackets ('[::1]') while the Host parsing
+//      strips them ('::1'), so the same-origin comparison never succeeded.
+{
+  const hCases = [
+    ['127.0.0.1:8080', '127.0.0.1'],
+    ['localhost:8080', 'localhost'],
+    ['LOCALHOST', 'localhost'],
+    ['[::1]:8080', '::1'],
+    ['[::1]', '::1'],
+    // Bare IPv6 literal (non-conforming Host, but it must parse to the
+    // address rather than the port-chopped ':' the old code returned).
+    ['::1', '::1'],
+    ['::ffff:127.0.0.1', '::ffff:127.0.0.1'],
+    ['[::ffff:127.0.0.1]:8080', '::ffff:127.0.0.1'],
+    // A malformed, unclosed bracket still yields the address inside.
+    ['[::1', '::1'],
+  ]
+  for (const [input, expected] of hCases) {
+    check('hostnameOf(' + JSON.stringify(input) + ') = ' + JSON.stringify(expected),
+      hostnameOf(input), (x) => x === expected)
+  }
+
+  // Canonical IP spelling — the WHATWG URL parser emits the hex form of a
+  // mapped address while Host keeps the dotted-quad form; the guard compares
+  // ADDRESSES, so both spellings must collapse to one value.
+  check('canonicalIp: ::ffff:127.0.0.1 equals its hex spelling ::ffff:7f00:1',
+    canonicalIp('::ffff:127.0.0.1'),
+    (x) => x === canonicalIp('::ffff:7f00:1')
+      && x === '0000:0000:0000:0000:0000:ffff:7f00:0001')
+  check('canonicalIp: ::1 expands to the full eight groups',
+    canonicalIp('[::1]'), (x) => x === '0000:0000:0000:0000:0000:0000:0000:0001')
+  check('canonicalIp: a full literal round-trips to padded lower case',
+    canonicalIp('2001:DB8::1'), (x) => x === '2001:0db8:0000:0000:0000:0000:0000:0001')
+  check('canonicalIp: a zone id is ignored for the comparison',
+    canonicalIp('fe80::1%eth0'), (x) => x === 'fe80:0000:0000:0000:0000:0000:0000:0001')
+  check('canonicalIp: an IPv4 literal gets a distinct family prefix',
+    canonicalIp('127.0.0.1'), (x) => x === 'v4:127.0.0.1' && x !== canonicalIp('::1'))
+  check('canonicalIp: hostnames and garbage are not IPs (null)',
+    canonicalIp('not-an-ip'), (x) => x === null)
+  check('canonicalIp: evil.com / ::gggg / null are not IPs',
+    [canonicalIp('localhost'), canonicalIp('evil.com'), canonicalIp('::gggg'), canonicalIp(null)],
+    (xs) => xs.every((x) => x === null))
+
+  const v = (headers, guarded = true) => requestOriginVerdict(headers, guarded).ok
+  check('IPv6 bracketed loopback Host + same Origin is accepted',
+    v({ host: '[::1]:8080', origin: 'http://[::1]:8080' }), (x) => x === true)
+  check('IPv6 loopback with an Origin on a different port is same-host',
+    v({ host: '[::1]:8080', origin: 'http://[::1]:9999' }), (x) => x === true)
+  check('a bare ::1 Host is treated as loopback',
+    v({ host: '::1' }), (x) => x === true)
+  check('IPv4-mapped loopback is accepted with its bracketed Origin',
+    v({ host: '[::ffff:127.0.0.1]:8080', origin: 'http://[::ffff:127.0.0.1]:8080' }), (x) => x === true)
+  check('IPv4-mapped loopback: dotted Host vs the URL-parser hex Origin is accepted',
+    v({ host: '[::ffff:127.0.0.1]:8080', origin: 'http://[::ffff:7f00:1]:8080' }), (x) => x === true)
+  check('IPv4-mapped loopback: the hex Host form is recognised as loopback',
+    v({ host: '[::ffff:7f00:1]:8080', origin: 'http://[::ffff:7f00:1]:8080' }), (x) => x === true)
+  // The guard must still do its actual job on IPv6:
+  check('a foreign Origin against [::1] is refused (rebinding still blocked)',
+    v({ host: '[::1]:8080', origin: 'http://evil.com' }), (x) => x === false)
+  check('a non-loopback Host on an ::1 bind is refused',
+    v({ host: 'evil.com:8080', origin: 'http://evil.com:8080' }), (x) => x === false)
+  // And the IPv4 path the fix could not regress:
+  check('IPv4 same-origin is still accepted',
+    v({ host: '127.0.0.1:8080', origin: 'http://127.0.0.1:8080' }), (x) => x === true)
+  check('localhost same-origin is still accepted',
+    v({ host: 'localhost:8080', origin: 'http://localhost:9000' }), (x) => x === true)
+  // Non-loopback binds disable the Host allowlist but keep Origin checks.
+  check('a published bind keeps accepting a concrete Host',
+    v({ host: '192.168.1.5:8080' }, false), (x) => x === true)
+  check('a published bind still refuses a cross Origin',
+    v({ host: '192.168.1.5:8080', origin: 'http://evil.com' }, false), (x) => x === false)
 }
 
 console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')
