@@ -1,0 +1,49 @@
+{
+  "mode": "control",
+  "idleWindowMs": 4000,
+  "idleElapsedMs": 4004,
+  "afterBoot": {
+    "sectionCalls": 0,
+    "specTextCalls": 0,
+    "handles": [
+      "FSWatcher",
+      "Socket"
+    ],
+    "mtime": 1790482313376.4705,
+    "loggerLines": 0,
+    "cpu": {
+      "user": 0,
+      "system": 31000
+    }
+  },
+  "afterIdle": {
+    "sectionCalls": 0,
+    "specTextCalls": 0,
+    "handles": [
+      "FSWatcher",
+      "Socket"
+    ],
+    "mtime": 1790482313376.4705,
+    "writesDuringIdle": 0,
+    "loggerLines": 0,
+    "cpuUsedMs": 0
+  },
+  "verdict": {
+    "模式": "CONTROL（未挂载插件）",
+    "section() 注册次数（PLUGIN 应 1 / CONTROL 应 0）": 0,
+    "注册的 text 是函数（thunk，应 true）": false,
+    "空转 4000ms 内 section() 新增（应 0）": 0,
+    "空转 4000ms 内 spec.text 求值（应 0）": 0,
+    "空转 4000ms 内存储被写（应 0）": 0,
+    "空转期间存储 mtime 变化（应 false）": false,
+    "空转期间活动句柄新增（应 0）": 0,
+    "插件是否自己调用 assemble（应 0）": 0,
+    "空转 4000ms 内插件新增日志行（应 0）": 0,
+    "空转 4000ms 内消耗 CPU（应 ~0ms）": "0.0ms",
+    "模拟一次装配后 spec.text 求值次数（应 ±1）": 1,
+    "thunk 渲染结果 = buildBlock() 输出（应 true）": false,
+    "thunk 渲染字符数": null
+  },
+  "loggerLines": [],
+  "pass": true
+}

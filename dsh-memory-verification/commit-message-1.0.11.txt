@@ -1,0 +1,35 @@
+1.0.11: stop writing a store file at boot, and stop logging "injected" as if it had been
+
+Both changes come from the runaway audit in dsh-memory-verification/RUNAWAY-AUDIT.md.
+
+- A first run no longer materialises an empty memory.json. That write happened the
+  moment the host booted -- no session, no turn, no user action -- which is the one
+  side effect a behaviour audit can fairly call "running with nothing to do". The
+  file is now created by the first action that genuinely needs it: a save, an
+  import, or the settings page reading `state`. Until then storage.onDisk is false
+  and the panel shows "尚未写入磁盘", a state its UI already renders. The two
+  branches that write during boot are unchanged, because both require real data to
+  already be on disk: .bak recovery and legacy-cwd migration.
+
+- The mount line said `injected=437 chars` even with zero sessions, which reads as
+  if the memory had already reached a prompt. It now says
+  `section=437 chars (pending assembly)`, and reports two things it can actually
+  observe: `onDisk=` and `pulls=`. `pulls` counts how many times the harness has
+  evaluated the registered thunk, i.e. how many times this section reached a
+  prompt; 0 means prepared but never assembled. Each pull also logs a debug line.
+  It is NOT a session count: the plugin depends only on systemPrompt and has no
+  way to know how many sessions exist, so reporting `sessions=` would be invented.
+
+The registered thunk is now a counting wrapper around sectionText; the rendered
+text is untouched, and both guards hold -- the render is byte-identical with and
+without a logger (verify.mjs), and the thunk's output equals buildBlock()'s
+(idle-probe.mjs).
+
+Regression: contract-test.mjs gains 12 assertions covering the lazy first run and
+the pulls semantics, using a separate mount with its own DSH_HOME -- without that
+the "boot writes no file" case cannot be observed at all. verify.mjs's wording
+assertion moves from `injected=` to `section=`+`pulls=`, and gains a negative
+assertion that the mount line must say "pending assembly" and must never say
+"injected=".
+
+Tests: npm test 190 pass / 0 fail (was 177).

@@ -1,0 +1,426 @@
+{
+  "checks": [
+    {
+      "id": "A1",
+      "label": "enabled:false registers NO prompt section",
+      "pass": true,
+      "detail": "sections=0"
+    },
+    {
+      "id": "A2",
+      "label": "enabled:false yields injection.registered=false",
+      "pass": true,
+      "detail": "{\"registered\":false,\"available\":true,\"error\":null,\"chars\":0,\"pulls\":0}"
+    },
+    {
+      "id": "A3",
+      "label": "enabled:false yields an empty assembly (prompt identical to no-plugin)",
+      "pass": true,
+      "detail": "preview=\"\""
+    },
+    {
+      "id": "A4",
+      "label": "the disabled entry is still preserved in the store (never destroyed)",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "A5",
+      "label": "enabled:true with zero entries registers NO section",
+      "pass": true,
+      "detail": "sections=0"
+    },
+    {
+      "id": "A6",
+      "label": "zero entries yields an empty assembly",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "B1",
+      "label": "exactly one prompt section is registered",
+      "pass": true,
+      "detail": "sections=1"
+    },
+    {
+      "id": "B2",
+      "label": "section name is \"instruction-memory\"",
+      "pass": true,
+      "detail": "instruction-memory"
+    },
+    {
+      "id": "B3",
+      "label": "section order is 950 — between FILE_REFERENCE(900) and TOOL_BASH(1000)",
+      "pass": true,
+      "detail": "950"
+    },
+    {
+      "id": "B4",
+      "label": "section text is a THUNK (re-evaluated on every assembly)",
+      "pass": true,
+      "detail": "function"
+    },
+    {
+      "id": "B5",
+      "label": "assembly carries the marker",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "B6",
+      "label": "route snapshot preview equals the assembled section text",
+      "pass": true,
+      "detail": "previewChars=263"
+    },
+    {
+      "id": "B7",
+      "label": "injection.registered=true and chars match the rendered length",
+      "pass": true,
+      "detail": "{\"registered\":true,\"available\":true,\"error\":null,\"chars\":263,\"pulls\":0}"
+    },
+    {
+      "id": "B8",
+      "label": "a second independent boot renders byte-identical text (survives restart)",
+      "pass": true,
+      "detail": "sha 5E1F785393A81098842A38A26AEAFCFB19A473395949E03957DA03A88C781239"
+    },
+    {
+      "id": "C1",
+      "label": "starts inert (no entries)",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "C2",
+      "label": "save-entry ok",
+      "pass": true,
+      "detail": "null"
+    },
+    {
+      "id": "C3",
+      "label": "WRITE is visible in the very next assembly (no restart)",
+      "pass": true,
+      "detail": "chars=0"
+    },
+    {
+      "id": "C4",
+      "label": "memory.json on disk now contains the entry",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "C5",
+      "label": "UPDATE replaces the old text in the next assembly",
+      "pass": true,
+      "detail": "ok=true"
+    },
+    {
+      "id": "C6",
+      "label": "DELETE removes the text from the next assembly",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "C7",
+      "label": "after DELETE the section is disposed again",
+      "pass": true,
+      "detail": "disposed=[\"instruction-memory\"]"
+    },
+    {
+      "id": "C8",
+      "label": "cross-task: information written in task 1 is still present in task 2",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "C9",
+      "label": "cross-round: task 2 adds to the same assembled block",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "C10",
+      "label": "set-options{enabled:false} disposes the section live",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "C11",
+      "label": "set-options{enabled:true} re-registers it live",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "C12",
+      "label": "entries survived the off/on cycle",
+      "pass": true,
+      "detail": "[\"m2\",\"m3\"]"
+    },
+    {
+      "id": "D1",
+      "label": "budget 800 injects a degraded header instead of nothing",
+      "pass": true,
+      "detail": "chars=570"
+    },
+    {
+      "id": "D2",
+      "label": "at least one entry is injected",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "D3",
+      "label": "over-budget entries are dropped and DISCLOSED in a footer",
+      "pass": true,
+      "detail": "\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\n\\n（另有 2 条指令因注入字数上限未包含，可在「设置 → 指令记忆」中提高上限或调低其优先级。）\""
+    },
+    {
+      "id": "D4",
+      "label": "the whole block respects the configured budget",
+      "pass": true,
+      "detail": "chars=570"
+    },
+    {
+      "id": "D5",
+      "label": "a too-large FIRST entry is truncated rather than dropped",
+      "pass": true,
+      "detail": "chars=749"
+    },
+    {
+      "id": "D6",
+      "label": "the truncated block still respects the budget",
+      "pass": true,
+      "detail": "chars=749"
+    },
+    {
+      "id": "E1",
+      "label": "corrupt memory.json falls back to memory.json.bak",
+      "pass": true,
+      "detail": "warning=\"memory.json 解析失败（Expected property name or '}' in JSON at position 2 (line 1 column 3)），已临时回退到最近备份 memory.json.bak；损坏文件已保留，下次保存时会覆盖它\""
+    },
+    {
+      "id": "E2",
+      "label": "the fallback is disclosed in storage.warning",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "E3",
+      "label": "corrupt store with no backup reports storage.error",
+      "pass": true,
+      "detail": "配置文件解析失败（Expected property name or '}' in JSON at position 2 (line 1 column 3)），原文件已保留；你下次保存时会覆盖它"
+    },
+    {
+      "id": "E4",
+      "label": "and injects nothing rather than guessing",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "E5",
+      "label": "an unwritable store fails the save instead of pretending",
+      "pass": true,
+      "detail": "\"保存失败：EISDIR: illegal operation on a directory, open 'D:\\\\Users\\\\34332\\\\AI\\\\dsh-instruction-memory\\\\dsh-memory-verification\\\\tmp\\\\home-09\\\\instruction-memory\\\\memory.json.tmp'\""
+    },
+    {
+      "id": "E6",
+      "label": "the failure is surfaced as storage.error",
+      "pass": true,
+      "detail": "保存失败：EISDIR: illegal operation on a directory, open 'D:\\Users\\34332\\AI\\dsh-instruction-memory\\dsh-memory-verification\\tmp\\home-09\\instruction-memory\\memory.json.tmp'"
+    },
+    {
+      "id": "E7",
+      "label": "FAIL-SAFE: the last good memory is still injected",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "E7b",
+      "label": "ROLLBACK: the entry whose save failed is NOT injected",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "E8",
+      "label": "the on-disk store is unchanged by the failed save",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "E9",
+      "label": "all 20 concurrent saves report ok",
+      "pass": true,
+      "detail": "ok=20"
+    },
+    {
+      "id": "E10",
+      "label": "no concurrent write is lost (queue serialises)",
+      "pass": true,
+      "detail": "entries=20"
+    },
+    {
+      "id": "E11",
+      "label": "the final assembled block renders all 20 concurrent entries",
+      "pass": true,
+      "detail": "rendered=20/20"
+    },
+    {
+      "id": "E12",
+      "label": "a rolling backup was produced by the rewrite",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "E13",
+      "label": "GET is refused with 405",
+      "pass": true,
+      "detail": "status=405"
+    },
+    {
+      "id": "E14",
+      "label": "a non-JSON content-type is refused with 415",
+      "pass": true,
+      "detail": "status=415"
+    },
+    {
+      "id": "E15",
+      "label": "an oversized body is refused with 413",
+      "pass": true,
+      "detail": "status=413 cap=2708000"
+    },
+    {
+      "id": "E15b",
+      "label": "the body cap exceeds the largest legal payload (own export re-importable)",
+      "pass": true,
+      "detail": "1285147 vs 2708000"
+    },
+    {
+      "id": "E16",
+      "label": "an unknown method returns ok:false with a readable message",
+      "pass": true,
+      "detail": "未知方法：nope"
+    },
+    {
+      "id": "E17",
+      "label": "the 200-entry cap is enforced on load",
+      "pass": true,
+      "detail": "entries=200"
+    },
+    {
+      "id": "E18",
+      "label": "duplicate ids are repaired instead of collapsing entries",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "E19",
+      "label": "the dropped items are disclosed in storage.warning",
+      "pass": true,
+      "detail": "存储文件中有 5 条条目未能载入（内容为空或超过 200 条上限）；下次保存时它们将从文件中移除"
+    },
+    {
+      "id": "E20",
+      "label": "blank entries are dropped and disclosed",
+      "pass": true,
+      "detail": "存储文件中有 1 条条目未能载入（内容为空或超过 200 条上限）；下次保存时它们将从文件中移除"
+    },
+    {
+      "id": "F1",
+      "label": "hot state: section registered before unload",
+      "pass": true,
+      "detail": "sections=1"
+    },
+    {
+      "id": "F2",
+      "label": "HOT UNLOAD: running the plugin effect disposes the prompt section",
+      "pass": true,
+      "detail": "sections=0"
+    },
+    {
+      "id": "F3",
+      "label": "an unreadable store surfaces storage.error",
+      "pass": true,
+      "detail": "读取失败：EISDIR: illegal operation on a directory, read"
+    },
+    {
+      "id": "F4",
+      "label": "an unreadable store injects nothing and does not crash the host",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "F5",
+      "label": "an unusable DSH_HOME does not throw out of apply()",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "F6",
+      "label": "it reports storage.error instead of silently injecting nothing",
+      "pass": true,
+      "detail": "保存失败：ENOTDIR: not a directory, mkdir 'D:\\Users\\34332\\AI\\dsh-instruction-memory\\dsh-memory-verification\\tmp\\home-notdir\\blocker'"
+    },
+    {
+      "id": "F7",
+      "label": "no prompt section is registered for an unusable store",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "F8",
+      "label": "blank $DSH_HOME counts as unset (never falls back to cwd)",
+      "pass": true,
+      "detail": "C:\\Users\\example\\.dsh\\instruction-memory\\memory.json"
+    },
+    {
+      "id": "F9",
+      "label": "an explicit $DSH_HOME wins",
+      "pass": true,
+      "detail": "D:\\alt-home\\instruction-memory\\memory.json"
+    },
+    {
+      "id": "F10",
+      "label": "budgetChars below the floor is clamped up to 800",
+      "pass": true,
+      "detail": "800"
+    },
+    {
+      "id": "F11",
+      "label": "budgetChars above the ceiling is clamped down to 40000",
+      "pass": true,
+      "detail": "40000"
+    },
+    {
+      "id": "F12",
+      "label": "\"when\" is rendered only for mode:auto entries",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "F13",
+      "label": "always entries are tagged [始终] and auto entries [按需]",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "F14",
+      "label": "higher priority sorts first",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "F15",
+      "label": "injection order is 高 > 普通 > 低",
+      "pass": true,
+      "detail": "[218,241,263]"
+    },
+    {
+      "id": "F16",
+      "label": "a disabled entry is not injected",
+      "pass": true,
+      "detail": null
+    }
+  ],
+  "failed": 0,
+  "total": 70
+}

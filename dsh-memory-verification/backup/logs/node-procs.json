@@ -1,0 +1,14 @@
+﻿[
+    {
+        "ProcessId":  7972,
+        "CommandLine":  "\"C:\\Users\\34332\\AppData\\Roaming\\TRAE SOLO CN\\ModularData\\ai-agent\\vm\\tools\\node\\\\node.exe\"   \"C:\\Users\\34332\\AppData\\Roaming\\TRAE SOLO CN\\ModularData\\ai-agent\\vm\\tools\\node\\\\node_modules\\@deepseek-ai\\dsh\\lib\\bin.js\" web --no-open --host 127.0.0.1 --port 8080"
+    },
+    {
+        "ProcessId":  40268,
+        "CommandLine":  "C:\\Users\\34332\\.workbuddy\\binaries\\node\\versions\\22.22.2-3\\node.EXE C:\\Users\\34332\\.workbuddy\\plugins\\cache\\workbuddy-builtin\\sheetagent\\5.5.6-wb.38337834.g5f969292.h4918b5ced607/mcp/start.mjs"
+    },
+    {
+        "ProcessId":  40540,
+        "CommandLine":  "\"C:\\Users\\34332\\.workbuddy\\binaries\\node\\versions\\22.22.2-3\\node.exe\"  C:\\Users\\34332\\.workbuddy\\plugins\\cache\\workbuddy-builtin\\weixinpay\\1.6.109/dist/mcp-server.mjs"
+    }
+]

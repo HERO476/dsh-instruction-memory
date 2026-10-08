@@ -1,0 +1,44 @@
+1.0.12: restate the host-compatibility claim in terms of what was actually verified
+
+The declared range is UNCHANGED -- the audit found nothing to change it for. What
+changed is the claim's wording, which had become misleading.
+
+The README's compatibility section said "5 host versions really booted" plus two
+covered by the range test, and then "any other DSH version is untested". After the
+compatibility sweep that is both vague and out of date, so it now names three
+distinct evidence levels and says which version sits in which:
+
+  1. real boot  - DSH actually started on that host: plugin loaded, the injection
+                  really reached the assembled prompt, the HTTP route answered,
+                  the client settings module was delivered (Windows / Node 22).
+                  0.1.3-alpha.2, 0.1.5-alpha.1, 0.1.5-alpha.2, 0.1.5-rc.1, 0.1.5-rc.2
+  2. contract   - the version's OWN published source was checked for every symbol
+                  this plugin uses: systemPrompt.section(), whether assemble()
+                  evaluates a function-typed text, FILE_REFERENCE 900 / TOOL_BASH
+                  1000, duplicate-name registration throwing, webServer.register(),
+                  get host(), ctx.inject(), ctx.effect(), and the two client
+                  packages declaring dsh.client.
+                  All 12 published versions the range accepts
+                  (0.1.3-alpha.2 through 0.1.7-rc.2).
+  3. real mount - the plugin actually mounted into that release's cordis and ran
+                  nine assertions. cordis 4.0.2 and 4.0.4.
+
+Two findings are recorded because they are the reason no range edit is justified:
+
+- ctx.inject, the one hard dependency 1.0.10 added (the route moved to a
+  non-blocking ctx.inject(['webServer'], ...) child fiber), exists in ALL SIX
+  published cordis versions, 4.0.1-rc.1 through 4.0.4. No version inside the
+  declared range can fail on it.
+- Across all 27 published host versions, the 12 the range accepts are API-complete
+  and there are ZERO over-claims. The 15 the range rejects (0.0.1-rc.1 through
+  0.1.2-rc.1) are API-complete too, but were never booted, so the floor stays put
+  rather than widening the claim onto versions nobody has run.
+
+Also documented, as an operational fact rather than a claim: early DSH releases
+declare their sibling packages with caret ranges, so installing an OLD DSH today
+resolves those siblings to the current 0.1.x rather than the ones from its own
+release (7 of 10 sampled versions drift; 3 are pinned exactly). It does not change
+this plugin's conclusions, but "the tree you get today" is not "the tree of that
+release".
+
+No code changed. npm test 190 pass / 0 fail.

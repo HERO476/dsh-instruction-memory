@@ -1,0 +1,226 @@
+{
+  "blockChars": 437,
+  "blockSha": "D66C3C3ED29A4E4BD4D09D1F5CC1C70FFB01AEED1B0630413F5A2608DD88BF46",
+  "counts": {
+    "session": 1,
+    "permission/preset": 2,
+    "sandbox/mode": 2,
+    "approval/policy": 2,
+    "session/end-seed": 5,
+    "agent-preset/selected": 1,
+    "command/run": 5,
+    "command/done": 5,
+    "agent/inbox/spliced": 20,
+    "turn/start": 8,
+    "step/start": 245,
+    "system/message": 6,
+    "user/message": 14,
+    "request/header": 3,
+    "request/context": 1,
+    "session/title": 2,
+    "session/title-llm-request": 1,
+    "session-log-deepseek/delivery-accepted": 246,
+    "assistant/message": 245,
+    "tool/call": 305,
+    "tool/result": 304,
+    "step/end": 244,
+    "approval/asked": 5,
+    "approval/decided": 5,
+    "developer/message": 2,
+    "goal/change": 2,
+    "subagent/catalog": 6,
+    "deliverables/presented": 3,
+    "workspace/changes": 3,
+    "turn/end": 7,
+    "todo/write": 4
+  },
+  "systemPrompts": [
+    {
+      "seq": 13,
+      "time": 1790328244615,
+      "rel": "1790328244.615s",
+      "turn": 1,
+      "step": 1,
+      "chars": 11817,
+      "occurrences": 1,
+      "offset": 5889,
+      "blockSha": "D66C3C3ED29A4E4BD4D09D1F5CC1C70FFB01AEED1B0630413F5A2608DD88BF46",
+      "promptSha": "678699386D15977F570ED916A07BA53570D17A0FE75E6754C47B5CD2210C2637"
+    },
+    {
+      "seq": 69,
+      "time": 1790328832052,
+      "rel": "1790328832.052s",
+      "turn": 1,
+      "step": 6,
+      "chars": 14195,
+      "occurrences": 1,
+      "offset": 5889,
+      "blockSha": "D66C3C3ED29A4E4BD4D09D1F5CC1C70FFB01AEED1B0630413F5A2608DD88BF46",
+      "promptSha": "843BBDA45497DB6A2CBCA51719F48861FA9ABD6FCA0F18555EC8CF53722A4809"
+    },
+    {
+      "seq": 263,
+      "time": 1790329295426,
+      "rel": "1790329295.426s",
+      "turn": 1,
+      "step": 29,
+      "chars": 13756,
+      "occurrences": 0,
+      "offset": -1,
+      "blockSha": null,
+      "promptSha": "80BF952A69D51D8C01E85FAA7A99067671512EFA87BCE5451854A566863D47A4"
+    },
+    {
+      "seq": 277,
+      "time": 1790329303940,
+      "rel": "1790329303.940s",
+      "turn": 1,
+      "step": 31,
+      "chars": 14269,
+      "occurrences": 0,
+      "offset": -1,
+      "blockSha": null,
+      "promptSha": "E49DC9B8762F0EB43A0DFEF2708BF569250778587985059F5E3579FDD51253C9"
+    },
+    {
+      "seq": 291,
+      "time": 1790329315412,
+      "rel": "1790329315.412s",
+      "turn": 1,
+      "step": 33,
+      "chars": 14195,
+      "occurrences": 1,
+      "offset": 5889,
+      "blockSha": "D66C3C3ED29A4E4BD4D09D1F5CC1C70FFB01AEED1B0630413F5A2608DD88BF46",
+      "promptSha": "843BBDA45497DB6A2CBCA51719F48861FA9ABD6FCA0F18555EC8CF53722A4809"
+    },
+    {
+      "seq": 1509,
+      "time": 1790482168042,
+      "rel": "1790482168.042s",
+      "turn": 8,
+      "step": 1,
+      "chars": 16192,
+      "occurrences": 1,
+      "offset": 7886,
+      "blockSha": "D66C3C3ED29A4E4BD4D09D1F5CC1C70FFB01AEED1B0630413F5A2608DD88BF46",
+      "promptSha": "0B2B19171633C601CC1D39083D301C540C6C68E3A455A7E19016F6E8F1CD3FA6"
+    }
+  ],
+  "traced": [
+    {
+      "seq": 13,
+      "turn": 1,
+      "step": 1,
+      "trigger": "agent/inbox/spliced",
+      "triggerSeq": 11,
+      "gapMs": 105
+    },
+    {
+      "seq": 69,
+      "turn": 1,
+      "step": 6,
+      "trigger": "user/message",
+      "triggerSeq": 16,
+      "gapMs": 587435
+    },
+    {
+      "seq": 263,
+      "turn": 1,
+      "step": 29,
+      "trigger": "user/message",
+      "triggerSeq": 145,
+      "gapMs": 98440
+    },
+    {
+      "seq": 277,
+      "turn": 1,
+      "step": 31,
+      "trigger": "user/message",
+      "triggerSeq": 145,
+      "gapMs": 106954
+    },
+    {
+      "seq": 291,
+      "turn": 1,
+      "step": 33,
+      "trigger": "user/message",
+      "triggerSeq": 145,
+      "gapMs": 118426
+    },
+    {
+      "seq": 1509,
+      "turn": 8,
+      "step": 1,
+      "trigger": "agent/inbox/spliced",
+      "triggerSeq": 1507,
+      "gapMs": 118
+    }
+  ],
+  "orphanCount": 0,
+  "duplicateInjections": 0,
+  "missingInjections": 2,
+  "steps": 245,
+  "turns": 8,
+  "users": 14,
+  "llmRequests": [
+    {
+      "seq": 17,
+      "type": "request/header",
+      "bytes": 83746,
+      "containsBlock": false
+    },
+    {
+      "seq": 18,
+      "type": "request/context",
+      "bytes": 179,
+      "containsBlock": false
+    },
+    {
+      "seq": 20,
+      "type": "session/title-llm-request",
+      "bytes": 1436,
+      "containsBlock": false
+    },
+    {
+      "seq": 70,
+      "type": "request/header",
+      "bytes": 98041,
+      "containsBlock": false
+    },
+    {
+      "seq": 1512,
+      "type": "request/header",
+      "bytes": 101424,
+      "containsBlock": false
+    }
+  ],
+  "topGaps": [
+    {
+      "i": 1486,
+      "ms": 149355538,
+      "at": "session/end-seed"
+    },
+    {
+      "i": 4,
+      "ms": 2734583,
+      "at": "session/end-seed"
+    },
+    {
+      "i": 835,
+      "ms": 961127,
+      "at": "subagent/catalog"
+    },
+    {
+      "i": 1504,
+      "ms": 709368,
+      "at": "turn/end"
+    },
+    {
+      "i": 61,
+      "ms": 566403,
+      "at": "approval/asked"
+    }
+  ]
+}

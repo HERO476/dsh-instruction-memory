@@ -1,0 +1,49 @@
+{
+  "D-1": {
+    "saveOk": false,
+    "diskHasNew": false,
+    "injectedBefore": false,
+    "injectedAfterFailedSave": false
+  },
+  "D-2": {
+    "bakExists": true,
+    "bakHasEntry": true,
+    "entriesAfterBoot": 1,
+    "injected": true,
+    "storageWarning": "memory.json 不存在，已从最近备份 memory.json.bak 恢复，并已写回 memory.json",
+    "storageError": null
+  },
+  "D-3": {
+    "storeEntries": 200,
+    "contentPerEntry": 6000,
+    "exportedChars": 1224332,
+    "importRequestBodyChars": 1224376,
+    "hostBodyCap": 2708000,
+    "importHttpStatus": 200,
+    "importMessage": "没有新增条目：200 条已存在或无效"
+  },
+  "D-4": {
+    "ok": true,
+    "message": "导入完成：新增 1 条，跳过 0 条（已存在或无效）；其中 1 条超过长度上限，内容已被截断",
+    "sentChars": 7000,
+    "storedCharsInResponse": 6000,
+    "storedCharsOnReload": 6000,
+    "truncationDisclosed": true
+  },
+  "D-5": {
+    "ok": true,
+    "saved": false,
+    "message": "没有新增条目：1 条已存在或无效",
+    "fileChanged": false
+  },
+  "D-6": {
+    "declaredInject": [
+      "systemPrompt"
+    ],
+    "declaresWebServer": false,
+    "applyThrew": null,
+    "sectionRegisteredWithoutWebServer": true,
+    "routeRegisteredWithoutWebServer": false,
+    "injectedText": "## 用户长期指令记忆（Instruction Memory）\n以下条目由用户在"
+  }
+}

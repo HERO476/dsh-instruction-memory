@@ -1,0 +1,64 @@
+{
+  "counts": {
+    "session": 1,
+    "permission/preset": 2,
+    "sandbox/mode": 2,
+    "approval/policy": 2,
+    "session/end-seed": 5,
+    "agent-preset/selected": 1,
+    "command/run": 5,
+    "command/done": 5,
+    "agent/inbox/spliced": 20,
+    "turn/start": 8,
+    "step/start": 243,
+    "system/message": 6,
+    "user/message": 14,
+    "request/header": 3,
+    "request/context": 1,
+    "session/title": 2,
+    "session/title-llm-request": 1,
+    "session-log-deepseek/delivery-accepted": 244,
+    "assistant/message": 243,
+    "tool/call": 303,
+    "tool/result": 302,
+    "step/end": 242,
+    "approval/asked": 5,
+    "approval/decided": 5,
+    "developer/message": 2,
+    "goal/change": 2,
+    "subagent/catalog": 6,
+    "deliverables/presented": 3,
+    "workspace/changes": 3,
+    "turn/end": 7,
+    "todo/write": 4
+  },
+  "stepTotal": 243,
+  "perTurnSum": 243,
+  "orphanSteps": 0,
+  "deliveryRecords": 244,
+  "deliveriesWithBlock": 0,
+  "deliveriesWithTitle": 0,
+  "goalTurnWindowDeliveries": [
+    {
+      "seq": 401,
+      "time": "2026-09-25 17:44:30",
+      "bytes": 190,
+      "hasBlock": false,
+      "hasTitle": false
+    },
+    {
+      "seq": 409,
+      "time": "2026-09-25 17:44:38",
+      "bytes": 190,
+      "hasBlock": false,
+      "hasTitle": false
+    },
+    {
+      "seq": 419,
+      "time": "2026-09-25 17:44:43",
+      "bytes": 190,
+      "hasBlock": false,
+      "hasTitle": false
+    }
+  ]
+}

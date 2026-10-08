@@ -1,0 +1,49 @@
+{
+  "checks": [
+    {
+      "label": "real cordis: plugin.mount does not throw",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "label": "real cordis: prompt section registered with NO webServer published",
+      "ok": true,
+      "detail": "[{\"name\":\"instruction-memory\",\"order\":950}]"
+    },
+    {
+      "label": "real cordis: the section carries the injected text",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "label": "real cordis: no route yet (no web server)",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "label": "real cordis: route registered once webServer is published late",
+      "ok": true,
+      "detail": "[{\"kind\":\"prefix\",\"path\":\"/instruction-memory/api\"}]"
+    },
+    {
+      "label": "real cordis: the section is unaffected by the web server arriving",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "label": "real cordis: the route answers state through the mounted plugin",
+      "ok": true,
+      "detail": "{\"ok\":true,\"registered\":true,\"entries\":1}"
+    },
+    {
+      "label": "real cordis: unmount disposes the prompt section",
+      "ok": true,
+      "detail": "sections=0"
+    },
+    {
+      "label": "real cordis: unmount disposes the route",
+      "ok": true,
+      "detail": null
+    }
+  ]
+}

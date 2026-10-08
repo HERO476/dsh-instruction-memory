@@ -1,0 +1,54 @@
+{
+  "mode": "plugin",
+  "idleWindowMs": 4000,
+  "idleElapsedMs": 4010,
+  "afterBoot": {
+    "sectionCalls": 1,
+    "specTextCalls": 0,
+    "handles": [
+      "FSWatcher",
+      "Socket"
+    ],
+    "mtime": 1790483231797.8389,
+    "loggerLines": 2,
+    "cpu": {
+      "user": 62000,
+      "system": 31000
+    }
+  },
+  "afterIdle": {
+    "sectionCalls": 1,
+    "specTextCalls": 0,
+    "handles": [
+      "FSWatcher",
+      "Socket"
+    ],
+    "mtime": 1790483231797.8389,
+    "writesDuringIdle": 0,
+    "loggerLines": 2,
+    "cpuUsedMs": 0
+  },
+  "verdict": {
+    "模式": "PLUGIN",
+    "section() 注册次数（PLUGIN 应 1 / CONTROL 应 0）": 1,
+    "注册的 text 是函数（thunk，应 true）": true,
+    "section order（应 950）": 950,
+    "空转 4000ms 内 section() 新增（应 0）": 0,
+    "空转 4000ms 内 spec.text 求值（应 0）": 0,
+    "空转 4000ms 内存储被写（应 0）": 0,
+    "空转期间存储 mtime 变化（应 false）": false,
+    "空转期间活动句柄新增（应 0）": 0,
+    "插件是否自己调用 assemble（应 0）": 0,
+    "空转 4000ms 内插件新增日志行（应 0）": 0,
+    "空转 4000ms 内消耗 CPU（应 ~0ms）": "0.0ms",
+    "模拟一次装配后 spec.text 求值次数（应 ±1）": 1,
+    "thunk 渲染结果 = buildBlock() 输出（应 true）": true,
+    "thunk 渲染字符数": 234
+  },
+  "loggerLines": [
+    "debug prompt section registered: order=950 chars=234",
+    "info  mounted: store=D:\\Users\\34332\\AI\\dsh-instruction-memory\\dsh-memory-verification\\tmp\\idle-home\\instruction-memory\\memory.json from=memory.json onDisk=yes entries=1 enabled=true section=234 chars (pending assembly) pulls=0",
+    "debug section pulled into a prompt (pull #1)"
+  ],
+  "pass": true
+}

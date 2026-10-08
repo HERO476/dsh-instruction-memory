@@ -9,7 +9,32 @@ Thumbs.db
 .workbuddy/
 .zcode/
 .mnemon/
+.claude/
+.trae/
+.graphflow/
+.demo-server.mjs
+
+# Local scratch log written by the DSH host process (Electron/gin). Root only,
+# so logs inside subdirectories stay visible.
+/debug.log
 
 # Verification evidence. The reports, scripts and captured logs are kept in the
 # tree on purpose; the scratch harness homes are re-created on every run.
 dsh-memory-verification/tmp/
+
+# Raw session transcript — contains local absolute paths and full conversation
+# content, and this repository is public. Deliberately NOT tracked.
+dsh-memory-verification/transcript/
+
+# Snapshots of the real memory store, plus probe outputs that embed its entry
+# text and ids. That is private configuration, not evidence — the findings are
+# written up in the reports next to them. Deliberately NOT tracked.
+dsh-memory-verification/backup/prod-store/
+dsh-memory-verification/out/b1-set-options-disabled.json
+dsh-memory-verification/out/c1-set-options-enabled.json
+dsh-memory-verification/out/c2-save-entry-marker.json
+dsh-memory-verification/out/c3-state-with-marker.json
+dsh-memory-verification/out/d1-rollback-reload.json
+dsh-memory-verification/out/d2-post-restore-state.json
+dsh-memory-verification/out/live-check.json
+dsh-memory-verification/out/memory.json.bak.created-by-experiment

@@ -1,0 +1,43 @@
+1.0.10: fix seven defects found by end-to-end verification
+
+Each defect was reproduced before the fix and now has a regression guard.
+
+- Failed disk write left the in-memory state (and the injected prompt) ahead of
+  memory.json, so the model obeyed an instruction the user was told was not
+  saved. Mutations now commit through a transactional helper that restores the
+  in-memory state and re-syncs the prompt section when the write fails.
+- A missing memory.json with an intact .bak produced an EMPTY store on the next
+  boot, silently discarding the user's memory. The rolling backup is a copy now
+  rather than a rename (the rename left a window in which the primary did not
+  exist), and a missing primary recovers from .bak and writes it back.
+- MAX_BODY_CHARS was hard-coded to 1,000,000 while 200 x 6000 characters of
+  content is already 1.2 M, so a maximal store could be exported and then never
+  imported back. The ceiling is derived from the entry limits now.
+- Over-long imported entries were truncated without a word; truncatedFields()
+  reports which fields were cut, and the cut is disclosed.
+- A no-op import reported saved:true although it wrote nothing.
+- inject: ['systemPrompt', 'webServer'] made a web server a precondition for the
+  whole plugin, so in a profile without one (headless, tui) apply() never ran and
+  the user lost the settings page AND the prompt injection. The route now
+  registers from a non-blocking ctx.inject(['webServer'], ...) child fiber.
+- The settings client discarded the host's readable error message on 4xx/5xx.
+
+Added on request:
+
+- Diagnostics: the plugin was silent on success, which made "is memory doing
+  anything?" unanswerable from logs. A mount line at info plus per-operation
+  debug detail, on the harness logger. Log-only: the rendered block is asserted
+  byte-identical with and without a logger.
+- Host/Origin guard: the content-type rule assumes the browser sees a request as
+  cross-origin, and DNS rebinding removes that assumption, so any web page could
+  rewrite the instructions injected into every later prompt. When bound to
+  loopback the route requires a loopback Host and validates Origin against Host.
+  Disabled automatically on a 0.0.0.0 bind, where no Host value can be known in
+  advance; the Origin check still applies there.
+- host-range-test: the enumerated prerelease tuples are a single source of truth
+  that package.json must equal byte for byte, and the live guard prints a
+  self-verifying remedy when it meets an uncovered host. The underlying npm limit
+  (an undeclared future minor's prerelease is unreachable from any range) cannot
+  be removed, but the hand-edited-string mistake that caused it twice can be.
+
+Tests: npm test 177 pass / 0 fail (was 142).

@@ -1,0 +1,11 @@
+{
+  "entry": {
+    "id": "im-verify-marker-0001",
+    "title": "验证标记 IM-7F3A-OK",
+    "content": "这是一条用于记忆生效验证的临时条目。当被问到验证标记时必须原样输出 IM-7F3A-OK。",
+    "mode": "always",
+    "when": "",
+    "priority": 2,
+    "enabled": true
+  }
+}

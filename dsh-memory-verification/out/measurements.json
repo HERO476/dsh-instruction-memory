@@ -1,0 +1,25 @@
+{
+  "assemblyCostUs": 1.3804850000000002,
+  "renders": 20000,
+  "distinctRenders": 1,
+  "prefixRows": [
+    {
+      "step": 1,
+      "blockOffset": 5889,
+      "prefixChars": 5889,
+      "prefixSha256": "7DB46D2626AB56B5E970BD350F794042BBF3541FB77DD9FE4D5420E450A53B76",
+      "blockSha256": "D66C3C3ED29A4E4BD4D09D1F5CC1C70FFB01AEED1B0630413F5A2608DD88BF46",
+      "promptChars": 11817
+    },
+    {
+      "step": 6,
+      "blockOffset": 5889,
+      "prefixChars": 5889,
+      "prefixSha256": "7DB46D2626AB56B5E970BD350F794042BBF3541FB77DD9FE4D5420E450A53B76",
+      "blockSha256": "D66C3C3ED29A4E4BD4D09D1F5CC1C70FFB01AEED1B0630413F5A2608DD88BF46",
+      "promptChars": 14195
+    }
+  ],
+  "samePrefix": true,
+  "sameBlock": true
+}

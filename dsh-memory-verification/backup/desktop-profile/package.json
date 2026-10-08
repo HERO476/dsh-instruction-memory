@@ -1,0 +1,48 @@
+{
+  "name": "dsh-profile-desktop",
+  "private": true,
+  "dependencies": {
+    "@liustack/modsearch": "^5.10.5",
+    "@nanmicoder/dsh-agent-teams": "0.1.22",
+    "@vectorize-io/hindsight-coding-agents": "^0.8.0",
+    "dsh-better-sidebar": "^0.24.1",
+    "dsh-find-plugin": "^0.4.0",
+    "dsh-mnemon": "^0.5.20",
+    "dsh-office-tools": "^1.0.4",
+    "dsh-pdf-edit": "^0.4.5",
+    "dsh-pet": "^0.2.8",
+    "dsh-plugin-writing-guard": "^2.0.1",
+    "dsh-sidecard-ask": "link:D:/Users/34332/AI/dsh-sidecard-ask",
+    "dsh-univer-office": "^0.3.5",
+    "dsh-version-update": "^1.4.2",
+    "dsh-vibe-math": "^2.3.16",
+    "dshmarket": "^1.66.5",
+    "oss-prompt-optimizer": "^1.8.6",
+    "uiskin-theme": "https://codeload.github.com/chouxiaohuai/dsh-uiskin-theme/tar.gz/a355a9b16ba692b7551ffac0a6a6a9fea1149e49"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dshmarket",
+        "dsh-better-sidebar",
+        "@vectorize-io/hindsight-coding-agents",
+        "oss-prompt-optimizer",
+        "dsh-plugin-writing-guard",
+        "dsh-pdf-edit",
+        "dsh-office-tools",
+        "dsh-univer-office",
+        "@liustack/modsearch",
+        "@nanmicoder/dsh-agent-teams",
+        "dsh-find-plugin",
+        "dsh-mnemon",
+        "dsh-pet",
+        "dsh-vibe-math",
+        "dsh-version-update",
+        "uiskin-theme",
+        "dsh-sidecard-ask"
+      ]
+    }
+  }
+}

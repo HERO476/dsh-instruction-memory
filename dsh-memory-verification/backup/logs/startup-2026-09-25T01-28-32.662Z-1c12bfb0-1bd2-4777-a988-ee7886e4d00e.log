@@ -1,0 +1,371 @@
+WARNING: Raw diagnostics may contain configuration or credential values from plugin errors. Review before sharing.
+
+{
+  timestamp: '2026-09-25T01:28:32.662Z',
+  dshVersion: '0.1.7-rc.2',
+  nodeVersion: 'v22.23.2',
+  platform: 'win32',
+  arch: 'x64',
+  profile: 'web',
+  error: StartupError: dsh: startup failed: 1 required plugin did not activate
+  
+  Failed plugins (1):
+    connection (required)
+      Package: @deepseek-ai/dsh-client-connection
+      Error: [safe-delete][SAFE_DELETE_BULK_REJECTED] {"count":20030,"threshold":50,"scope":"turn","targets":["C:/Users/34332/AppData/Roaming/TRAE SOLO CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/.dsh-NXs8oBGk"],"targetCount":1}
+          at checkBulkDeleteGuard (D:\Program Files\WorkBuddy\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:239:19)
+          at tryTrash (D:\Program Files\WorkBuddy\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:591:5)
+          at tryRm (D:\Program Files\WorkBuddy\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:785:5)
+          at wrappedPromisesRm (D:\Program Files\WorkBuddy\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:829:15)
+          at withFileLock (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-atomic-write/lib/index.js:213:9)
+  
+  Plugins waiting for services (5):
+    Plugin                Missing services
+    session-log-download  connection
+    open-in-app           connection
+    session-controller    fileUploads
+    file-upload           connection
+    ui-deliverables       connection, sessionController
+      at auditStartupEntries (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js:4011:31)
+      ... 3 lines matching cause stack trace ...
+      at async file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/lib/bin.js:248:23 {
+    [stack]: [Getter/Setter],
+    [message]: 'dsh: startup failed: 1 required plugin did not activate\n' +
+      '\n' +
+      'Failed plugins (1):\n' +
+      '  connection (required)\n' +
+      '    Package: @deepseek-ai/dsh-client-connection\n' +
+      '    Error: [safe-delete][SAFE_DELETE_BULK_REJECTED] {"count":20030,"threshold":50,"scope":"turn","targets":["C:/Users/34332/AppData/Roaming/TRAE SOLO CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/.dsh-NXs8oBGk"],"targetCount":1}\n' +
+      '        at checkBulkDeleteGuard (D:\\Program Files\\WorkBuddy\\resources\\app.asar.unpacked\\cli\\vendor\\shim\\node-safe-delete-shim.cjs:239:19)\n' +
+      '        at tryTrash (D:\\Program Files\\WorkBuddy\\resources\\app.asar.unpacked\\cli\\vendor\\shim\\node-safe-delete-shim.cjs:591:5)\n' +
+      '        at tryRm (D:\\Program Files\\WorkBuddy\\resources\\app.asar.unpacked\\cli\\vendor\\shim\\node-safe-delete-shim.cjs:785:5)\n' +
+      '        at wrappedPromisesRm (D:\\Program Files\\WorkBuddy\\resources\\app.asar.unpacked\\cli\\vendor\\shim\\node-safe-delete-shim.cjs:829:15)\n' +
+      '        at withFileLock (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-atomic-write/lib/index.js:213:9)\n' +
+      '\n' +
+      'Plugins waiting for services (5):\n' +
+      '  Plugin                Missing services\n' +
+      '  session-log-download  connection\n' +
+      '  open-in-app           connection\n' +
+      '  session-controller    fileUploads\n' +
+      '  file-upload           connection\n' +
+      '  ui-deliverables       connection, sessionController',
+    [cause]: AggregateError: Plugin activation failures
+        at new StartupError (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js:3873:49)
+        at auditStartupEntries (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js:4011:31)
+        at async boot (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js:4085:3)
+        at async runProfile (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/lib/profile-boot-BZ2ZjNWi.js:271:15)
+        at async runCli (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/lib/bin.js:212:5)
+        at async file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/lib/bin.js:248:23 {
+      [stack]: [Getter/Setter],
+      [message]: 'Plugin activation failures',
+      [errors]: [
+        Error: [safe-delete][SAFE_DELETE_BULK_REJECTED] {"count":20030,"threshold":50,"scope":"turn","targets":["C:/Users/34332/AppData/Roaming/TRAE SOLO CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/.dsh-NXs8oBGk"],"targetCount":1}
+            at checkBulkDeleteGuard (D:\Program Files\WorkBuddy\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:239:19)
+            at tryTrash (D:\Program Files\WorkBuddy\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:591:5)
+            at tryRm (D:\Program Files\WorkBuddy\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:785:5)
+            at wrappedPromisesRm (D:\Program Files\WorkBuddy\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:829:15)
+            at withFileLock (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-atomic-write/lib/index.js:213:9) {
+          [stack]: [Getter/Setter],
+          [message]: '[safe-delete][SAFE_DELETE_BULK_REJECTED] {"count":20030,"threshold":50,"scope":"turn","targets":["C:/Users/34332/AppData/Roaming/TRAE SOLO CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/.dsh-NXs8oBGk"],"targetCount":1}'
+        },
+        [length]: 1
+      ]
+    },
+    [entries]: [
+      {
+        id: 'session-log-download',
+        module: '@deepseek-ai/dsh-session-log-export',
+        required: false,
+        fiberState: 0,
+        outcome: { kind: 'pending', missing: [ 'connection', [length]: 1 ] }
+      },
+      {
+        id: 'open-in-app',
+        module: '@deepseek-ai/dsh-host-open-in-app',
+        required: false,
+        fiberState: 0,
+        outcome: { kind: 'pending', missing: [ 'connection', [length]: 1 ] }
+      },
+      {
+        id: 'session-controller',
+        module: '@deepseek-ai/dsh-api-session-controller',
+        required: false,
+        fiberState: 0,
+        outcome: { kind: 'pending', missing: [ 'fileUploads', [length]: 1 ] }
+      },
+      {
+        id: 'connection',
+        module: '@deepseek-ai/dsh-client-connection',
+        required: true,
+        fiberState: 3,
+        outcome: {
+          kind: 'failed',
+          error: Error: [safe-delete][SAFE_DELETE_BULK_REJECTED] {"count":20030,"threshold":50,"scope":"turn","targets":["C:/Users/34332/AppData/Roaming/TRAE SOLO CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/.dsh-NXs8oBGk"],"targetCount":1}
+              at checkBulkDeleteGuard (D:\Program Files\WorkBuddy\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:239:19)
+              at tryTrash (D:\Program Files\WorkBuddy\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:591:5)
+              at tryRm (D:\Program Files\WorkBuddy\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:785:5)
+              at wrappedPromisesRm (D:\Program Files\WorkBuddy\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:829:15)
+              at withFileLock (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-atomic-write/lib/index.js:213:9) {
+            [stack]: [Getter/Setter],
+            [message]: '[safe-delete][SAFE_DELETE_BULK_REJECTED] {"count":20030,"threshold":50,"scope":"turn","targets":["C:/Users/34332/AppData/Roaming/TRAE SOLO CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/.dsh-NXs8oBGk"],"targetCount":1}'
+          }
+        }
+      },
+      {
+        id: 'file-upload',
+        module: '@deepseek-ai/dsh-client-file-upload',
+        required: false,
+        fiberState: 0,
+        outcome: { kind: 'pending', missing: [ 'connection', [length]: 1 ] }
+      },
+      {
+        id: 'ui-deliverables',
+        module: '@deepseek-ai/dsh-client-ui-deliverables',
+        required: false,
+        fiberState: 0,
+        outcome: {
+          kind: 'pending',
+          missing: [ 'connection', 'sessionController', [length]: 2 ]
+        }
+      },
+      [length]: 6
+    ],
+    [startup]: {
+      configurationPath: 'C:\\Users\\34332\\.dsh\\profiles\\web\\cordis.yml',
+      messages: [
+        {
+          ts: 1790299693880,
+          name: 'root',
+          type: 'warn',
+          args: [
+            'patch: entry "directory-picker-mobile-host" not found',
+            [length]: 1
+          ]
+        },
+        {
+          ts: 1790299693880,
+          name: 'root',
+          type: 'warn',
+          args: [
+            'patch: entry "directory-picker-mobile-surface" not found',
+            [length]: 1
+          ]
+        },
+        {
+          ts: 1790299693880,
+          name: 'root',
+          type: 'warn',
+          args: [ 'patch: entry "mobile-access" not found', [length]: 1 ]
+        },
+        {
+          ts: 1790299697445,
+          name: 'vibe-math-preset-installer',
+          type: 'warn',
+          args: [
+            '[dsh-vibe-math] 可选宿主服务缺失，功能会静默降级（不影响挂载）：宿主缺少服务 subprocess；宿主缺少服务 sandboxPolicy；宿主缺少服务 compaction；宿主缺少服务 sessionProjections；宿主缺少服务 sessions。subprocess 缺失则无法用 shell 创建目录树（仅靠 fs 自动建父目录兜底）；sandboxPolicy 缺失则插件写入不带显式围栏；compaction 缺失则 v4 的真实 /compact 路径与 v5 的真实压缩不生效（v5 回退到自述浓缩）；sessionProjections 缺失则 v5 的研究所状态回退到加固 JSON 文件（权威源从会话日志投影变为 State/<institute>.v5state.json，跨进程恢复能力下降）。',
+            [length]: 1
+          ]
+        },
+        {
+          ts: 1790299697445,
+          name: 'vibe-math-preset-installer',
+          type: 'warn',
+          args: [
+            '[dsh-vibe-math] 宿主自检：5 项不满足（宿主缺少服务 subagents；宿主缺少服务 agents；宿主缺少服务 tools；宿主缺少服务 commands；宿主缺少服务 fs）。v2/v3/v4/v5 预设依赖这些宿主服务/API，旧版或未经声明兼容的 DSH 可能无法挂载（当前检测到 DSH v0.1.7-rc.2，本包适配 0.1.2-alpha.4 / 0.1.2-alpha.5 / 0.1.2-rc.1 / 0.1.3-alpha.2 / 0.1.5-alpha.1 / 0.1.5-alpha.2 / 0.1.5-rc.1 / 0.1.5-rc.2）。',
+            [length]: 1
+          ]
+        },
+        {
+          ts: 1790299698777,
+          name: 'dsh-restart',
+          type: 'error',
+          args: [
+            TypeError: settingsCtx.settings.installSection is not a function
+                at Object.callback (file:///C:/Users/34332/.dsh/profiles/web/node_modules/dsh-restart/lib/index.js:387:34)
+                at Fiber.execute (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1071:28)
+                at file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1142:34
+                at Proxy.inject (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1601:15)
+                at new apply (file:///C:/Users/34332/.dsh/profiles/web/node_modules/dsh-restart/lib/index.js:386:13)
+                at Fiber.execute (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1068:24)
+                at file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1142:34
+                at composeError (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:199:18)
+                at Fiber._execute (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1137:10)
+                at Fiber._reload (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1356:16) {
+              [stack]: [Getter/Setter],
+              [message]: 'settingsCtx.settings.installSection is not a function'
+            },
+            [length]: 1
+          ]
+        },
+        {
+          ts: 1790299700160,
+          name: 'univer-settings',
+          type: 'error',
+          args: [
+            TypeError: settings.register is not a function
+                at Object.callback (file:///C:/Users/34332/.dsh/profiles/web/node_modules/dsh-univer-office/lib/index.js:11134:14)
+                at Fiber.execute (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1071:28)
+                at file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1142:34
+                at Proxy.inject (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1601:15)
+                at new apply2 (file:///C:/Users/34332/.dsh/profiles/web/node_modules/dsh-univer-office/lib/index.js:11132:7)
+                at Fiber.execute (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1068:24)
+                at file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1142:34
+                at composeError (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:199:18)
+                at Fiber._execute (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1137:10)
+                at Fiber._reload (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1356:16) {
+              [stack]: [Getter/Setter],
+              [message]: 'settings.register is not a function'
+            },
+            [length]: 1
+          ]
+        },
+        {
+          ts: 1790299705557,
+          name: 'dsh-market',
+          type: 'warn',
+          args: [
+            "this host's settings service has no register() (dsh 0.1.7 derives settings from a plugin Config schema); the market keeps its composed configuration and shows no allowRestart switch on this host yet (#677)",
+            [length]: 1
+          ]
+        },
+        {
+          ts: 1790299705575,
+          name: 'dsh-better-sidebar',
+          type: 'error',
+          args: [
+            TypeError: sctx.settings.register is not a function
+                at Object.callback (file:///C:/Users/34332/.dsh/profiles/web/node_modules/dsh-better-sidebar/lib/index.js:4890:31)
+                at Fiber.execute (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1071:28)
+                at file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1142:34
+                at Proxy.inject (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1601:15)
+                at new apply (file:///C:/Users/34332/.dsh/profiles/web/node_modules/dsh-better-sidebar/lib/index.js:4888:6)
+                at Fiber.execute (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1068:24)
+                at file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1142:34
+                at composeError (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:199:18)
+                at Fiber._execute (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1137:10)
+                at Fiber._reload (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1356:16)
+                at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {
+              [stack]: [Getter/Setter],
+              [message]: 'sctx.settings.register is not a function'
+            },
+            [length]: 1
+          ]
+        },
+        {
+          ts: 1790299711530,
+          name: 'dsh-image-gen',
+          type: 'error',
+          args: [
+            TypeError: settingsCtx.settings.installSection is not a function
+                at Object.callback (file:///C:/Users/34332/.dsh/profiles/web/node_modules/dsh-image-gen/lib/index.js:22173:25)
+                at Fiber.execute (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1071:28)
+                at file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1142:34
+                at Proxy.inject (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1601:15)
+                at installImageSettings (file:///C:/Users/34332/.dsh/profiles/web/node_modules/dsh-image-gen/lib/index.js:22172:7)
+                at new apply (file:///C:/Users/34332/.dsh/profiles/web/node_modules/dsh-image-gen/lib/index.js:21578:2)
+                at Fiber.execute (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1068:24)
+                at file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1142:34
+                at composeError (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:199:18)
+                at Fiber._execute (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1137:10)
+                at Fiber._reload (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:1356:16) {
+              [stack]: [Getter/Setter],
+              [message]: 'settingsCtx.settings.installSection is not a function'
+            },
+            [length]: 1
+          ]
+        },
+        {
+          ts: 1790299712099,
+          name: 'client-connection',
+          type: 'error',
+          args: [
+            Error: [safe-delete][SAFE_DELETE_BULK_REJECTED] {"count":20030,"threshold":50,"scope":"turn","targets":["C:/Users/34332/AppData/Roaming/TRAE SOLO CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/.dsh-NXs8oBGk"],"targetCount":1}
+                at checkBulkDeleteGuard (D:\Program Files\WorkBuddy\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:239:19)
+                at tryTrash (D:\Program Files\WorkBuddy\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:591:5)
+                at tryRm (D:\Program Files\WorkBuddy\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:785:5)
+                at wrappedPromisesRm (D:\Program Files\WorkBuddy\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:829:15)
+                at withFileLock (file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-atomic-write/lib/index.js:213:9) {
+              [stack]: [Getter/Setter],
+              [message]: '[safe-delete][SAFE_DELETE_BULK_REJECTED] {"count":20030,"threshold":50,"scope":"turn","targets":["C:/Users/34332/AppData/Roaming/TRAE SOLO CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/.dsh-NXs8oBGk"],"targetCount":1}'
+            },
+            [length]: 1
+          ]
+        },
+        {
+          ts: 1790299712111,
+          name: 'pet',
+          type: 'warn',
+          args: [
+            '[dsh-pet desktop helper] node:internal/modules/cjs/loader:1527\r\n' +
+              '  throw err;\r\n' +
+              '  ^\r\n' +
+              '\r\n' +
+              "Error: Cannot find module 'electron'\r\n" +
+              'Require stack:\r\n' +
+              '- C:\\Users\\34332\\.dsh\\profiles\\web\\node_modules\\dsh-pet\\runtime\\electron-helper\\main.js\r\n' +
+              '    at Module._resolveFilename (node:internal/modules/cjs/loader:1524:15)\r\n' +
+              '    at wrapResolveFilename (node:internal/modules/cjs/loader:1078:27)\r\n' +
+              '    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1102:10)\r\n' +
+              '    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1129:12)\r\n' +
+              '    at Module._load (node:internal/modules/cjs/loader:1301:5)\r\n' +
+              '    at c._load (node:electron/js2c/node_init:2:18068)\r\n' +
+              '    at wrapModuleLoad (node:internal/modules/cjs/loader:262:19)\r\n' +
+              '    at Module.require (node:internal/modules/cjs/loader:1624:12)\r\n' +
+              '    at require (node:internal/modules/helpers:153:16)\r\n' +
+              '    at Object.<anonymous> (C:\\Users\\34332\\.dsh\\profiles\\web\\node_modules\\dsh-pet\\runtime\\electron-helper\\main.js:22:66) {\r\n' +
+              "  code: 'MODULE_NOT_FOUND',\r\n" +
+              '  requireStack: [\r\n' +
+              "    'C:\\\\Users\\\\34332\\\\.dsh\\\\profiles\\\\web\\\\node_modules\\\\dsh-pet\\\\runtime\\\\electron-helper\\\\main.js'\r\n" +
+              '  ]\r\n' +
+              '}\r\n' +
+              '\r\n' +
+              'Node.js v24.18.1',
+            [length]: 1
+          ]
+        },
+        {
+          ts: 1790299712111,
+          name: 'pet',
+          type: 'warn',
+          args: [
+            'dsh-pet desktop helper exited (code=1, signal=null); restarting',
+            [length]: 1
+          ]
+        },
+        {
+          ts: 1790299712111,
+          name: 'pet',
+          type: 'warn',
+          args: [
+            'dsh-pet desktop helper exited; restarting in 1500ms (attempt 1, consecutive-crash limit 12)',
+            [length]: 1
+          ]
+        },
+        {
+          ts: 1790299712654,
+          name: 'hmr',
+          type: 'warn',
+          args: [
+            'config reload at %C failed',
+            'C:\\Users\\34332\\.dsh\\profiles\\web\\package.json',
+            [length]: 2
+          ]
+        },
+        {
+          ts: 1790299712654,
+          name: 'hmr',
+          type: 'warn',
+          args: [
+            Error: HMR is disposed
+                at file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-hmr/lib/index.js:282:29 {
+              [stack]: [Getter/Setter],
+              [message]: 'HMR is disposed'
+            },
+            [length]: 1
+          ]
+        },
+        [length]: 16
+      ]
+    }
+  }
+}

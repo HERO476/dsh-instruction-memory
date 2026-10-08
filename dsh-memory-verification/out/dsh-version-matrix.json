@@ -1,0 +1,688 @@
+{
+  "generatedAt": "2026-10-05T01:25:29.590Z",
+  "pluginVersion": "1.0.15",
+  "declaredRange": ">=0.1.3-alpha.2 <0.1.4 || >=0.1.4-0 <0.1.5-0 || >=0.1.5-alpha.1 <0.1.6-0 || >=0.1.6-alpha.0 <0.1.7-0 || >=0.1.7-alpha.0 <0.2.0-0 || >=0.2.1-alpha.0 <0.3.0-0 || >=0.2.0-0",
+  "clientInject": [
+    "@deepseek-ai/dsh-client-ui-renderer",
+    "@deepseek-ai/dsh-client-ui-settings"
+  ],
+  "basis": "dsh@V 的同期子包 = @V；该前提由 lockstep 与本机安装树双重验证",
+  "lockstep": {
+    "dsh-system-prompt": {
+      "versionCount": 31,
+      "allTenPresent": true,
+      "missing": []
+    },
+    "dsh-host-webserver": {
+      "versionCount": 31,
+      "allTenPresent": true,
+      "missing": []
+    },
+    "dsh-client-ui-renderer": {
+      "versionCount": 23,
+      "allTenPresent": true,
+      "missing": []
+    },
+    "dsh-client-ui-settings": {
+      "versionCount": 31,
+      "allTenPresent": true,
+      "missing": []
+    },
+    "dsh-agent-loop": {
+      "versionCount": 31,
+      "allTenPresent": true,
+      "missing": []
+    }
+  },
+  "installedTree": {
+    "dsh": "0.2.0-rc.2",
+    "dsh-system-prompt": "0.2.0-rc.2",
+    "dsh-host-webserver": "0.2.0-rc.2",
+    "dsh-client-ui-renderer": "0.2.0-rc.2",
+    "dsh-client-ui-settings": "0.2.0-rc.2",
+    "dsh-agent-loop": "0.2.0-rc.2"
+  },
+  "checkedVersionsNewestFirst": [
+    "0.2.1-alpha.1",
+    "0.2.0-rc.2",
+    "0.2.0-rc.1",
+    "0.1.7-rc.2",
+    "0.1.7-rc.1",
+    "0.1.7-alpha.2",
+    "0.1.7-alpha.1",
+    "0.1.5-rc.3",
+    "0.1.6-alpha.2",
+    "0.1.6-alpha.1"
+  ],
+  "rows": [
+    {
+      "dshVersion": "0.2.1-alpha.1",
+      "published": "2026-10-03T04:53:22.343Z",
+      "subPackagesAtSameVersion": true,
+      "cordis": {
+        "range": "~4.0.5-alpha.1",
+        "resolved": "4.0.5-alpha.1"
+      },
+      "rangeDriftToday": {
+        "kind": "all-exact"
+      },
+      "semver": {
+        "default": true,
+        "includePrerelease": true
+      },
+      "systemPrompt": {
+        "fetched": true,
+        "bytes": 17387,
+        "sectionMethod": true,
+        "evaluatesFunctionText": true,
+        "fileReference900": true,
+        "toolBash1000": true,
+        "duplicateNameThrows": true,
+        "exportsRenderPrompt": true
+      },
+      "webServer": {
+        "fetched": true,
+        "bytes": 13276,
+        "registerMethod": true,
+        "hostGetter": true,
+        "loopbackOnly": true
+      },
+      "cordisApi": {
+        "fetched": true,
+        "bytes": 60211,
+        "inject": true,
+        "effect": true,
+        "logger": true,
+        "provide": true
+      },
+      "client": {
+        "@deepseek-ai/dsh-client-ui-renderer": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 178
+        },
+        "@deepseek-ai/dsh-client-ui-settings": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 868
+        }
+      }
+    },
+    {
+      "dshVersion": "0.2.0-rc.2",
+      "published": "2026-09-29T09:56:27.792Z",
+      "subPackagesAtSameVersion": true,
+      "cordis": {
+        "range": "~4.0.4",
+        "resolved": "4.0.5-alpha.1"
+      },
+      "rangeDriftToday": {
+        "kind": "all-exact"
+      },
+      "semver": {
+        "default": true,
+        "includePrerelease": true
+      },
+      "systemPrompt": {
+        "fetched": true,
+        "bytes": 17387,
+        "sectionMethod": true,
+        "evaluatesFunctionText": true,
+        "fileReference900": true,
+        "toolBash1000": true,
+        "duplicateNameThrows": true,
+        "exportsRenderPrompt": true
+      },
+      "webServer": {
+        "fetched": true,
+        "bytes": 13276,
+        "registerMethod": true,
+        "hostGetter": true,
+        "loopbackOnly": true
+      },
+      "cordisApi": {
+        "fetched": true,
+        "bytes": 60211,
+        "inject": true,
+        "effect": true,
+        "logger": true,
+        "provide": true
+      },
+      "client": {
+        "@deepseek-ai/dsh-client-ui-renderer": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 178
+        },
+        "@deepseek-ai/dsh-client-ui-settings": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 868
+        }
+      }
+    },
+    {
+      "dshVersion": "0.2.0-rc.1",
+      "published": "2026-09-28T12:34:03.181Z",
+      "subPackagesAtSameVersion": true,
+      "cordis": {
+        "range": "~4.0.4",
+        "resolved": "4.0.5-alpha.1"
+      },
+      "rangeDriftToday": {
+        "kind": "all-exact"
+      },
+      "semver": {
+        "default": true,
+        "includePrerelease": true
+      },
+      "systemPrompt": {
+        "fetched": true,
+        "bytes": 17387,
+        "sectionMethod": true,
+        "evaluatesFunctionText": true,
+        "fileReference900": true,
+        "toolBash1000": true,
+        "duplicateNameThrows": true,
+        "exportsRenderPrompt": true
+      },
+      "webServer": {
+        "fetched": true,
+        "bytes": 13276,
+        "registerMethod": true,
+        "hostGetter": true,
+        "loopbackOnly": true
+      },
+      "cordisApi": {
+        "fetched": true,
+        "bytes": 60211,
+        "inject": true,
+        "effect": true,
+        "logger": true,
+        "provide": true
+      },
+      "client": {
+        "@deepseek-ai/dsh-client-ui-renderer": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 178
+        },
+        "@deepseek-ai/dsh-client-ui-settings": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 868
+        }
+      }
+    },
+    {
+      "dshVersion": "0.1.7-rc.2",
+      "published": "2026-09-24T14:18:11.337Z",
+      "subPackagesAtSameVersion": true,
+      "cordis": {
+        "range": "~4.0.4",
+        "resolved": "4.0.5-alpha.1"
+      },
+      "rangeDriftToday": {
+        "kind": "all-exact"
+      },
+      "semver": {
+        "default": true,
+        "includePrerelease": true
+      },
+      "systemPrompt": {
+        "fetched": true,
+        "bytes": 17387,
+        "sectionMethod": true,
+        "evaluatesFunctionText": true,
+        "fileReference900": true,
+        "toolBash1000": true,
+        "duplicateNameThrows": true,
+        "exportsRenderPrompt": true
+      },
+      "webServer": {
+        "fetched": true,
+        "bytes": 13276,
+        "registerMethod": true,
+        "hostGetter": true,
+        "loopbackOnly": true
+      },
+      "cordisApi": {
+        "fetched": true,
+        "bytes": 60211,
+        "inject": true,
+        "effect": true,
+        "logger": true,
+        "provide": true
+      },
+      "client": {
+        "@deepseek-ai/dsh-client-ui-renderer": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 178
+        },
+        "@deepseek-ai/dsh-client-ui-settings": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 868
+        }
+      }
+    },
+    {
+      "dshVersion": "0.1.7-rc.1",
+      "published": "2026-09-23T13:44:12.289Z",
+      "subPackagesAtSameVersion": true,
+      "cordis": {
+        "range": "~4.0.4",
+        "resolved": "4.0.5-alpha.1"
+      },
+      "rangeDriftToday": {
+        "kind": "all-exact"
+      },
+      "semver": {
+        "default": true,
+        "includePrerelease": true
+      },
+      "systemPrompt": {
+        "fetched": true,
+        "bytes": 17387,
+        "sectionMethod": true,
+        "evaluatesFunctionText": true,
+        "fileReference900": true,
+        "toolBash1000": true,
+        "duplicateNameThrows": true,
+        "exportsRenderPrompt": true
+      },
+      "webServer": {
+        "fetched": true,
+        "bytes": 13276,
+        "registerMethod": true,
+        "hostGetter": true,
+        "loopbackOnly": true
+      },
+      "cordisApi": {
+        "fetched": true,
+        "bytes": 60211,
+        "inject": true,
+        "effect": true,
+        "logger": true,
+        "provide": true
+      },
+      "client": {
+        "@deepseek-ai/dsh-client-ui-renderer": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 178
+        },
+        "@deepseek-ai/dsh-client-ui-settings": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 868
+        }
+      }
+    },
+    {
+      "dshVersion": "0.1.7-alpha.2",
+      "published": "2026-09-22T16:08:55.647Z",
+      "subPackagesAtSameVersion": true,
+      "cordis": {
+        "range": "~4.0.4",
+        "resolved": "4.0.5-alpha.1"
+      },
+      "rangeDriftToday": {
+        "kind": "all-exact"
+      },
+      "semver": {
+        "default": true,
+        "includePrerelease": true
+      },
+      "systemPrompt": {
+        "fetched": true,
+        "bytes": 17387,
+        "sectionMethod": true,
+        "evaluatesFunctionText": true,
+        "fileReference900": true,
+        "toolBash1000": true,
+        "duplicateNameThrows": true,
+        "exportsRenderPrompt": true
+      },
+      "webServer": {
+        "fetched": true,
+        "bytes": 13276,
+        "registerMethod": true,
+        "hostGetter": true,
+        "loopbackOnly": true
+      },
+      "cordisApi": {
+        "fetched": true,
+        "bytes": 60211,
+        "inject": true,
+        "effect": true,
+        "logger": true,
+        "provide": true
+      },
+      "client": {
+        "@deepseek-ai/dsh-client-ui-renderer": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 178
+        },
+        "@deepseek-ai/dsh-client-ui-settings": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 868
+        }
+      }
+    },
+    {
+      "dshVersion": "0.1.7-alpha.1",
+      "published": "2026-09-22T06:23:31.522Z",
+      "subPackagesAtSameVersion": true,
+      "cordis": {
+        "range": "^4.0.3",
+        "resolved": "4.0.5-alpha.1"
+      },
+      "rangeDriftToday": {
+        "kind": "ranged",
+        "sample": "dsh-hmr",
+        "range": "^0.1.7-alpha.1",
+        "default": "0.1.7-rc.2",
+        "includePrerelease": "0.1.7-rc.2"
+      },
+      "semver": {
+        "default": true,
+        "includePrerelease": true
+      },
+      "systemPrompt": {
+        "fetched": true,
+        "bytes": 17387,
+        "sectionMethod": true,
+        "evaluatesFunctionText": true,
+        "fileReference900": true,
+        "toolBash1000": true,
+        "duplicateNameThrows": true,
+        "exportsRenderPrompt": true
+      },
+      "webServer": {
+        "fetched": true,
+        "bytes": 13276,
+        "registerMethod": true,
+        "hostGetter": true,
+        "loopbackOnly": true
+      },
+      "cordisApi": {
+        "fetched": true,
+        "bytes": 60211,
+        "inject": true,
+        "effect": true,
+        "logger": true,
+        "provide": true
+      },
+      "client": {
+        "@deepseek-ai/dsh-client-ui-renderer": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 178
+        },
+        "@deepseek-ai/dsh-client-ui-settings": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 868
+        }
+      }
+    },
+    {
+      "dshVersion": "0.1.5-rc.3",
+      "published": "2026-09-22T05:55:20.869Z",
+      "subPackagesAtSameVersion": true,
+      "cordis": {
+        "range": "4.0.2",
+        "resolved": "4.0.2"
+      },
+      "rangeDriftToday": {
+        "kind": "ranged",
+        "sample": "dsh-base",
+        "range": "^0.1.5-rc.3",
+        "default": "0.1.5-rc.3",
+        "includePrerelease": "0.1.7-rc.2"
+      },
+      "semver": {
+        "default": true,
+        "includePrerelease": true
+      },
+      "systemPrompt": {
+        "fetched": true,
+        "bytes": 17087,
+        "sectionMethod": true,
+        "evaluatesFunctionText": true,
+        "fileReference900": true,
+        "toolBash1000": true,
+        "duplicateNameThrows": true,
+        "exportsRenderPrompt": true
+      },
+      "webServer": {
+        "fetched": true,
+        "bytes": 13170,
+        "registerMethod": true,
+        "hostGetter": true,
+        "loopbackOnly": true
+      },
+      "cordisApi": {
+        "fetched": true,
+        "bytes": 60228,
+        "inject": true,
+        "effect": true,
+        "logger": true,
+        "provide": true
+      },
+      "client": {
+        "@deepseek-ai/dsh-client-ui-renderer": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 178
+        },
+        "@deepseek-ai/dsh-client-ui-settings": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 247
+        }
+      }
+    },
+    {
+      "dshVersion": "0.1.6-alpha.2",
+      "published": "2026-09-17T13:52:10.201Z",
+      "subPackagesAtSameVersion": true,
+      "cordis": {
+        "range": "^4.0.2",
+        "resolved": "4.0.5-alpha.1"
+      },
+      "rangeDriftToday": {
+        "kind": "ranged",
+        "sample": "dsh-hmr",
+        "range": "^0.1.6-alpha.2",
+        "default": "0.1.6-alpha.2",
+        "includePrerelease": "0.1.7-rc.2"
+      },
+      "semver": {
+        "default": true,
+        "includePrerelease": true
+      },
+      "systemPrompt": {
+        "fetched": true,
+        "bytes": 17339,
+        "sectionMethod": true,
+        "evaluatesFunctionText": true,
+        "fileReference900": true,
+        "toolBash1000": true,
+        "duplicateNameThrows": true,
+        "exportsRenderPrompt": true
+      },
+      "webServer": {
+        "fetched": true,
+        "bytes": 13170,
+        "registerMethod": true,
+        "hostGetter": true,
+        "loopbackOnly": true
+      },
+      "cordisApi": {
+        "fetched": true,
+        "bytes": 60211,
+        "inject": true,
+        "effect": true,
+        "logger": true,
+        "provide": true
+      },
+      "client": {
+        "@deepseek-ai/dsh-client-ui-renderer": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 178
+        },
+        "@deepseek-ai/dsh-client-ui-settings": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 247
+        }
+      }
+    },
+    {
+      "dshVersion": "0.1.6-alpha.1",
+      "published": "2026-09-15T03:23:13.750Z",
+      "subPackagesAtSameVersion": true,
+      "cordis": {
+        "range": "^4.0.2",
+        "resolved": "4.0.5-alpha.1"
+      },
+      "rangeDriftToday": {
+        "kind": "ranged",
+        "sample": "dsh-base",
+        "range": "^0.1.6-alpha.1",
+        "default": "0.1.6-alpha.2",
+        "includePrerelease": "0.1.7-rc.2"
+      },
+      "semver": {
+        "default": true,
+        "includePrerelease": true
+      },
+      "systemPrompt": {
+        "fetched": true,
+        "bytes": 17339,
+        "sectionMethod": true,
+        "evaluatesFunctionText": true,
+        "fileReference900": true,
+        "toolBash1000": true,
+        "duplicateNameThrows": true,
+        "exportsRenderPrompt": true
+      },
+      "webServer": {
+        "fetched": true,
+        "bytes": 13170,
+        "registerMethod": true,
+        "hostGetter": true,
+        "loopbackOnly": true
+      },
+      "cordisApi": {
+        "fetched": true,
+        "bytes": 60211,
+        "inject": true,
+        "effect": true,
+        "logger": true,
+        "provide": true
+      },
+      "client": {
+        "@deepseek-ai/dsh-client-ui-renderer": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 178
+        },
+        "@deepseek-ai/dsh-client-ui-settings": {
+          "existsAtVersion": true,
+          "declaresDshClient": true,
+          "loaderCall": false,
+          "bytes": 247
+        }
+      }
+    }
+  ],
+  "results": [
+    {
+      "label": "前提：5 个子包在全部 10 个 dsh 版本都有同版本发布",
+      "pass": true,
+      "failing": []
+    },
+    {
+      "label": "semver 声明范围覆盖（默认模式）",
+      "pass": true,
+      "failing": []
+    },
+    {
+      "label": "semver 声明范围覆盖（includePrerelease）",
+      "pass": true,
+      "failing": []
+    },
+    {
+      "label": "system-prompt.section() 存在",
+      "pass": true,
+      "failing": []
+    },
+    {
+      "label": "system-prompt 的 assemble() 求值函数型 text（注入机制成立）",
+      "pass": true,
+      "failing": []
+    },
+    {
+      "label": "order 950 落在 FILE_REFERENCE(900) 与 TOOL_BASH(1000) 之间的空档",
+      "pass": true,
+      "failing": []
+    },
+    {
+      "label": "重名注册抛错（结构性排除重复注入）",
+      "pass": true,
+      "failing": []
+    },
+    {
+      "label": "host-webserver.register() 存在",
+      "pass": true,
+      "failing": []
+    },
+    {
+      "label": "host-webserver 有 get host()",
+      "pass": true,
+      "failing": []
+    },
+    {
+      "label": "cordis 有 ctx.inject()（1.0.10 起硬依赖）",
+      "pass": true,
+      "failing": []
+    },
+    {
+      "label": "cordis 有 ctx.effect()",
+      "pass": true,
+      "failing": []
+    },
+    {
+      "label": "client 两个包在各版本存在且声明 dsh.client",
+      "pass": true,
+      "failing": []
+    }
+  ],
+  "failedCount": 0
+}
