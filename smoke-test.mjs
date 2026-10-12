@@ -3,7 +3,7 @@
  *   node smoke-test.mjs
  */
 import { isAbsolute, join } from 'node:path'
-import { buildBlock, canonicalIp, hostnameOf, requestOriginVerdict, resolveStorePath, sanitizeEntry } from './lib/index.js'
+import { buildBlock, canonicalIp, hostnameOf, planInjection, requestOriginVerdict, resolveStorePath, sanitizeEntry } from './lib/index.js'
 
 let failures = 0
 const check = (label, actual, predicate) => {
@@ -98,6 +98,94 @@ check('truncation is labelled', huge, (v) => v.includes('被截断'))
     if (out.length > b || out.length === 0) { bad = { b, len: out.length }; break }
   }
   check('budget sweep: never over ceiling, never empty', bad, (v) => v === null)
+}
+
+// ---- injection plan (F1): the budget decision is observable -------------
+//
+// buildBlock() is now a thin wrapper over planInjection(); the text must stay
+// byte-identical, while the plan additionally reports which active entries
+// made it into the prompt and which the current budget left out.
+{
+  const truthy = (v) => v === true
+  const emptyPlan = planInjection(base)
+  check('plan: empty memory renders nothing', emptyPlan.text, (v) => v === '')
+  check('plan: empty memory still reports the effective ceiling',
+    emptyPlan.budget, (v) => v === 4000)
+  check('plan: empty memory has no candidates',
+    emptyPlan.activeCount === 0 && emptyPlan.included.length === 0 && emptyPlan.omitted.length === 0,
+    truthy)
+
+  const offPlan = planInjection({ ...base, enabled: false, entries: [entry()] })
+  check('plan: master switch off renders nothing', offPlan.text, (v) => v === '')
+  check('plan: master switch off keeps the budget ceiling',
+    offPlan.budget === 4000 && offPlan.included.length === 0 && offPlan.omitted.length === 0,
+    truthy)
+
+  check('plan: non-object input degrades to an empty plan',
+    planInjection(null).text === '' && planInjection(null).budget === 4000, truthy)
+  check('plan: budget is clamped in the plan',
+    planInjection({ ...base, budgetChars: 999999, entries: [entry()] }).budget === 40000
+    && planInjection({ ...base, budgetChars: 5, entries: [entry()] }).budget === 800,
+    truthy)
+
+  const mixedCandidates = {
+    ...base,
+    entries: [
+      entry({ id: 'a', title: 'ACTIVE', content: 'AAA' }),
+      entry({ id: 'off', title: 'DISABLED', content: 'BBB', enabled: false }),
+      entry({ id: 'blank', title: 'BLANK', content: '' }),
+    ],
+  }
+  const p = planInjection(mixedCandidates)
+  check('plan: text stays byte-identical to buildBlock()',
+    p.text === buildBlock(mixedCandidates) && p.text.length > 0, truthy)
+  check('plan: only the active non-blank entry is a candidate',
+    p.activeCount === 1 && p.included.length === 1 && p.omitted.length === 0, truthy)
+  check('plan: the included entry carries id, positive chars and truncated:false',
+    p.included[0].id === 'a' && p.included[0].chars > 0 && p.included[0].truncated === false, truthy)
+  check('plan: disabled/blank entries are in neither list',
+    !p.included.some((x) => x.id === 'off' || x.id === 'blank')
+    && !p.omitted.some((x) => x.id === 'off' || x.id === 'blank'), truthy)
+
+  // 始终 precedes 按需 in the consideration order as well as the text.
+  const modePlan = planInjection({
+    ...base,
+    entries: [
+      entry({ id: 'auto1', title: 'AUTO', mode: 'auto', priority: 0, updatedAt: 99 }),
+      entry({ id: 'always1', title: 'ALWAYS', mode: 'always', priority: 0, updatedAt: 1 }),
+    ],
+  })
+  check('plan: included order is 始终 first then 按需',
+    modePlan.included.map((x) => x.id).join(','), (v) => v === 'always1,auto1')
+
+  const tight = planInjection(many)
+  check('plan: tight-budget text is the existing block, unchanged',
+    tight.text === trimmed && tight.text.length > 0 && tight.text.length <= 800, truthy)
+  check('plan: tight budget reports the 800 ceiling', tight.budget, (v) => v === 800)
+  check('plan: every candidate is classified exactly once',
+    tight.activeCount === 12 && tight.included.length + tight.omitted.length === 12, truthy)
+  check('plan: included ids and omitted ids partition the candidates',
+    (() => {
+      const ids = [...tight.included, ...tight.omitted].map((x) => x.id).sort().join(',')
+      return ids === Array.from({ length: 12 }, (_, i) => 'e' + i).sort().join(',')
+    })(), truthy)
+  check('plan: the highest-priority first entry is included',
+    tight.included[0].id === 'e0' && tight.omitted.some((x) => x.id === 'e11'), truthy)
+  check('plan: included/omitted items carry their rendered char costs',
+    tight.included.every((x) => x.chars > 0) && tight.omitted.every((x) => x.chars > 0), truthy)
+  check('plan: at least one entry is omitted under the tight budget',
+    tight.omitted.length, (v) => v >= 1)
+  check('plan: every included item declares a boolean truncated flag',
+    tight.included.every((x) => typeof x.truncated === 'boolean'), truthy)
+
+  const hugePlan = planInjection({ ...base, budgetChars: 800, entries: [entry({ content: 'y'.repeat(5000) })] })
+  check('plan: the single oversized entry is included but flagged truncated',
+    hugePlan.included.length === 1 && hugePlan.included[0].truncated === true
+    && hugePlan.omitted.length === 0 && hugePlan.text === huge, truthy)
+
+  // Determinism for the plan itself, not just its text.
+  check('plan: identical input yields a byte-identical plan',
+    JSON.stringify(planInjection(many)) === JSON.stringify(tight), truthy)
 }
 
 // ---- storage location: the harness home, never the working directory ----

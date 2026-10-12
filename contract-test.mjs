@@ -1191,5 +1191,139 @@ async function statusFor(headers, body) {
   await rm(LAZY_HOME, { recursive: true, force: true })
 }
 
+/* ====================================================================
+ * F1: the injection budget plan is published through the real route
+ *
+ * A tight budget must make the state snapshot carry the effective ceiling,
+ * per-entry included/omitted decisions, and a preview whose length matches
+ * injection.chars — the exact data the Client's budget meter and the entry
+ * badges render. The Client's own reducer is fed the raw snapshot too, so
+ * this also pins the seam between the two halves.
+ * ==================================================================== */
+{
+  const PLAN_HOME = fileURLToPath(new URL('./.test-dsh-home-plan/', import.meta.url))
+  await rm(PLAN_HOME, { recursive: true, force: true })
+  const previousHome = process.env.DSH_HOME
+  process.env.DSH_HOME = PLAN_HOME
+
+  let planHandler = null
+  const planCtx = {
+    systemPrompt: { section: () => () => {} },
+    inject: (deps, callback) => {
+      const names = Array.isArray(deps) ? deps : Object.keys(deps)
+      if (names.includes('webServer')) {
+        callback({
+          webServer: { register: (route) => { planHandler = route.handler; return () => {} } },
+          effect: (fn) => { fn(); return () => {} },
+        })
+      }
+      return null
+    },
+    get: () => undefined,
+    effect: (fn) => { fn(); return () => {} },
+  }
+
+  const planHost = await import(new URL('./lib/index.js', import.meta.url).href + '?plan=' + Date.now())
+  planHost.apply(planCtx)
+
+  // Eight active entries plus one disabled entry; equal 220-char bodies so
+  // only priority/recency decides who makes an 800-character budget.
+  const planEntries = Array.from({ length: 8 }, (_, i) => ({
+    id: 'p' + i, title: 'P' + i, content: 'z'.repeat(220),
+    mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 100 - i,
+  }))
+  planEntries.push({
+    id: 'p-off', title: 'POFF', content: 'q'.repeat(220),
+    mode: 'always', when: '', priority: 1, enabled: false, updatedAt: 200,
+  })
+
+  await callRoute(planHandler, { method: 'state' })
+  for (const e of planEntries) {
+    await callRoute(planHandler, { method: 'save-entry', args: { entry: e } })
+  }
+  await callRoute(planHandler, { method: 'set-options', args: { budgetChars: 800 } })
+
+  const state = await callRoute(planHandler, { method: 'state' })
+  const normalized = normalize(state)
+  check('F1 plan: the state response is consumable by the Client', normalized !== null)
+  const inj = state.snapshot.injection
+  check('F1 plan: snapshot carries the effective 800-char budget',
+    inj.budget === 800, String(inj.budget))
+  check('F1 plan: injection.chars equals preview.length and stays within the budget',
+    typeof inj.chars === 'number' && inj.chars === state.snapshot.preview.length
+    && inj.chars > 0 && inj.chars <= 800,
+    'chars=' + String(inj.chars) + ' preview=' + state.snapshot.preview.length)
+  check('F1 plan: activeCount counts enabled non-blank entries only',
+    inj.activeCount === 8, String(inj.activeCount))
+  check('F1 plan: included and omitted partition every active entry exactly once',
+    Array.isArray(inj.included) && Array.isArray(inj.omitted)
+    && inj.included.length + inj.omitted.length === 8
+    && new Set([...inj.included, ...inj.omitted].map((x) => x.id)).size === 8,
+    JSON.stringify({ included: inj.included.map((x) => x.id), omitted: inj.omitted.map((x) => x.id) }))
+  check('F1 plan: the disabled entry is in neither list',
+    ![...inj.included, ...inj.omitted].some((x) => x.id === 'p-off'))
+  // The Host re-stamps updatedAt on every save, so the entry saved LAST is the
+  // most recent (all priorities are equal); derive the expected first id from
+  // the stored data instead of assuming the request order survived.
+  const expectedFirst = state.snapshot.data.entries.slice()
+    .filter((e) => e.enabled && e.content !== '')
+    .sort((a, b) => (b.priority - a.priority) || (b.updatedAt - a.updatedAt))[0].id
+  check('F1 plan: the most recent active entry is included first',
+    inj.included[0] && inj.included[0].id === expectedFirst,
+    'got ' + String(inj.included[0] && inj.included[0].id) + ' expected ' + expectedFirst)
+  check('F1 plan: an 800-char budget omits at least one 220-char entry',
+    inj.omitted.length >= 1, String(inj.omitted.length))
+  check('F1 plan: every included item carries id/chars/truncated',
+    inj.included.every((x) => typeof x.id === 'string' && typeof x.chars === 'number' && x.chars > 0
+      && typeof x.truncated === 'boolean'), JSON.stringify(inj.included))
+  check('F1 plan: every omitted item carries id/chars and is not marked truncated',
+    inj.omitted.every((x) => typeof x.id === 'string' && typeof x.chars === 'number' && x.chars > 0
+      && x.truncated === undefined), JSON.stringify(inj.omitted))
+  check('F1 plan: the preview discloses the exact omitted count',
+    state.snapshot.preview.includes('另有 ' + inj.omitted.length + ' 条指令因注入字数上限未包含'),
+    state.snapshot.preview.slice(-120))
+
+  // The Client-side reducer against the REAL snapshot (the two-half seam).
+  if (typeof clientPlugin.__budgetMeter === 'function') {
+    const meter = clientPlugin.__budgetMeter(normalized.snapshot)
+    check('F1 seam: meter.used mirrors injection.chars', meter.used === inj.chars, String(meter.used))
+    check('F1 seam: meter.budget mirrors the plan budget', meter.budget === 800, String(meter.budget))
+    check('F1 seam: meter.omitted counts the omitted entries',
+      meter.omitted === inj.omitted.length, meter.omitted + ' vs ' + inj.omitted.length)
+    check('F1 seam: meter.percent is within 1..100',
+      meter.percent >= 1 && meter.percent <= 100, String(meter.percent))
+    check('F1 seam: meter.tokens is the documented 0.6 estimate',
+      meter.tokens === Math.round(inj.chars * 0.6), String(meter.tokens))
+  } else {
+    check('F1 seam: client exposes __budgetMeter', false, 'missing export')
+  }
+
+  // Raising the budget must fit every entry and clear the omitted set.
+  await callRoute(planHandler, { method: 'set-options', args: { budgetChars: 40000 } })
+  const roomy = (await callRoute(planHandler, { method: 'state' })).snapshot.injection
+  check('F1 plan: a large budget includes every active entry',
+    roomy.included.length === 8 && roomy.omitted.length === 0,
+    JSON.stringify({ included: roomy.included.length, omitted: roomy.omitted.length }))
+
+  // Backward-compatible seam: an older Host publishes no budget/included/
+  // omitted fields; the reducer falls back to data.budgetChars and never throws.
+  if (typeof clientPlugin.__budgetMeter === 'function') {
+    const oldMeter = clientPlugin.__budgetMeter({
+      data: { budgetChars: 2000 },
+      injection: { registered: true, chars: 123 },
+    })
+    check('F1 seam: older-host snapshot falls back to data.budgetChars',
+      oldMeter.budget === 2000 && oldMeter.used === 123 && oldMeter.omitted === 0
+      && oldMeter.truncated === 0, JSON.stringify(oldMeter))
+    const garbage = clientPlugin.__budgetMeter(null)
+    check('F1 seam: garbage snapshot degrades to zeros',
+      garbage.budget === 0 && garbage.used === 0 && garbage.omitted === 0
+      && garbage.percent === 0 && garbage.tokens === 0, JSON.stringify(garbage))
+  }
+
+  process.env.DSH_HOME = previousHome
+  await rm(PLAN_HOME, { recursive: true, force: true })
+}
+
 console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')
 process.exit(failures === 0 ? 0 : 1)

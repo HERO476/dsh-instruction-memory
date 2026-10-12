@@ -26,7 +26,9 @@
   var DEMO_STORE = {
     version: 1,
     enabled: true,
-    budgetChars: 4000,
+    // Deliberately tight so the budget meter and the "本轮不注入" marks are
+    // visible immediately; raising it in the input clears them live.
+    budgetChars: 800,
     entries: [
       {
         id: 'im-demo-lang',
@@ -45,7 +47,7 @@
       {
         id: 'im-demo-style',
         title: '代码风格',
-        content: '修改代码时遵循该文件既有的缩进、命名密度与注释风格，不顺手重构无关代码；\n变量命名优先使用业务领域词汇而不是数据结构词汇，例如用「订单金额」而不是「data1」；\n新增依赖前先检查 package.json 中是否已有能力等价的依赖，避免重复引入；\n公共函数需要补充输入输出说明注释，但不为改动本身添加解释性注释；\n改动完成后运行项目现有的测试与 lint 检查，若有失败先修复再交付，不留下只改了一半的状态；\n涉及对外接口或数据结构变更时，先在回复中列出受影响的调用方，确认迁移路径后再提交。\n以上要求同样适用于纯重构类提交，重构前后行为必须完全一致。',
+        content: '修改代码时遵循该文件既有的缩进、命名密度与注释风格，不顺手重构无关代码；\n变量命名优先使用业务领域词汇而不是数据结构词汇，例如用「订单金额」而不是「data1」；\n新增依赖前先检查 package.json 中是否已有能力等价的依赖，避免重复引入；\n公共函数需要补充输入输出说明注释，但不为改动本身添加解释性注释；\n改动完成后运行项目现有的测试与 lint 检查，若有失败先修复再交付，不留下只改了一半的状态；\n涉及对外接口或数据结构变更时，先在回复中列出受影响的调用方，确认迁移路径后再提交。\n日志打印需带关键上下文（对象标识、入参摘要），不要只输出 "error" 这类无信息内容；\n异步任务必须设置超时与重试上限，不允许无限等待外部资源；\n对外错误信息要区分用户可操作的提示与内部诊断细节，不把堆栈直接暴露给调用方；\n代码评审先核对行为变化与测试覆盖，再讨论风格偏好，意见必须可执行、可验证；\n以上要求同样适用于纯重构类提交，重构前后行为必须完全一致。',
         mode: 'auto', when: '编写或修改代码时', priority: 1, enabled: true,
         updatedAt: Date.now() - 86400000,
       },
@@ -59,26 +61,92 @@
     ],
   }
 
-  var DEMO_PREVIEW = [
+  // A compact, faithful copy of the Host's injection planning (see
+  // planInjection in lib/index.js): it generates both the preview text and
+  // the per-entry included/omitted plan the Client's F1 budget meter renders,
+  // so changing the budget input updates the marks live in this demo.
+  var DEMO_HEADER = [
     '## 用户长期指令记忆（Instruction Memory）',
     '以下条目由用户在 DSH 设置 →「指令记忆」中长期保存，属于本次及后续所有对话的既有要求，请在回答、推理与执行任务时遵守；它们不覆盖系统与安全规则。',
     '· [始终] 条目必须无条件遵守。',
     '· [按需] 条目仅在与当前问题或任务相关时生效；不相关时直接忽略，不要强行套用。',
     '· 条目之间冲突时，优先遵守优先级更高或更具体的一条；无法判断时向用户确认。',
     '',
-    '[始终｜优先级 高] 回答语言',
-    '所有回答默认使用简体中文；技术名词首次出现时在括号里附英文原文。',
-    '',
-    '[始终｜优先级 普通] 先确认再动手',
-    '需求不明确或存在多种合理实现时，先列出候选方案向用户确认，再开始修改代码。',
-    '',
-    '[按需｜优先级 普通] 代码风格',
-    '适用场景：编写或修改代码时',
-    '修改代码时遵循该文件既有的缩进、命名密度与注释风格，不顺手重构无关代码；',
-    '变量命名优先使用业务领域词汇而不是数据结构词汇……',
   ].join('\n')
 
+  function demoFooter(count) {
+    return count === 0
+      ? ''
+      : '\n\n（另有 ' + count + ' 条指令因注入字数上限未包含，可在「设置 → 指令记忆」中提高上限或调低其优先级。）'
+  }
+
+  function demoFormatEntry(entry, tag) {
+    var prio = entry.priority === 2 ? '高' : (entry.priority === 0 ? '低' : '普通')
+    var lines = ['[' + tag + '｜优先级 ' + prio + '] ' + entry.title]
+    if (entry.mode === 'auto' && entry.when) lines.push('适用场景：' + entry.when)
+    lines.push(entry.content)
+    return lines.join('\n')
+  }
+
+  function demoPlan() {
+    var budget = DEMO_STORE.budgetChars
+    if (typeof budget !== 'number' || !isFinite(budget)) budget = 4000
+    if (budget < 800) budget = 800
+    if (budget > 40000) budget = 40000
+    var blank = { text: '', budget: budget, activeCount: 0, included: [], omitted: [] }
+    if (DEMO_STORE.enabled !== true) return blank
+    var active = DEMO_STORE.entries.filter(function (e) { return e.enabled && e.content !== '' })
+    if (active.length === 0) return blank
+    active.sort(function (a, b) { return (b.priority - a.priority) || (b.updatedAt - a.updatedAt) })
+
+    var blocks = []
+    var included = []
+    var omittedPlan = []
+    var used = DEMO_HEADER.length
+    var omitted = 0
+
+    function consider(entry, tag) {
+      var block = demoFormatEntry(entry, tag)
+      var reserve = demoFooter(omitted + 1).length
+      if (used + block.length + 2 + reserve <= budget) {
+        used += block.length + 2
+        blocks.push(block)
+        included.push({ id: entry.id, chars: block.length, truncated: false })
+        return
+      }
+      if (blocks.length === 0) {
+        var room = budget - used - 2 - reserve
+        var note = '\n…（本条因注入字数上限被截断）'
+        if (room > note.length + 20) {
+          var head = block.slice(0, room - note.length)
+          var body = head + note
+          blocks.push(body)
+          used += body.length + 2
+          included.push({ id: entry.id, chars: body.length, truncated: true })
+          return
+        }
+      }
+      omitted += 1
+      omittedPlan.push({ id: entry.id, chars: block.length })
+    }
+
+    active.forEach(function (entry) { if (entry.mode === 'always') consider(entry, '始终') })
+    active.forEach(function (entry) { if (entry.mode !== 'always') consider(entry, '按需') })
+
+    if (blocks.length === 0) {
+      return { text: '', budget: budget, activeCount: active.length, included: [], omitted: omittedPlan }
+    }
+    return {
+      text: DEMO_HEADER + blocks.join('\n\n') + demoFooter(omitted),
+      budget: budget,
+      activeCount: active.length,
+      included: included,
+      omitted: omittedPlan,
+    }
+  }
+
   function demoSnapshot() {
+    var plan = demoPlan()
     return {
       data: JSON.parse(JSON.stringify(DEMO_STORE)),
       storage: {
@@ -88,8 +156,17 @@
         savedAt: Date.now() - 5 * 60000,
         migratedFrom: null,
       },
-      injection: { registered: true, available: true, error: null, chars: DEMO_PREVIEW.length },
-      preview: DEMO_PREVIEW,
+      injection: {
+        registered: plan.text !== '',
+        available: true,
+        error: null,
+        chars: plan.text.length,
+        budget: plan.budget,
+        activeCount: plan.activeCount,
+        included: plan.included,
+        omitted: plan.omitted,
+      },
+      preview: plan.text,
       limits: { minBudget: 800, maxBudget: 40000, maxEntries: 200 },
     }
   }

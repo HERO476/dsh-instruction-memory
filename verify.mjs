@@ -496,6 +496,55 @@ if (captured && typeof captured.factory === 'function') {
     check('client: exposes __nextBudgetText for this test', false, 'missing export')
   }
 
+  // F1 budget meter: the reducer that turns a snapshot's injection plan into
+  // the header usage bar and the per-entry marks. Pinned here for the same
+  // reason as nextBudgetText: it must survive older-host snapshots and bad
+  // shapes without throwing inside a render.
+  if (plugin && typeof plugin.__budgetMeter === 'function') {
+    const meter = plugin.__budgetMeter
+    const snap = (over) => ({
+      data: { budgetChars: 4000 },
+      injection: {
+        registered: true, chars: 1000, budget: 800, activeCount: 3,
+        included: [{ id: 'a', chars: 400, truncated: false }, { id: 'b', chars: 300, truncated: false }],
+        omitted: [{ id: 'c', chars: 200 }],
+      },
+      ...over,
+    })
+    const m = meter(snap())
+    check('client: meter prefers the plan budget over data.budgetChars',
+      m.budget === 800, String(m.budget))
+    check('client: meter reports used/omitted/truncated from the plan',
+      m.used === 1000 && m.omitted === 1 && m.truncated === 0,
+      JSON.stringify(m))
+    check('client: meter percent is capped at 100 (used can equal, not exceed, budget)',
+      m.percent === 100, String(m.percent))
+    check('client: meter tokens are the documented 0.6 estimate',
+      m.tokens === 600, String(m.tokens))
+    const trunc = meter(snap({
+      injection: {
+        registered: true, chars: 400, budget: 800,
+        included: [{ id: 'a', chars: 400, truncated: true }],
+        omitted: [],
+      },
+    }))
+    check('client: meter counts a truncated included entry',
+      trunc.truncated === 1 && trunc.omitted === 0 && trunc.percent === 50,
+      JSON.stringify(trunc))
+    check('client: meter ignores malformed plan items',
+      meter(snap({
+        injection: { chars: 10, budget: 100, included: [null, 42, { id: '' }], omitted: [{ chars: 5 }] },
+      })).omitted === 0)
+    const oldHost = meter({ data: { budgetChars: 2000 }, injection: { registered: true, chars: 333 } })
+    check('client: meter falls back to data.budgetChars on an older-host snapshot',
+      oldHost.budget === 2000 && oldHost.used === 333 && oldHost.omitted === 0
+      && oldHost.truncated === 0, JSON.stringify(oldHost))
+    check('client: meter survives a null snapshot with all zeros',
+      (() => { const g = meter(null); return g.budget === 0 && g.used === 0 && g.percent === 0 && g.tokens === 0 })())
+  } else {
+    check('client: exposes __budgetMeter for this test', false, 'missing export')
+  }
+
   // i18n: the panel ships both locales from one dictionary pair. The lookup
   // chain falls back to zh, so a key missing from zh renders as the raw key;
   // a key missing from en silently degrades that user to Chinese. Placeholder
@@ -520,6 +569,11 @@ if (captured && typeof captured.factory === 'function') {
     check('i18n: the undo bar copy exists in both locales',
       ['undo.deleted', 'undo.restore', 'undo.dismiss', 'undo.restored'].every((k) => k in zh && k in en),
       'missing: ' + ['undo.deleted', 'undo.restore', 'undo.dismiss', 'undo.restored'].filter((k) => !(k in zh) || !(k in en)).join(','))
+    check('i18n: the F1 budget meter copy exists in both locales',
+      ['budget.used', 'budget.omitted', 'tag.omitted', 'tag.truncated', 'tag.omittedTitle', 'tag.truncatedTitle']
+        .every((k) => k in zh && k in en),
+      'missing: ' + ['budget.used', 'budget.omitted', 'tag.omitted', 'tag.truncated', 'tag.omittedTitle', 'tag.truncatedTitle']
+        .filter((k) => !(k in zh) || !(k in en)).join(','))
 
     // dictionaryT is the built-in translator that carries the panel until the
     // official locale service publishes — and forever on hosts without it.
