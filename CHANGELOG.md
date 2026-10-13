@@ -7,7 +7,7 @@
 > 1.0.13 起由 CI 经 OIDC Trusted Publishing 发布（首个带 provenance 的版本）。
 > 这些历史 tag **不应回填**——npm 上的版本号已被占用。
 
-## [Unreleased]
+## [1.0.18] — 2026-10-13
 
 ### 新增
 
