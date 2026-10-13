@@ -1325,5 +1325,170 @@ async function statusFor(headers, body) {
   await rm(PLAN_HOME, { recursive: true, force: true })
 }
 
+/* ====================================================================
+ * F3: the batch route applies one op to many entries in ONE transaction
+ *
+ * Every successful batch must commit exactly once (rev moves by exactly
+ * 1, regardless of how many ids it touches); all-no-op batches write nothing
+ * and keep rev still, mirroring the single delete-entry rule. Tags round-trip
+ * and never reach the injected preview. Invalid op/value shapes and stale revs
+ * are refused.
+ * ==================================================================== */
+{
+  const BATCH_HOME = fileURLToPath(new URL('./.test-dsh-home-batch/', import.meta.url))
+  await rm(BATCH_HOME, { recursive: true, force: true })
+  const previousHome = process.env.DSH_HOME
+  process.env.DSH_HOME = BATCH_HOME
+
+  let batchHandler = null
+  const batchCtx = {
+    systemPrompt: { section: () => () => {} },
+    inject: (deps, callback) => {
+      const names = Array.isArray(deps) ? deps : Object.keys(deps)
+      if (names.includes('webServer')) {
+        callback({
+          webServer: { register: (route) => { batchHandler = route.handler; return () => {} } },
+          effect: (fn) => { fn(); return () => {} },
+        })
+      }
+      return null
+    },
+    get: () => undefined,
+    effect: (fn) => { fn(); return () => {} },
+  }
+  const batchHost = await import(new URL('./lib/index.js', import.meta.url).href + '?batch=' + Date.now())
+  batchHost.apply(batchCtx)
+
+  await callRoute(batchHandler, { method: 'state' })
+  const ids = ['b0', 'b1', 'b2', 'b3', 'b4', 'b5']
+  for (const id of ids) {
+    await callRoute(batchHandler, {
+      method: 'save-entry',
+      args: { entry: { id, title: 'BATCH-' + id, content: 'content ' + id, mode: 'always', when: '', priority: 1, enabled: true, tags: ['grp'] } },
+    })
+  }
+
+  const revOf = async () => (await callRoute(batchHandler, { method: 'state' })).snapshot.data.rev
+  const entriesOf = (snap) => snap.snapshot.data.entries
+  const byId = (snap, id) => entriesOf(snap).find((e) => e.id === id)
+
+  let rev = await revOf()
+
+  // set-priority on three ids in one request -> exactly one write (rev +1).
+  const prio = await callRoute(batchHandler, {
+    method: 'batch', args: { op: 'set-priority', ids: ['b0', 'b1', 'b2'], value: 2 },
+  })
+  check('batch: set-priority reports ok/saved', prio.ok === true && prio.saved === true, JSON.stringify(prio.message))
+  check('batch: set-priority is one transaction (rev +1)',
+    prio.snapshot.data.rev === rev + 1, 'rev=' + prio.snapshot.data.rev + ' expected ' + (rev + 1))
+  check('batch: priority changed on exactly the three targets',
+    [0, 1, 2].every((i) => byId(prio, 'b' + i).priority === 2)
+    && byId(prio, 'b3').priority === 1)
+  rev = prio.snapshot.data.rev
+
+  // Repeating it is a no-op: no write, rev unchanged.
+  const prioAgain = await callRoute(batchHandler, {
+    method: 'batch', args: { op: 'set-priority', ids: ['b0', 'b1', 'b2'], value: 2 },
+  })
+  check('batch: an all-no-op batch saves nothing',
+    prioAgain.ok === true && prioAgain.saved === false, JSON.stringify(prioAgain.saved))
+  check('batch: an all-no-op batch keeps rev still',
+    prioAgain.snapshot.data.rev === rev, String(prioAgain.snapshot.data.rev))
+
+  // set-enabled false on two ids, message names the count.
+  const disable = await callRoute(batchHandler, {
+    method: 'batch', args: { op: 'set-enabled', ids: ['b3', 'b4'], value: false },
+  })
+  check('batch: disable ok/saved and message counts 2',
+    disable.ok && disable.saved && disable.message.includes('停用') && disable.message.includes('2'),
+    JSON.stringify(disable.message))
+  check('batch: exactly the two targets are disabled',
+    !byId(disable, 'b3').enabled && !byId(disable, 'b4').enabled && byId(disable, 'b0').enabled)
+  check('batch: bulk enable does not re-stamp updatedAt',
+    byId(disable, 'b3').updatedAt > 0 && byId(disable, 'b3').updatedAt === (await callRoute(batchHandler, {
+      method: 'batch', args: { op: 'set-enabled', ids: ['b3'], value: true },
+    })).snapshot.data.entries.find((e) => e.id === 'b3').updatedAt)
+  rev = disable.snapshot.data.rev
+
+  // add-tags merges de-duplicated; tags stay out of the injected preview.
+  const addTags = await callRoute(batchHandler, {
+    method: 'batch', args: { op: 'add-tags', ids: ['b0', 'b1'], value: ['grp', 'x', 'y'] },
+  })
+  check('batch: add-tags merges and de-duplicates',
+    addTags.ok && addTags.saved
+    && JSON.stringify(byId(addTags, 'b0').tags) === JSON.stringify(['grp', 'x', 'y'])
+    && JSON.stringify(byId(addTags, 'b1').tags) === JSON.stringify(['grp', 'x', 'y']),
+    JSON.stringify([byId(addTags, 'b0') && byId(addTags, 'b0').tags]))
+  check('batch: tag text never enters the injected preview',
+    !addTags.snapshot.preview.includes('grp') && !addTags.snapshot.preview.includes('x'))
+
+  // Adding only tags already present is a no-op.
+  const addSame = await callRoute(batchHandler, {
+    method: 'batch', args: { op: 'add-tags', ids: ['b0', 'b1'], value: ['x'] },
+  })
+  check('batch: adding already-present tags saves nothing', addSame.saved === false)
+
+  // remove-tags.
+  const removeTags = await callRoute(batchHandler, {
+    method: 'batch', args: { op: 'remove-tags', ids: ['b0'], value: ['x'] },
+  })
+  check('batch: remove-tags drops the tag from the target only',
+    JSON.stringify(byId(removeTags, 'b0').tags) === JSON.stringify(['grp', 'y'])
+    && JSON.stringify(byId(removeTags, 'b1').tags) === JSON.stringify(['grp', 'x', 'y']))
+  rev = removeTags.snapshot.data.rev
+
+  // delete two in one transaction.
+  const del = await callRoute(batchHandler, {
+    method: 'batch', args: { op: 'delete', ids: ['b4', 'b5'] },
+  })
+  check('batch: delete ok/saved and message counts 2',
+    del.ok && del.saved && del.message.includes('删除') && del.message.includes('2'), JSON.stringify(del.message))
+  check('batch: delete removed exactly two entries',
+    entriesOf(del).length === 4 && !entriesOf(del).some((e) => e.id === 'b4' || e.id === 'b5'))
+  check('batch: delete is one transaction (rev +1)',
+    del.snapshot.data.rev === rev + 1, 'rev=' + del.snapshot.data.rev)
+  rev = del.snapshot.data.rev
+
+  // Deleting absent ids writes nothing.
+  const delMissing = await callRoute(batchHandler, {
+    method: 'batch', args: { op: 'delete', ids: ['ghost1', 'ghost2'] },
+  })
+  check('batch: deleting only absent ids saves nothing',
+    delMissing.ok === true && delMissing.saved === false && delMissing.snapshot.data.entries.length === 4,
+    JSON.stringify({ saved: delMissing.saved, n: delMissing.snapshot.data.entries.length }))
+  check('batch: deleting absent ids keeps rev still', delMissing.snapshot.data.rev === rev)
+
+  // Partial hit: the missing id is counted but the present one still changes.
+  const partial = await callRoute(batchHandler, {
+    method: 'batch', args: { op: 'set-enabled', ids: ['b0', 'ghost'], value: false },
+  })
+  check('batch: a partial hit still applies and discloses the missing id',
+    partial.ok && partial.saved && !byId(partial, 'b0').enabled && partial.message.includes('1 条未找到'),
+    JSON.stringify(partial.message))
+
+  // Invalid shapes refused without writing.
+  const badOp = await callRoute(batchHandler, { method: 'batch', args: { op: 'explode', ids: ['b0'] } })
+  check('batch: unknown op refused', badOp.ok === false)
+  const noIds = await callRoute(batchHandler, { method: 'batch', args: { op: 'delete', ids: [] } })
+  check('batch: empty ids refused', noIds.ok === false)
+  const badPrio = await callRoute(batchHandler, { method: 'batch', args: { op: 'set-priority', ids: ['b0'], value: 9 } })
+  check('batch: invalid priority value refused', badPrio.ok === false)
+  const badBool = await callRoute(batchHandler, { method: 'batch', args: { op: 'set-enabled', ids: ['b0'], value: 'yes' } })
+  check('batch: non-boolean enabled value refused', badBool.ok === false)
+  const badTags = await callRoute(batchHandler, { method: 'batch', args: { op: 'add-tags', ids: ['b0'], value: 'not-an-array' } })
+  check('batch: non-array tags value refused', badTags.ok === false)
+
+  // Stale rev -> conflict, no write.
+  const conflict = await callRoute(batchHandler, {
+    method: 'batch', args: { op: 'set-priority', ids: ['b0'], value: 0, baseRev: rev - 5 },
+  })
+  check('batch: a stale baseRev is a conflict carrying a fresh snapshot',
+    conflict.ok === false && conflict.conflict === true && conflict.snapshot.data.rev !== rev - 5,
+    JSON.stringify({ ok: conflict.ok, conflict: conflict.conflict }))
+
+  process.env.DSH_HOME = previousHome
+  await rm(BATCH_HOME, { recursive: true, force: true })
+}
+
 console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')
 process.exit(failures === 0 ? 0 : 1)

@@ -34,28 +34,28 @@
         id: 'im-demo-lang',
         title: '回答语言',
         content: '所有回答默认使用简体中文；技术名词首次出现时在括号里附英文原文。',
-        mode: 'always', when: '', priority: 2, enabled: true,
+        mode: 'always', when: '', priority: 2, enabled: true, tags: ['沟通'],
         updatedAt: Date.now() - 86400000 * 3,
       },
       {
         id: 'im-demo-confirm',
         title: '先确认再动手',
         content: '需求不明确或存在多种合理实现时，先列出候选方案向用户确认，再开始修改代码。',
-        mode: 'always', when: '', priority: 1, enabled: true,
+        mode: 'always', when: '', priority: 1, enabled: true, tags: ['沟通', '工作流'],
         updatedAt: Date.now() - 86400000 * 2,
       },
       {
         id: 'im-demo-style',
         title: '代码风格',
         content: '修改代码时遵循该文件既有的缩进、命名密度与注释风格，不顺手重构无关代码；\n变量命名优先使用业务领域词汇而不是数据结构词汇，例如用「订单金额」而不是「data1」；\n新增依赖前先检查 package.json 中是否已有能力等价的依赖，避免重复引入；\n公共函数需要补充输入输出说明注释，但不为改动本身添加解释性注释；\n改动完成后运行项目现有的测试与 lint 检查，若有失败先修复再交付，不留下只改了一半的状态；\n涉及对外接口或数据结构变更时，先在回复中列出受影响的调用方，确认迁移路径后再提交。\n日志打印需带关键上下文（对象标识、入参摘要），不要只输出 "error" 这类无信息内容；\n异步任务必须设置超时与重试上限，不允许无限等待外部资源；\n对外错误信息要区分用户可操作的提示与内部诊断细节，不把堆栈直接暴露给调用方；\n代码评审先核对行为变化与测试覆盖，再讨论风格偏好，意见必须可执行、可验证；\n以上要求同样适用于纯重构类提交，重构前后行为必须完全一致。',
-        mode: 'auto', when: '编写或修改代码时', priority: 1, enabled: true,
+        mode: 'auto', when: '编写或修改代码时', priority: 1, enabled: true, tags: ['代码规范'],
         updatedAt: Date.now() - 86400000,
       },
       {
         id: 'im-demo-reply',
         title: '回复结构',
         content: '较长的回答先给一句结论，再展开细节；方案对比先列差异再给推荐。',
-        mode: 'auto', when: '解释性问题与方案对比', priority: 0, enabled: false,
+        mode: 'auto', when: '解释性问题与方案对比', priority: 0, enabled: false, tags: ['沟通'],
         updatedAt: Date.now() - 3600000,
       },
     ],
@@ -192,6 +192,32 @@
         if (typeof payload.args.enabled === 'boolean') DEMO_STORE.enabled = payload.args.enabled
         if (typeof payload.args.budgetChars === 'number') DEMO_STORE.budgetChars = payload.args.budgetChars
         break
+      case 'batch': {
+        // Demo stand-in for the Host's single-transaction batch route.
+        var b = payload.args || {}
+        var batchIds = Array.isArray(b.ids) ? b.ids : []
+        if (b.op === 'delete') {
+          DEMO_STORE.entries = DEMO_STORE.entries.filter(function (e) {
+            return batchIds.indexOf(e.id) < 0
+          })
+        } else {
+          DEMO_STORE.entries.forEach(function (e) {
+            if (batchIds.indexOf(e.id) < 0) return
+            if (b.op === 'set-enabled') {
+              e.enabled = b.value
+            } else if (b.op === 'set-priority') {
+              e.priority = b.value
+            } else if (b.op === 'add-tags') {
+              var cur = Array.isArray(e.tags) ? e.tags.slice() : []
+              ;(b.value || []).forEach(function (tg) { if (cur.indexOf(tg) < 0) cur.push(tg) })
+              e.tags = cur.slice(0, 8)
+            } else if (b.op === 'remove-tags') {
+              e.tags = (e.tags || []).filter(function (tg) { return (b.value || []).indexOf(tg) < 0 })
+            }
+          })
+        }
+        break
+      }
       case 'export-data':
         return {
           ok: true,

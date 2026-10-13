@@ -545,6 +545,33 @@ if (captured && typeof captured.factory === 'function') {
     check('client: exposes __budgetMeter for this test', false, 'missing export')
   }
 
+  // F2 tag input: parse the free text the editor box commits into normalised
+  // tag candidates. Pinned here because the Host applies the same limits
+  // server-side, so the two normalisations must agree on shape.
+  if (plugin && typeof plugin.__parseTagInput === 'function') {
+    const parse = plugin.__parseTagInput
+    const eq = (got, want) => JSON.stringify(got) === JSON.stringify(want)
+    check('client: tag parser splits on ASCII/full-width commas and semicolons',
+      eq(parse('a,b，c;d；e'), ['a', 'b', 'c', 'd', 'e']), JSON.stringify(parse('a,b，c;d；e')))
+    check('client: tag parser splits on newlines but keeps spaces inside a tag',
+      eq(parse('code style\nreview'), ['code style', 'review']), JSON.stringify(parse('code style\nreview')))
+    check('client: tag parser trims and drops empty pieces',
+      eq(parse(' a , ,b, '), ['a', 'b']), JSON.stringify(parse(' a , ,b, ')))
+    check('client: tag parser collapses internal whitespace runs',
+      eq(parse('a    b'), ['a b']), JSON.stringify(parse('a    b')))
+    check('client: tag parser de-duplicates after trimming',
+      eq(parse('x, x ,x'), ['x']), JSON.stringify(parse('x, x ,x')))
+    check('client: tag parser caps at 8 tags',
+      parse('1,2,3,4,5,6,7,8,9,10').length === 8,
+      String(parse('1,2,3,4,5,6,7,8,9,10').length))
+    check('client: tag parser cuts one tag to 24 characters',
+      parse('t'.repeat(40))[0].length === 24, String(parse('t'.repeat(40))[0].length))
+    check('client: tag parser tolerates non-string input',
+      eq(parse(null), []) && eq(parse(undefined), []))
+  } else {
+    check('client: exposes __parseTagInput for this test', false, 'missing export')
+  }
+
   // i18n: the panel ships both locales from one dictionary pair. The lookup
   // chain falls back to zh, so a key missing from zh renders as the raw key;
   // a key missing from en silently degrades that user to Chinese. Placeholder
@@ -573,6 +600,14 @@ if (captured && typeof captured.factory === 'function') {
       ['budget.used', 'budget.omitted', 'tag.omitted', 'tag.truncated', 'tag.omittedTitle', 'tag.truncatedTitle']
         .every((k) => k in zh && k in en),
       'missing: ' + ['budget.used', 'budget.omitted', 'tag.omitted', 'tag.truncated', 'tag.omittedTitle', 'tag.truncatedTitle']
+        .filter((k) => !(k in zh) || !(k in en)).join(','))
+    check('i18n: the F2/F3 filter/bulk copy exists in both locales',
+      ['tags.label', 'tags.placeholder', 'tags.hint', 'filter.all', 'filter.mode', 'filter.status',
+        'sort.priority', 'sort.updated', 'sort.title', 'action.batch', 'batch.exit', 'batch.selectAll',
+        'batch.selected', 'batch.enable', 'batch.disable', 'batch.priority', 'batch.addTags', 'batch.delete',
+        'batch.confirmDelete', 'batch.tagPrompt', 'batch.noneSelected', 'list.filteredEmpty']
+        .every((k) => k in zh && k in en),
+      'missing: ' + ['tags.label', 'filter.all', 'sort.priority', 'action.batch', 'batch.delete', 'list.filteredEmpty']
         .filter((k) => !(k in zh) || !(k in en)).join(','))
 
     // dictionaryT is the built-in translator that carries the panel until the

@@ -3,7 +3,7 @@
  *   node smoke-test.mjs
  */
 import { isAbsolute, join } from 'node:path'
-import { buildBlock, canonicalIp, hostnameOf, planInjection, requestOriginVerdict, resolveStorePath, sanitizeEntry } from './lib/index.js'
+import { buildBlock, canonicalIp, hostnameOf, planInjection, requestOriginVerdict, resolveStorePath, sanitizeEntry, sanitizeTags } from './lib/index.js'
 
 let failures = 0
 const check = (label, actual, predicate) => {
@@ -186,6 +186,57 @@ check('truncation is labelled', huge, (v) => v.includes('被截断'))
   // Determinism for the plan itself, not just its text.
   check('plan: identical input yields a byte-identical plan',
     JSON.stringify(planInjection(many)) === JSON.stringify(tight), truthy)
+}
+
+// ---- tags (F2): normalised grouping labels that never reach the prompt ---
+{
+  const truthy = (v) => v === true
+  check('tags: non-array input is no tags', JSON.stringify(sanitizeTags('x')), (v) => v === '[]')
+  check('tags: null/undefined input is no tags',
+    sanitizeTags(null).length === 0 && sanitizeTags(undefined).length === 0, truthy)
+  check('tags: non-string and blank items are dropped',
+    JSON.stringify(sanitizeTags(['a', 1, null, '', '   ', 'b'])), (v) => v === JSON.stringify(['a', 'b']))
+  check('tags: surrounding whitespace is trimmed',
+    sanitizeTags(['  code  '])[0], (v) => v === 'code')
+  check('tags: inner whitespace runs collapse to one space',
+    sanitizeTags(['code   style'])[0], (v) => v === 'code style')
+  check('tags: newlines collapse to a space (single-line labels)',
+    sanitizeTags(['a\nb'])[0], (v) => v === 'a b')
+  check('tags: values de-duplicate after trimming',
+    JSON.stringify(sanitizeTags(['x', 'x', ' x '])), (v) => v === JSON.stringify(['x']))
+  check('tags: an over-long tag is cut to 24 characters',
+    sanitizeTags(['t'.repeat(40)])[0].length, (v) => v === 24)
+  check('tags: at most 8 tags survive, de-duplicated first',
+    sanitizeTags(['1', '2', '3', '4', '5', '6', '7', '8', '9', '1']).length, (v) => v === 8)
+
+  const withTags = sanitizeEntry({ id: 't1', title: 'T', content: 'C', tags: ['代码', ' 规范 '] })
+  check('tags: sanitizeEntry keeps normalised tags',
+    JSON.stringify(withTags.tags), (v) => v === JSON.stringify(['代码', '规范']))
+  const noTags = sanitizeEntry({ id: 't2', title: 'T', content: 'C' })
+  check('tags: an entry without tags gets an empty array (old stores stay valid)',
+    Array.isArray(noTags.tags) && noTags.tags.length === 0, truthy)
+  const badTags = sanitizeEntry({ id: 't3', title: 'T', content: 'C', tags: { nope: 1 } })
+  check('tags: a non-array tags field degrades to no tags',
+    Array.isArray(badTags.tags) && badTags.tags.length === 0, truthy)
+
+  // Tags are management-only: they must never appear in the injected block or
+  // change its decisions.
+  const tagged = buildBlock({
+    version: 1, enabled: true, budgetChars: 4000,
+    entries: [sanitizeEntry({ id: 'a', title: 'T', content: 'C', tags: ['绝不应该出现的标签'] })],
+  })
+  const tagless = buildBlock({
+    version: 1, enabled: true, budgetChars: 4000,
+    entries: [sanitizeEntry({ id: 'a', title: 'T', content: 'C' })],
+  })
+  check('tags: tag text never appears in the injected block', !tagged.includes('绝不应该出现的标签'), truthy)
+  check('tags: tags do not change the injected text', tagged === tagless, truthy)
+  const plan = planInjection({
+    version: 1, enabled: true, budgetChars: 4000,
+    entries: [sanitizeEntry({ id: 'a', title: 'T', content: 'C', tags: ['x'] })],
+  })
+  check('tags: the injection plan is unaffected (one included entry)',
+    plan.included.length === 1 && plan.included[0].id === 'a' && plan.omitted.length === 0, truthy)
 }
 
 // ---- storage location: the harness home, never the working directory ----
