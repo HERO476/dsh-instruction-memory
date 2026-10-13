@@ -541,6 +541,16 @@ if (captured && typeof captured.factory === 'function') {
       && oldHost.truncated === 0, JSON.stringify(oldHost))
     check('client: meter survives a null snapshot with all zeros',
       (() => { const g = meter(null); return g.budget === 0 && g.used === 0 && g.percent === 0 && g.tokens === 0 })())
+    // A persona host reports chars for the WHOLE section but entryChars for
+    // the budgeted instruction half; the meter must measure the latter so the
+    // persona never inflates the instruction usage bar.
+    const personaHost = meter({
+      data: { budgetChars: 1000 },
+      injection: { registered: true, chars: 1500, entryChars: 200, budget: 1000, included: [], omitted: [] },
+    })
+    check('client: meter uses entryChars (not whole-section chars) on a persona host',
+      personaHost.used === 200 && personaHost.percent === 20 && personaHost.tokens === 120,
+      JSON.stringify(personaHost))
   } else {
     check('client: exposes __budgetMeter for this test', false, 'missing export')
   }
@@ -608,6 +618,13 @@ if (captured && typeof captured.factory === 'function') {
         'batch.confirmDelete', 'batch.tagPrompt', 'batch.noneSelected', 'list.filteredEmpty']
         .every((k) => k in zh && k in en),
       'missing: ' + ['tags.label', 'filter.all', 'sort.priority', 'action.batch', 'batch.delete', 'list.filteredEmpty']
+        .filter((k) => !(k in zh) || !(k in en)).join(','))
+    check('i18n: the user-persona copy exists in both locales',
+      ['profiles.section', 'profiles.subtitle', 'profiles.new', 'profiles.name', 'profiles.content',
+        'profiles.use', 'profiles.untitled', 'profiles.confirmDelete', 'profiles.empty',
+        'profiles.count', 'profiles.chars', 'profiles.saving']
+        .every((k) => k in zh && k in en),
+      'missing: ' + ['profiles.section', 'profiles.new', 'profiles.use', 'profiles.count', 'profiles.chars']
         .filter((k) => !(k in zh) || !(k in en)).join(','))
 
     // dictionaryT is the built-in translator that carries the panel until the

@@ -3,7 +3,7 @@
  *   node smoke-test.mjs
  */
 import { isAbsolute, join } from 'node:path'
-import { buildBlock, canonicalIp, hostnameOf, planInjection, requestOriginVerdict, resolveStorePath, sanitizeEntry, sanitizeTags } from './lib/index.js'
+import { buildBlock, canonicalIp, hostnameOf, planInjection, requestOriginVerdict, resolveStorePath, sanitizeEntry, sanitizeProfile, sanitizeTags, truncatedProfileFields } from './lib/index.js'
 
 let failures = 0
 const check = (label, actual, predicate) => {
@@ -397,6 +397,111 @@ check('a multi-line 适用场景 is collapsed',
     v({ host: '192.168.1.5:8080' }, false), (x) => x === true)
   check('a published bind still refuses a cross Origin',
     v({ host: '192.168.1.5:8080', origin: 'http://evil.com' }, false), (x) => x === false)
+}
+
+// ---- 用户形象 (persona profiles): facts about the user, never a role ----
+{
+  const truthy = (v) => v === true
+
+  // sanitizeProfile
+  check('profile: non-object/blank is null',
+    sanitizeProfile(null) === null && sanitizeProfile({ name: '   ', content: '' }) === null, truthy)
+  check('profile: name is forced onto one line and capped at 40',
+    (() => { const p = sanitizeProfile({ name: 'a\nb' + 'x'.repeat(60), content: 'C' }); return p.name.indexOf('\n') === -1 && p.name.length === 40 })(),
+    truthy)
+  check('profile: content is capped at 4000',
+    sanitizeProfile({ name: 'n', content: 'y'.repeat(5000) }).content.length === 4000, truthy)
+  check('profile: enabled defaults to true and honours false',
+    sanitizeProfile({ name: 'a', content: 'b' }).enabled === true
+    && sanitizeProfile({ name: 'a', content: 'b', enabled: false }).enabled === false, truthy)
+  check('profile: a missing id is minted; a supplied one is kept and cut',
+    (() => { const minted = sanitizeProfile({ name: 'a', content: 'b' }); const kept = sanitizeProfile({ id: 'p1', name: 'a', content: 'b' }); return typeof minted.id === 'string' && minted.id !== '' && kept.id === 'p1' })(),
+    truthy)
+  check('profile: a blank name falls back to the first 20 chars of content',
+    sanitizeProfile({ content: '1234567890123456789012345' }).name === '12345678901234567890', truthy)
+  check('profile: truncatedProfileFields reports name/content cuts',
+    JSON.stringify(truncatedProfileFields({ name: 'x'.repeat(50), content: 'y'.repeat(5000) })),
+    (v) => v === JSON.stringify(['形象名称', '形象内容']))
+
+  const entryOnly = (profiles) => ({
+    version: 1, enabled: true, budgetChars: 4000,
+    entries: [sanitizeEntry({ id: 'e1', title: 'T', content: 'C' })],
+    profiles,
+  })
+
+  // 0 enabled profiles => byte-identical to the old entries-only block.
+  const none = planInjection(entryOnly(undefined))
+  const old = planInjection({ version: 1, enabled: true, budgetChars: 4000, entries: [sanitizeEntry({ id: 'e1', title: 'T', content: 'C' })] })
+  check('profile: no profiles field renders byte-identically to the old block',
+    none.text === old.text && none.profileChars === 0 && JSON.stringify(none.profiles) === '[]', truthy)
+  check('profile: empty/disabled profiles render nothing',
+    planInjection(entryOnly([
+      sanitizeProfile({ id: 'p0', name: 'off', content: 'x', enabled: false }),
+    ])).profileChars === 0, truthy)
+
+  // 1 enabled profile: header about the USER, placed before the instructions.
+  const one = planInjection(entryOnly([
+    sanitizeProfile({ id: 'p1', name: '职业背景', content: '有 8 年后端经验' }),
+  ]))
+  check('profile: one profile injects the "关于用户" persona header',
+    one.text.includes('## 关于用户（用户形象）') && one.text.includes('### 职业背景')
+    && one.text.includes('有 8 年后端经验'), truthy)
+  check('profile: persona section is placed BEFORE the instruction block',
+    one.text.indexOf('## 关于用户（用户形象）') < one.text.indexOf('## 用户长期指令记忆'), truthy)
+  check('profile: the wording demotes it to a tilt, not a role',
+    one.text.includes('不是要求你扮演的角色') && one.text.includes('紧扣问题本身'), truthy)
+  check('profile: plan exposes profile metadata and entryChars',
+    one.profiles.length === 1 && one.profiles[0].name === '职业背景'
+    && one.profileChars > 0 && one.entryChars === old.text.length, truthy)
+
+  // Multiple profiles: one ### subsection each, in stored order.
+  const two = planInjection(entryOnly([
+    sanitizeProfile({ id: 'p1', name: '职业背景', content: '后端工程师' }),
+    sanitizeProfile({ id: 'p2', name: '沟通偏好', content: '先结论后步骤' }),
+  ]))
+  check('profile: two profiles render two subsections in order',
+    (two.text.match(/### /g) || []).length === 2
+    && two.text.indexOf('### 职业背景') < two.text.indexOf('### 沟通偏好'), truthy)
+
+  // Profile-only store (no instructions) still injects.
+  const personaOnly = planInjection({
+    version: 1, enabled: true, budgetChars: 4000, entries: [],
+    profiles: [sanitizeProfile({ id: 'p1', name: '性格', content: '喜欢简洁' })],
+  })
+  check('profile: a profile-only store injects the persona with no instruction header',
+    personaOnly.text.includes('## 关于用户（用户形象）')
+    && !personaOnly.text.includes('## 用户长期指令记忆')
+    && personaOnly.entryChars === 0 && personaOnly.activeCount === 0, truthy)
+
+  // Master switch suppresses BOTH halves.
+  const switchedOff = planInjection({
+    version: 1, enabled: false, budgetChars: 4000,
+    entries: [sanitizeEntry({ id: 'e1', title: 'T', content: 'C' })],
+    profiles: [sanitizeProfile({ id: 'p1', name: 'n', content: 'c' })],
+  })
+  check('profile: master enabled=false suppresses persona and instructions',
+    switchedOff.text === '' && switchedOff.profiles.length === 0, truthy)
+
+  // Personas are NOT subject to the entry budget: a big profile survives a
+  // tight budget in full while instructions are trimmed independently.
+  const longContent = '形象'.repeat(1500) // 3000 chars
+  const tight = planInjection({
+    version: 1, enabled: true, budgetChars: 800,
+    entries: [sanitizeEntry({ id: 'e1', title: 'T', content: '指令内容 '.repeat(400) })],
+    profiles: [sanitizeProfile({ id: 'p1', name: '长篇背景', content: longContent })],
+  })
+  check('profile: persona content is injected in full regardless of the entry budget',
+    tight.text.includes(longContent) && tight.profiles[0].chars >= longContent.length, truthy)
+  check('profile: persona does not perturb the entry budget decision',
+    tight.budget === 800 && Array.isArray(tight.included) && Array.isArray(tight.omitted), truthy)
+
+  // Determinism of the persona rendering.
+  const data = entryOnly([
+    sanitizeProfile({ id: 'p1', name: '职业背景', content: '后端' }),
+    sanitizeProfile({ id: 'p2', name: '追求', content: '严谨' }),
+  ])
+  check('profile: rendering is deterministic',
+    planInjection(data).text === planInjection(JSON.parse(JSON.stringify(data))).text, truthy)
 }
 
 console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')

@@ -59,6 +59,29 @@
         updatedAt: Date.now() - 3600000,
       },
     ],
+    profiles: [
+      {
+        id: 'pf-demo-bg',
+        name: '职业背景',
+        content: '有 8 年后端开发经验，熟悉 Java 与分布式系统；技术问题可以跳过入门概念，直接讲权衡与实现细节。',
+        enabled: true,
+        updatedAt: Date.now() - 86400000,
+      },
+      {
+        id: 'pf-demo-style',
+        name: '沟通偏好',
+        content: '喜欢先给结论、再给可执行步骤，少寒暄少铺陈。',
+        enabled: true,
+        updatedAt: Date.now() - 7200000,
+      },
+      {
+        id: 'pf-demo-goal',
+        name: '长期追求（停用示例）',
+        content: '希望代码评审意见都具体可执行，不要泛泛而谈。',
+        enabled: false,
+        updatedAt: Date.now() - 3600000,
+      },
+    ],
   }
 
   // A compact, faithful copy of the Host's injection planning (see
@@ -80,6 +103,29 @@
       : '\n\n（另有 ' + count + ' 条指令因注入字数上限未包含，可在「设置 → 指令记忆」中提高上限或调低其优先级。）'
   }
 
+  // Faithful copy of the Host's persona header (lib/index.js PERSONA_HEADER).
+  var DEMO_PERSONA_HEADER = [
+    '## 关于用户（用户形象）',
+    '以下是用户本人提供的个人形象信息，描述其身份背景、喜好、性格与追求，不是要求你扮演的角色。请在保证回答正确、完整、客观且紧扣问题本身的前提下，结合这些信息调整解释的深浅、详略、举例与建议的侧重；不得为了迎合这些信息而改变事实、省略必要的风险提示或偏离问题核心；与当前问题无关时直接忽略。',
+    '',
+  ].join('\n')
+
+  function demoProfilesBlock() {
+    var active = (Array.isArray(DEMO_STORE.profiles) ? DEMO_STORE.profiles : [])
+      .filter(function (p) { return p && p.enabled === true && p.content })
+    if (active.length === 0) return { text: '', profiles: [], chars: 0 }
+    var blocks = active.map(function (p) {
+      var name = p.name || (p.content || '').slice(0, 20)
+      return { id: p.id, name: name, block: '### ' + name + '\n' + p.content }
+    })
+    var text = DEMO_PERSONA_HEADER + '\n' + blocks.map(function (b) { return b.block }).join('\n\n')
+    return {
+      text: text,
+      chars: text.length,
+      profiles: blocks.map(function (b) { return { id: b.id, name: b.name, chars: b.block.length } }),
+    }
+  }
+
   function demoFormatEntry(entry, tag) {
     var prio = entry.priority === 2 ? '高' : (entry.priority === 0 ? '低' : '普通')
     var lines = ['[' + tag + '｜优先级 ' + prio + '] ' + entry.title]
@@ -88,16 +134,17 @@
     return lines.join('\n')
   }
 
-  function demoPlan() {
+    function demoPlan() {
     var budget = DEMO_STORE.budgetChars
     if (typeof budget !== 'number' || !isFinite(budget)) budget = 4000
     if (budget < 800) budget = 800
     if (budget > 40000) budget = 40000
-    var blank = { text: '', budget: budget, activeCount: 0, included: [], omitted: [] }
-    if (DEMO_STORE.enabled !== true) return blank
+    var blank = function () {
+      return { text: '', budget: budget, activeCount: 0, included: [], omitted: [], profiles: [], profileChars: 0, entryChars: 0 }
+    }
+    if (DEMO_STORE.enabled !== true) return blank()
+    var persona = demoProfilesBlock()
     var active = DEMO_STORE.entries.filter(function (e) { return e.enabled && e.content !== '' })
-    if (active.length === 0) return blank
-    active.sort(function (a, b) { return (b.priority - a.priority) || (b.updatedAt - a.updatedAt) })
 
     var blocks = []
     var included = []
@@ -133,15 +180,21 @@
     active.forEach(function (entry) { if (entry.mode === 'always') consider(entry, '始终') })
     active.forEach(function (entry) { if (entry.mode !== 'always') consider(entry, '按需') })
 
-    if (blocks.length === 0) {
-      return { text: '', budget: budget, activeCount: active.length, included: [], omitted: omittedPlan }
-    }
+    var entryText = blocks.length === 0
+      ? ''
+      : DEMO_HEADER + blocks.join('\n\n') + demoFooter(omitted)
+    var parts = []
+    if (persona.text !== '') parts.push(persona.text)
+    if (entryText !== '') parts.push(entryText)
     return {
-      text: DEMO_HEADER + blocks.join('\n\n') + demoFooter(omitted),
+      text: parts.join('\n\n'),
       budget: budget,
       activeCount: active.length,
       included: included,
       omitted: omittedPlan,
+      profiles: persona.profiles,
+      profileChars: persona.chars,
+      entryChars: entryText.length,
     }
   }
 
@@ -165,9 +218,15 @@
         activeCount: plan.activeCount,
         included: plan.included,
         omitted: plan.omitted,
+        profiles: plan.profiles,
+        profileChars: plan.profileChars,
+        entryChars: plan.entryChars,
       },
       preview: plan.text,
-      limits: { minBudget: 800, maxBudget: 40000, maxEntries: 200 },
+      limits: {
+        minBudget: 800, maxBudget: 40000, maxEntries: 200,
+        maxProfiles: 50, maxProfileName: 40, maxProfileContent: 4000,
+      },
     }
   }
 
@@ -218,6 +277,35 @@
         }
         break
       }
+      case 'save-profile': {
+        // Demo stand-in for the Host's save-profile route. Mirror
+        // sanitizeProfile: a blank name falls back to the first 20 single-line
+        // characters of content, so the card never shows an empty name (the
+        // real Host stores this fallback; it is not a client-only label).
+        var p = Object.assign({}, payload.args.profile)
+        if (!p.id) p.id = 'pf-demo-' + Math.random().toString(36).slice(2, 8)
+        if (typeof p.enabled !== 'boolean') p.enabled = true
+        if (typeof p.content !== 'string') p.content = ''
+        var oneLine = function (s, max) {
+          return String(s).split(/\r?\n/).map(function (x) { return x.trim() })
+            .filter(Boolean).join(' ').slice(0, max)
+        }
+        var trimmedName = oneLine(p.name || '', 40)
+        p.name = trimmedName !== '' ? trimmedName : oneLine(p.content, 20)
+        p.updatedAt = Date.now()
+        if (!Array.isArray(DEMO_STORE.profiles)) DEMO_STORE.profiles = []
+        var pIndex = -1
+        for (var pi = 0; pi < DEMO_STORE.profiles.length; pi += 1) {
+          if (DEMO_STORE.profiles[pi].id === p.id) { pIndex = pi; break }
+        }
+        if (pIndex >= 0) DEMO_STORE.profiles[pIndex] = p
+        else DEMO_STORE.profiles.push(p)
+        break
+      }
+      case 'delete-profile':
+        DEMO_STORE.profiles = (DEMO_STORE.profiles || [])
+          .filter(function (p) { return p.id !== payload.args.id })
+        break
       case 'export-data':
         return {
           ok: true,

@@ -308,7 +308,7 @@ for (const scenario of scenarios) {
   ] }
   const imported = normalize(await callRoute(handler, { method: 'import-data', args: { payload: fresh } }))
   check('import-data: new entries merge in with minted ids',
-    imported.ok === true && imported.message.includes('新增 2 条'), JSON.stringify(imported.message))
+    imported.ok === true && imported.message.includes('新增指令 2 条'), JSON.stringify(imported.message))
   const st = normalize(await callRoute(handler, { method: 'state', args: null }))
   const importedEntries = st.snapshot.data.entries
     .filter((e) => e.title === 'IMPORTED-1' || e.title === 'IMPORTED-2')
@@ -1488,6 +1488,176 @@ async function statusFor(headers, body) {
 
   process.env.DSH_HOME = previousHome
   await rm(BATCH_HOME, { recursive: true, force: true })
+}
+
+/* ====================================================================
+ * 用户形象 (persona profiles): save/delete over the real route, snapshot
+ * shape, injection placement/toggle, conflict guard, and import merge.
+ * ==================================================================== */
+{
+  const PROFILE_HOME = fileURLToPath(new URL('./.test-dsh-home-profiles/', import.meta.url))
+  await rm(PROFILE_HOME, { recursive: true, force: true })
+  const previousHome = process.env.DSH_HOME
+  process.env.DSH_HOME = PROFILE_HOME
+
+  let profileHandler = null
+  const profileCtx = {
+    systemPrompt: { section: () => () => {} },
+    inject: (deps, callback) => {
+      const names = Array.isArray(deps) ? deps : Object.keys(deps)
+      if (names.includes('webServer')) {
+        callback({
+          webServer: { register: (route) => { profileHandler = route.handler; return () => {} } },
+          effect: (fn) => { fn(); return () => {} },
+        })
+      }
+      return null
+    },
+    get: () => undefined,
+    effect: (fn) => { fn(); return () => {} },
+  }
+  const profileHost = await import(new URL('./lib/index.js', import.meta.url).href + '?profiles=' + Date.now())
+  profileHost.apply(profileCtx)
+
+  const snap = async () => (await callRoute(profileHandler, { method: 'state' })).snapshot
+  const rev = async () => (await snap()).data.rev
+  const saveProfile = async (profile) =>
+    callRoute(profileHandler, { method: 'save-profile', args: { profile, baseRev: await rev() } })
+  const deleteProfile = async (id) =>
+    callRoute(profileHandler, { method: 'delete-profile', args: { id, baseRev: await rev() } })
+
+  let baseRev = await rev()
+
+  // Create with no entries present: the persona alone makes the section non-empty.
+  const created = await saveProfile({ id: 'pf1', name: '职业背景', content: '有 8 年后端经验，可跳过入门概念' })
+  check('profile: save ok/saved and rev +1',
+    created.ok === true && created.saved === true && created.snapshot.data.rev === baseRev + 1,
+    JSON.stringify({ ok: created.ok, saved: created.saved }))
+  baseRev = created.snapshot.data.rev
+  const createdSnap = created.snapshot
+  check('profile: snapshot carries the stored profile and injection metadata',
+    createdSnap.data.profiles.length === 1
+    && createdSnap.data.profiles[0].name === '职业背景'
+    && Array.isArray(createdSnap.injection.profiles)
+    && createdSnap.injection.profiles.length === 1
+    && createdSnap.injection.profiles[0].name === '职业背景'
+    && typeof createdSnap.injection.profileChars === 'number' && createdSnap.injection.profileChars > 0
+    && createdSnap.injection.entryChars === 0,
+    JSON.stringify({ n: createdSnap.data.profiles.length, inj: createdSnap.injection }))
+  check('profile: persona header lands in the preview',
+    createdSnap.preview.includes('## 关于用户（用户形象）') && createdSnap.preview.includes('### 职业背景'))
+
+  // Update in place.
+  const updated = await saveProfile({ id: 'pf1', name: '职业背景', content: '十年经验，熟悉分布式' })
+  check('profile: update keeps one profile and bumps rev',
+    updated.ok && updated.snapshot.data.profiles.length === 1
+    && updated.snapshot.data.profiles[0].content === '十年经验，熟悉分布式'
+    && updated.snapshot.data.rev === baseRev + 1,
+    JSON.stringify(updated.snapshot.data.profiles))
+  baseRev = updated.snapshot.data.rev
+
+  // Blank name+content refused without a write.
+  const blank = await callRoute(profileHandler, {
+    method: 'save-profile', args: { profile: { id: 'pfX', name: '  ', content: '' }, baseRev: baseRev },
+  })
+  check('profile: a fully blank profile is refused', blank.ok === false && blank.saved === false)
+  check('profile: refusing a blank profile keeps rev still', blank.snapshot.data.rev === baseRev)
+
+  // Add an instruction entry too, then untick the persona: persona disappears,
+  // instructions remain.
+  await callRoute(profileHandler, {
+    method: 'save-entry',
+    args: { entry: { id: 'e1', title: '规则', content: '回答使用中文' }, baseRev: await rev() },
+  })
+  const both = await snap()
+  check('profile: persona sits before the instruction block',
+    both.preview.indexOf('## 关于用户（用户形象）') < both.preview.indexOf('## 用户长期指令记忆'))
+  const unticked = await saveProfile({ id: 'pf1', name: '职业背景', content: '十年经验，熟悉分布式', enabled: false })
+  check('profile: unticking removes the persona while leaving instructions',
+    !unticked.snapshot.preview.includes('## 关于用户（用户形象）')
+    && unticked.snapshot.preview.includes('回答使用中文')
+    && unticked.snapshot.injection.profiles.length === 0
+    && unticked.snapshot.injection.profileChars === 0
+    && unticked.snapshot.injection.entryChars > 0,
+    JSON.stringify({ entryChars: unticked.snapshot.injection.entryChars }))
+  await saveProfile({ id: 'pf1', name: '职业背景', content: '十年经验，熟悉分布式', enabled: true })
+
+  // Delete: present id writes and rev+1; absent id is a no-op.
+  const beforeDelete = await rev()
+  const deleted = await deleteProfile('pf1')
+  check('profile: delete ok/saved, rev +1, profile gone',
+    deleted.ok === true && deleted.saved === true
+    && deleted.snapshot.data.rev === beforeDelete + 1
+    && deleted.snapshot.data.profiles.length === 0,
+    JSON.stringify({ saved: deleted.saved, n: deleted.snapshot.data.profiles.length }))
+  const deleteGhost = await callRoute(profileHandler, {
+    method: 'delete-profile', args: { id: 'ghost', baseRev: await rev() },
+  })
+  check('profile: deleting an absent id saves nothing',
+    deleteGhost.ok === true && deleteGhost.saved === false)
+
+  // Stale baseRev -> conflict carrying a fresh snapshot.
+  const conflict = await callRoute(profileHandler, {
+    method: 'save-profile',
+    args: { profile: { id: 'pf2', name: '性格', content: '严谨' }, baseRev: (await rev()) - 7 },
+  })
+  check('profile: stale baseRev is a conflict',
+    conflict.ok === false && conflict.conflict === true && conflict.snapshot !== undefined,
+    JSON.stringify({ ok: conflict.ok, conflict: conflict.conflict }))
+
+  // A profiles-only import file is valid (not "nothing to import") — done
+  // while the profile list is empty, before the 50-cap bulk import below.
+  const onlyProfiles = await callRoute(profileHandler, {
+    method: 'import-data',
+    args: {
+      payload: { profiles: [{ id: 'solo', name: '独有形象', content: '只带形象的导入文件' }] },
+      baseRev: await rev(),
+    },
+  })
+  check('profile: a profiles-only import is accepted',
+    onlyProfiles.ok && onlyProfiles.saved
+    && onlyProfiles.snapshot.data.profiles.some((p) => p.id === 'solo'),
+    JSON.stringify({ ok: onlyProfiles.ok, saved: onlyProfiles.saved }))
+
+  // Import merges profiles (and entries together) in ONE transaction;
+  // duplicates by id/name+content are skipped; the 50-profile cap is enforced.
+  const many = []
+  for (let i = 0; i < 52; i += 1) many.push({ id: 'imp' + i, name: '形象' + i, content: '内容' + i })
+  const bulk = await callRoute(profileHandler, {
+    method: 'import-data',
+    args: {
+      payload: {
+        app: 'dsh-instruction-memory', version: 1,
+        data: {
+          entries: [{ id: 'ie1', title: '导入规则', content: '导入的指令' }],
+          profiles: many,
+        },
+      },
+      baseRev: await rev(),
+    },
+  })
+  check('profile: bulk import accepts at most 50 profiles',
+    bulk.ok && bulk.saved && bulk.snapshot.data.profiles.length === 50
+    && bulk.message.includes('新增用户形象 49 个') && bulk.message.includes('跳过 3 个'),
+    JSON.stringify({ n: bulk.snapshot.data.profiles.length, msg: bulk.message }))
+  check('profile: mixed import lands entries and personas in one rev bump',
+    bulk.snapshot.data.entries.some((e) => e.id === 'ie1')
+    && bulk.snapshot.preview.includes('### 形象0')
+    && bulk.snapshot.preview.includes('导入的指令'))
+  // Re-importing the same two profiles adds nothing (same name+content).
+  const reimport = await callRoute(profileHandler, {
+    method: 'import-data',
+    args: {
+      payload: { profiles: [{ name: '形象0', content: '内容0' }, { name: '形象1', content: '内容1' }] },
+      baseRev: await rev(),
+    },
+  })
+  check('profile: duplicate personas merge as no-op',
+    reimport.ok && reimport.saved === false && reimport.snapshot.data.profiles.length === 50,
+    JSON.stringify({ saved: reimport.saved, n: reimport.snapshot.data.profiles.length }))
+
+  process.env.DSH_HOME = previousHome
+  await rm(PROFILE_HOME, { recursive: true, force: true })
 }
 
 console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')
