@@ -15,7 +15,7 @@
  * snapshot shape) rather than a mock of it.
  */
 import { mkdir, rm, writeFile } from 'node:fs/promises'
-import { readFileSync } from 'node:fs'
+import { readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -24,6 +24,11 @@ import { fileURLToPath } from 'node:url'
 const SCRATCH_HOME = fileURLToPath(new URL('./.test-dsh-home-ui-p' + process.pid + '/', import.meta.url))
 const STORE_FILE = join(SCRATCH_HOME, 'instruction-memory', 'memory.json')
 process.env.DSH_HOME = SCRATCH_HOME
+// Own-pid scratch cleanup on every exit path (crash, throw, failed check);
+// the green-path rm at the end covers the normal case.
+process.on('exit', () => {
+  try { rmSync(SCRATCH_HOME, { recursive: true, force: true }) } catch { /* best effort */ }
+})
 await rm(SCRATCH_HOME, { recursive: true, force: true })
 await mkdir(join(SCRATCH_HOME, 'instruction-memory'), { recursive: true })
 
@@ -120,17 +125,24 @@ async function rawRoute(body) {
 let inFlight = 0
 globalThis.fetch = async (url, options) => {
   inFlight += 1
-  const out = await rawRoute(options.body)
-  return {
-    ok: out.status >= 200 && out.status < 300,
-    status: out.status,
-    json: async () => {
-      try {
-        return JSON.parse(out.body)
-      } finally {
-        inFlight -= 1
-      }
-    },
+  try {
+    const out = await rawRoute(options.body)
+    return {
+      ok: out.status >= 200 && out.status < 300,
+      status: out.status,
+      json: async () => {
+        try {
+          return JSON.parse(out.body)
+        } finally {
+          inFlight -= 1
+        }
+      },
+    }
+  } catch (err) {
+    // A timed-out route must not leak the counter: a leaked inFlight would
+    // silently burn every later settle's wait window.
+    inFlight -= 1
+    throw err
   }
 }
 
@@ -639,6 +651,12 @@ check('panel: resume clears the bar and the section returns',
 tree = await click(tree, '重新载入')
 check('panel: reload keeps the panel alive', hasText(tree, '指令记忆') || hasTextContaining(tree, '指令记忆'))
 
-console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')
+// The scratch home goes before the exit code is captured: it is the one await
+// (yield point) between here and process.exit, and a stray rejection during it
+// must not be able to mask a crash-hook exitCode.
 await rm(SCRATCH_HOME, { recursive: true, force: true }).catch(() => {})
-process.exit(failures === 0 ? 0 : 1)
+// A late stray rejection could land after ALL PASS; the crash-hook exitCode
+// must survive the final process.exit (which would otherwise force 0).
+const exitCode = failures === 0 ? (process.exitCode || 0) : 1
+console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')
+process.exit(exitCode)

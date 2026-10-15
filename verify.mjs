@@ -8,7 +8,7 @@
  *              that it registers the settings page without throwing.
  */
 import { fileURLToPath } from 'node:url'
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { readFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 // The repo files are what the profile junction points at (install.mjs links
@@ -24,6 +24,11 @@ const PKG = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
 const SCRATCH_HOME = fileURLToPath(new URL('./.test-dsh-home-p' + process.pid + '/', import.meta.url))
 const STORE_FILE = join(SCRATCH_HOME, 'instruction-memory', 'memory.json')
 process.env.DSH_HOME = SCRATCH_HOME
+// Own-pid scratch cleanup on every exit path (crash, throw, failed check):
+// the suite used to leave its home behind on every run.
+process.on('exit', () => {
+  try { rmSync(SCRATCH_HOME, { recursive: true, force: true }) } catch { /* best effort */ }
+})
 
 let failures = 0
 const check = (label, ok, detail) => {
@@ -696,17 +701,24 @@ if (captured && typeof captured.factory === 'function') {
     const terms = plugin.__relevanceTerms
     const preview = plugin.__relevancePreview
     check('client: terms split a latin phrase into words',
-      JSON.stringify(terms('edit the config file')), (v) => v === JSON.stringify(['edit', 'the', 'config', 'file']),
+      JSON.stringify(terms('edit the config file')) === JSON.stringify(['edit', 'the', 'config', 'file']),
       JSON.stringify(terms('edit the config file')))
+    // The design (since 1.0.17): terms are letter/number RUNS of ≥2
+    // characters; punctuation splits runs and single letters drop. The
+    // original expectation here said ['cd'] for 'a, b? c#d' — a mental model
+    // that was never implemented — and sat in the detail slot of an always-
+    // true check, so the mismatch stayed invisible until this round.
     check('client: terms drop single characters and punctuation',
-      JSON.stringify(terms('a, b? c#d')), (v) => v === JSON.stringify(['cd']), JSON.stringify(terms('a, b? c#d')))
+      JSON.stringify(terms('a, b? c#d')) === JSON.stringify([])
+      && JSON.stringify(terms('ab, cd? ef')) === JSON.stringify(['ab', 'cd', 'ef']),
+      JSON.stringify(terms('a, b? c#d')) + ' / ' + JSON.stringify(terms('ab, cd? ef')))
     check('client: a CJK run becomes 2- and 3-character grams',
       (() => { const t2 = terms('配置文件'); return t2.includes('配置') && t2.includes('置文') && t2.includes('文件') && t2.includes('配置文') })(),
       JSON.stringify(terms('配置文件')))
     check('client: a short CJK run is also kept whole',
       terms('改配置').includes('改配置'), JSON.stringify(terms('改配置')))
     check('client: terms are capped so a pasted paragraph cannot explode',
-      terms('前缀'.repeat(200)).length, (v) => v <= 40, String(terms('前缀'.repeat(200)).length))
+      terms('前缀'.repeat(200)).length <= 40, String(terms('前缀'.repeat(200)).length))
     check('client: an empty or non-string query yields no terms',
       terms('') .length === 0 && terms('   ').length === 0 && terms(null).length === 0 && terms(undefined).length === 0)
 
@@ -1018,5 +1030,8 @@ if (captured && typeof captured.factory === 'function') {
       : 'count=' + enRegistered.length + ' label=' + (enRegistered[0] && String(enRegistered[0].options.label)))
 }
 
+// A late stray rejection could land after ALL PASS; the crash-hook exitCode
+// must survive the final process.exit (which would otherwise force 0).
+const exitCode = failures === 0 ? (process.exitCode || 0) : 1
 console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')
-process.exit(failures === 0 ? 0 : 1)
+process.exit(exitCode)

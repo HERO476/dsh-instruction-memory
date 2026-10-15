@@ -14,7 +14,7 @@
  * dropped-entries warning path is exercised too.
  */
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
-import { existsSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -52,8 +52,25 @@ process.on('unhandledRejection', (err) => {
  * ".test-dsh-home-star" covers every variant. (No literal "star-slash" here:
  * inside a block comment it would terminate the comment early.)
  */
-const scratchHome = (name) =>
-  fileURLToPath(new URL('./.test-dsh-home' + name + '-p' + process.pid + '/', import.meta.url))
+/**
+ * Per-PID scratch homes must not outlive the run: every suite previously
+ * left its home behind (39 directories were piling up in the repo), because
+ * only some named blocks removed theirs. This hook deletes ONLY this
+ * process's homes on any exit path (crash, throw, or a failed check), so
+ * concurrent runs stay untouched; blocks that clean up on the green path
+ * simply find nothing left.
+ */
+const scratchHomes = new Set()
+const scratchHome = (name) => {
+  const dir = fileURLToPath(new URL('./.test-dsh-home' + name + '-p' + process.pid + '/', import.meta.url))
+  scratchHomes.add(dir)
+  return dir
+}
+process.on('exit', () => {
+  for (const dir of scratchHomes) {
+    try { rmSync(dir, { recursive: true, force: true }) } catch { /* best effort */ }
+  }
+})
 
 const SCRATCH_HOME = scratchHome('')
 const STORE_FILE = join(SCRATCH_HOME, 'instruction-memory', 'memory.json')
@@ -2627,5 +2644,8 @@ async function statusFor(headers, body) {
   await rm(BOOT_HOME, { recursive: true, force: true })
 }
 
+// A late stray rejection could land after ALL PASS; the crash-hook exitCode
+// must survive the final process.exit (which would otherwise force 0).
+const exitCode = failures === 0 ? (process.exitCode || 0) : 1
 console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')
-process.exit(failures === 0 ? 0 : 1)
+process.exit(exitCode)

@@ -19,10 +19,19 @@ const check = (label, actual, predicate) => {
   console.log((ok ? 'PASS  ' : 'FAIL  ') + label)
   if (!ok) {
     const shown = typeof predicate === 'function' || predicate === undefined ? actual : predicate
-    console.log('      got: ' + JSON.stringify(shown).slice(0, 400))
+    // Serialize evidence without ever throwing from the reporter: undefined
+    // stringifies to undefined and circular structures throw, both of which
+    // would crash the suite and lose the failing label.
+    let shownText
+    try {
+      shownText = JSON.stringify(shown) === undefined ? String(shown) : JSON.stringify(shown)
+    } catch {
+      shownText = String(shown)
+    }
+    console.log('      got: ' + shownText.slice(0, 400))
     // GitHub Actions annotation: surfaces the failing assertion on the public
     // check-run without needing log access.
-    console.log('::error::' + label + ' | got: ' + JSON.stringify(shown).slice(0, 200))
+    console.log('::error::' + label + ' | got: ' + shownText.slice(0, 200))
   }
 }
 
@@ -742,5 +751,8 @@ check('a multi-line 适用场景 is collapsed',
     planInjection.length === 1 && buildBlock.length === 1)
 }
 
+// A late stray rejection could land after ALL PASS; the crash-hook exitCode
+// must survive the final process.exit (which would otherwise force 0).
+const exitCode = failures === 0 ? (process.exitCode || 0) : 1
 console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')
-process.exit(failures === 0 ? 0 : 1)
+process.exit(exitCode)
