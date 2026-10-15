@@ -105,6 +105,10 @@ check('host: exports buildBlock()', typeof host.buildBlock === 'function', typeo
       drifted.map(([name, actual, want]) => name + ' schema=' + JSON.stringify(actual) + ' code=' + JSON.stringify(want)).join('; '))
     check('schema: it documents the $schema option it tells editors to use',
       props.$schema !== undefined, JSON.stringify(Object.keys(props).slice(0, 6)))
+    check('schema: the F7 pause field is documented (optional integer, minimum 0)',
+      props.disabledUntil !== undefined && props.disabledUntil.type === 'integer'
+      && props.disabledUntil.minimum === 0,
+      JSON.stringify(props.disabledUntil))
     check('schema: version 1 files still validate (no required setId)',
       !(entryProps.setId && entryProps.setId.required) && !(schema.required || []).includes('sets'),
       JSON.stringify(schema.required))
@@ -739,6 +743,57 @@ if (captured && typeof captured.factory === 'function') {
     check('client: exposes __sourceParseVerdict for this test', false, 'missing export')
   }
 
+  // F12 diagnostics dump: the text an issue report carries. The contract is
+  // fixed here: operational fields present, reporter environment present, and
+  // NEVER any user text (entry titles, entry bodies, persona content) — the
+  // preview field in the snapshot is deliberately poisoned with a secret to
+  // prove the dump ignores it.
+  if (plugin && typeof plugin.__diagnosticsText === 'function') {
+    const dump = plugin.__diagnosticsText
+    const diagSnap = {
+      data: {
+        version: 2, rev: 7, enabled: true, budgetChars: 4000, disabledUntil: 0,
+        activeSetId: 'st-default',
+        sets: [{ id: 'st-default', name: '默认' }],
+        entries: [{ id: 'e1', title: 'DIAG-SECRET-TITLE', content: 'DIAG-SECRET-ENTRY-BODY', mode: 'always', when: '', priority: 1, enabled: true, tags: [], setId: 'st-default', updatedAt: 1 }],
+        profiles: [{ id: 'p1', name: 'DIAG-SECRET-NAME', content: 'DIAG-SECRET-PROFILE-BODY', enabled: true, setId: 'st-default', updatedAt: 1 }],
+      },
+      sets: { activeId: 'st-default', scoped: true, total: { entries: 1, profiles: 1 }, list: [] },
+      storage: {
+        path: 'C:/demo/instruction-memory/memory.json', error: null, warning: 'DIAG-WARNING',
+        savedAt: 1700000000000, migratedFrom: null, onDisk: true, backupDir: '',
+        isDefaultBackupDir: true, backupPath: 'C:/demo/instruction-memory/memory.json.bak',
+        historyDir: 'C:/demo/instruction-memory/history', historyCount: 2, historyError: null,
+        schemaFile: 'C:/demo/instruction-memory/memory.schema.json',
+      },
+      injection: { registered: true, available: true, error: null, muted: false, chars: 120, budget: 4000, pulls: 3 },
+      security: { hostGuarded: true, boundHost: '127.0.0.1' },
+      diagnostics: { loadedFrom: 'adopted store file', rev: 7 },
+      preview: 'DIAG-SECRET-ENTRY-BODY',
+      limits: {},
+    }
+    const diagText = dump(diagSnap, { userAgent: 'DIAG-UA', language: 'zh-CN', now: '2026-01-01T00:00:00.000Z' })
+    check('diagnostics: the dump carries the operational fields',
+      diagText.includes('dsh-instruction-memory diagnostics')
+      && diagText.includes('rev: 7') && diagText.includes('registered: true')
+      && diagText.includes('pulls(since boot): 3')
+      && diagText.includes('hostGuarded: true') && diagText.includes('boundHost: 127.0.0.1')
+      && diagText.includes('loadedFrom: adopted store file')
+      && diagText.includes('memory.json.bak') && diagText.includes('DIAG-WARNING'),
+      diagText.slice(0, 200))
+    check('diagnostics: the dump carries the reporter environment',
+      diagText.includes('userAgent: DIAG-UA') && diagText.includes('language: zh-CN')
+      && diagText.includes('time: 2026-01-01T00:00:00.000Z'))
+    check('diagnostics: the dump never carries entry or persona text (not even via preview)',
+      !diagText.includes('DIAG-SECRET-TITLE') && !diagText.includes('DIAG-SECRET-ENTRY-BODY')
+      && !diagText.includes('DIAG-SECRET-NAME') && !diagText.includes('DIAG-SECRET-PROFILE-BODY'),
+      diagText)
+    check('diagnostics: junk input degrades to a labelled dump instead of throwing',
+      (() => { const bare = dump(null, null); return typeof bare === 'string' && bare.includes('dsh-instruction-memory diagnostics') })())
+  } else {
+    check('client: exposes __diagnosticsText for this test', false, 'missing export')
+  }
+
   // i18n: the panel ships both locales from one dictionary pair. The lookup
   // chain falls back to zh, so a key missing from zh renders as the raw key;
   // a key missing from en silently degrades that user to Chinese. Placeholder
@@ -818,6 +873,23 @@ if (captured && typeof captured.factory === 'function') {
         'backup.hint', 'backup.multiDevice']
         .every((k) => k in zh && k in en),
       'missing: ' + ['backup.section', 'backup.label', 'backup.apply', 'backup.hint']
+        .filter((k) => !(k in zh) || !(k in en)).join(','))
+    check('i18n: the F12 diagnostics copy exists in both locales',
+      ['diag.section', 'diag.show', 'diag.hide', 'diag.copy', 'diag.copied', 'diag.copyManual',
+        'diag.hostWarn', 'diag.groupStorage', 'diag.groupInjection', 'diag.groupBackup',
+        'diag.groupIssues', 'diag.none', 'diag.storagePath', 'diag.onDisk', 'diag.loadedFrom',
+        'diag.savedAt', 'diag.rev', 'diag.registered', 'diag.yes', 'diag.no', 'diag.pulls',
+        'diag.chars', 'diag.backupDir', 'diag.backupDefault', 'diag.backupPath', 'diag.historyDir',
+        'diag.historyCount', 'diag.schemaFile', 'diag.issueStorage', 'diag.issueWarning',
+        'diag.issueHistory', 'diag.issueSection']
+        .every((k) => k in zh && k in en),
+      'missing: ' + ['diag.section', 'diag.hostWarn', 'diag.pulls', 'diag.issueSection']
+        .filter((k) => !(k in zh) || !(k in en)).join(','))
+    check('i18n: the F7 temporary-mute copy exists in both locales',
+      ['mute.menu', 'mute.30m', 'mute.1h', 'mute.today', 'mute.resume', 'mute.active',
+        'mute.hint', 'mute.remainingMs', 'mute.remainingH']
+        .every((k) => k in zh && k in en),
+      'missing: ' + ['mute.menu', 'mute.resume', 'mute.active', 'mute.remainingH']
         .filter((k) => !(k in zh) || !(k in en)).join(','))
     // The one wording rule this feature must not soften: the local preview has
     // to SAY it is not the model's judgement, in both locales.

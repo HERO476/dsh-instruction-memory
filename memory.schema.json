@@ -27,6 +27,12 @@
       "description": "总开关。为 false 时指令与用户形象都不注入。",
       "default": true
     },
+    "disabledUntil": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "临时静音（F7）：暂停注入的到期时刻（epoch 毫秒）。0 或缺失 = 未暂停；未来值 = 暂停中，到期后由插件自动恢复注入（无需用户操作，也不产生写盘，rev 不变）。它与总开关相互独立：手动切换 enabled 会把它清零（显式开关优先于定时）。字段缺失时按未暂停处理，不触发任何迁移。",
+      "default": 0
+    },
     "budgetChars": {
       "type": "integer",
       "minimum": 800,

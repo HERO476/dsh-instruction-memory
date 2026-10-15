@@ -90,6 +90,7 @@
     DEMO_STORE.version = 2
     DEMO_STORE.$schema = './memory.schema.json'
     DEMO_STORE.backupDir = ''
+    DEMO_STORE.disabledUntil = 0
     DEMO_STORE.activeSetId = 'st-demo-default'
     DEMO_STORE.sets = [
       { id: 'st-demo-default', name: '默认' },
@@ -179,6 +180,8 @@
       return { text: '', budget: budget, activeCount: 0, included: [], omitted: [], profiles: [], profileChars: 0, entryChars: 0 }
     }
     if (DEMO_STORE.enabled !== true) return blank()
+    // F7 临时静音：与真实宿主同义——暂停中的计划与 enabled:false 逐字节相同。
+    if (typeof DEMO_STORE.disabledUntil === 'number' && DEMO_STORE.disabledUntil > Date.now()) return blank()
     var persona = demoProfilesBlock()
     var active = demoScopedEntries().filter(function (e) { return e.enabled && e.content !== '' })
 
@@ -289,6 +292,7 @@
         registered: plan.text !== '',
         available: true,
         error: null,
+        muted: DEMO_STORE.enabled === true && typeof DEMO_STORE.disabledUntil === 'number' && DEMO_STORE.disabledUntil > Date.now(),
         chars: plan.text.length,
         budget: plan.budget,
         activeCount: plan.activeCount,
@@ -297,7 +301,11 @@
         profiles: plan.profiles,
         profileChars: plan.profileChars,
         entryChars: plan.entryChars,
+        pulls: 2,
       },
+      // F12：演示桩里路由绑定在回环地址，安全面板不告警。
+      security: { hostGuarded: true, boundHost: '127.0.0.1' },
+      diagnostics: { loadedFrom: 'demo（内存桩宿主）', rev: data.rev || 0 },
       preview: plan.text,
       limits: {
         minBudget: 800, maxBudget: 40000, maxEntries: 200,
@@ -341,6 +349,9 @@
   function demoAdoptStore(parsed) {
     DEMO_STORE.version = 2
     DEMO_STORE.enabled = parsed.enabled !== false
+    DEMO_STORE.disabledUntil = typeof parsed.disabledUntil === 'number' && isFinite(parsed.disabledUntil) && parsed.disabledUntil > 0
+      ? parsed.disabledUntil
+      : 0
     DEMO_STORE.budgetChars = typeof parsed.budgetChars === 'number' ? parsed.budgetChars : 4000
     DEMO_STORE.sets = Array.isArray(parsed.sets) && parsed.sets.length > 0
       ? parsed.sets.map(function (s) { return { id: String(s.id), name: String(s.name).slice(0, 30) } })
@@ -399,7 +410,27 @@
         break
       }
       case 'set-options': {
-        if (typeof payload.args.enabled === 'boolean') DEMO_STORE.enabled = payload.args.enabled
+        if (typeof payload.args.enabled === 'boolean') {
+          DEMO_STORE.enabled = payload.args.enabled
+          DEMO_STORE.disabledUntil = 0
+        }
+        if (typeof payload.args.disabledUntil === 'number' && isFinite(payload.args.disabledUntil)
+          && payload.args.disabledUntil >= 0 && typeof payload.args.enabled !== 'boolean') {
+          var wantedMute = Math.round(payload.args.disabledUntil)
+          var muteClamped = false
+          if (wantedMute <= Date.now()) wantedMute = 0
+          else if (wantedMute > Date.now() + 7 * 86400000) { wantedMute = Date.now() + 7 * 86400000; muteClamped = true }
+          DEMO_STORE.disabledUntil = wantedMute
+          if (wantedMute > 0) {
+            // 演示桩也到期自动恢复：真实宿主由插件内的定时器负责，这里用一个页内
+            // 定时器模拟同一行为（下一个快照即恢复正常态）。
+            setTimeout(function () { DEMO_STORE.disabledUntil = 0 }, wantedMute - Date.now() + 50)
+          }
+          return demoReply(true, wantedMute === 0
+            ? '已恢复注入。'
+            : '已暂停注入至 ' + new Date(wantedMute).toLocaleString() + '（到期自动恢复；暂停期间不注入任何指令或用户形象）'
+              + (muteClamped ? '；暂停时长上限为 7 天，已按上限记录' : ''))
+        }
         if (typeof payload.args.budgetChars === 'number') DEMO_STORE.budgetChars = payload.args.budgetChars
         if (typeof payload.args.backupDir === 'string') {
           DEMO_STORE.backupDir = payload.args.backupDir.trim()

@@ -24,11 +24,47 @@
   no-op 不写盘。回退目标中 id 已被占用而正文是新内容时改发新 id，不再把重复 id 写进同一
   集合。正常路径（集合存在/成功创建）的幂等性不变——重新导入同一导出文件仍是 no-op。
 
+### 新增
+
+- **诊断与安全状态集中面板（F12）**：设置页新增可折叠「诊断信息」卡片（默认收起、纯展示、
+  无写路由），集中展示存储（路径/在盘/载入来源/最近保存/rev）、注入（注册状态、`pulls`
+  自启动计数、字符数/上限）、备份与历史（位置、`.bak`、历史目录与快照数、Schema 文件）与
+  全部错误/警告；「复制诊断信息」生成含 `navigator.userAgent` 的纯文本（**不含任何用户文本**，
+  剪贴板不可用时降级为手动全选文本框；序列化为导出纯函数 `__diagnosticsText` 并被
+  `verify.mjs` 锁定）。快照新增 `security`（`hostGuarded`/`boundHost`，与路由 Host 校验同源）与
+  `diagnostics`（`loadedFrom`/`rev`）：绑定在非回环地址时页面顶部显示醒目橙色安全警告，
+  补上对外发布场景缺失的信号。`docs/demo.html` 桩同步补齐。
+- **临时静音（F7）**：总开关旁「暂停注入…」——30 分钟 / 1 小时 / 到今天结束（本地时区
+  24:00），暂停期间指令与形象都不注入（系统提示词与未安装插件逐字节一致），到期由宿主侧
+  定时器自动恢复，**无需操作、不写盘（rev 不变）**；状态存于新增的**可选**顶层字段
+  `disabledUntil`（epoch 毫秒；0/缺失 = 未暂停；格式版本仍为 2，无迁移；跨重启保留）。
+  `set-options` 接受该字段：0 = 立即恢复，过去时间视为 0，超过 7 天上限钳到 now+7d 并披露；
+  手动切换总开关清零它（显式开关优先于定时）。注入渲染引入**可注入时钟**：`isMuted(data, now)`、
+  `planInjection(data, now = Date.now())`、`buildBlock(data, now = Date.now())`（默认参数仍是
+  当前时间，纯函数允许固定 now，字节结果可复现）；到期决策 `muteExpired(data, now)` 由
+  `syncSection` 末尾的单一定时器消费（每次状态变化先清旧定时器，插件卸载时清理，`unref`
+  不阻退出）。客户端提供暂停菜单、剩余时间倒计时（1s interval，随暂停状态自动建立/清理）
+  与「立即恢复」；`memory.schema.json`、README、demo 桩同步更新。
+
 ### 测试
 
 - contract-test：导入回退去重六组回归（激活集合重复 / 20 集上限 / 批内互查 / 形象重复 /
   id 重发 / 跨集同文不误伤）；先红后绿验证（回退修复后新用例失败）。
 - ui-test：切换集合关闭草稿回归；同以 stash 验证测试有效性。
+- smoke-test：isMuted 真值表与 muteExpired 到期决策；planInjection/buildBlock 注入时钟在
+  暂停前/后的字节一致性（暂停中 ≡ enabled:false；到期后 ≡ 未暂停）；形象随暂停一起置空；
+  时钟参数可省（arity = 1）。
+- contract-test（F7/F12）：set-options disabledUntil 写入/披露/过去归零/7 天钳制/随总开关
+  清零/非法拒绝；暂停中快照 injection.muted=true、registered=false、preview 为空；存储文件/
+  导出/restore 往返/源码模式携带该字段；手改非法值载入时重置并披露；F12 security/diagnostics
+  字段存在且 hostGuarded 随绑定地址变化（回环 vs 0.0.0.0）。
+- verify.mjs：__diagnosticsText 输出含关键字段、含环境信息、不含条目/形象/预演文本；
+  schema 记录 disabledUntil（integer ≥ 0）；F12/F7 双语键组检查。
+- ui-test（F12/F7）：诊断卡片展开/收起与复制降级路径（无剪贴板 → 可手动全选的转储，断言
+  不含用户文本）；非回环绑定警告出现/消失（第二宿主实例真实切换绑定）；暂停菜单三档 →
+  状态条倒计时 → 立即恢复；50ms 真实定时器到期自动恢复（文件字节不变的到期语义）。
+  ui-test 垫片补上 React 的 effect cleanup 语义（重跑前先清理），倒计时 interval 不再泄漏到
+  后续断言。
 
 ## [1.2.0] — 2026-10-15
 

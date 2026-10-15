@@ -2366,6 +2366,147 @@ async function statusFor(headers, body) {
   await rm(IMPORT_HOME, { recursive: true, force: true })
 }
 
+/* ---------------- F7 temporary mute + F12 diagnostics fields ---------------- */
+
+// The pause is a FORMAT-v2-OPTIONAL field: missing means unmuted, so old files
+// load untouched. The route owns the clock decisions; this block pins them
+// through the real route WITHOUT real waiting (the expiry decision is a pure
+// export pinned in smoke-test.mjs; the only real-timer smoke, 50ms, lives in
+// ui-test.mjs). F12 is pinned on the same mounts: security/diagnostics exist,
+// and hostGuarded follows the address the route is actually bound to.
+{
+  const MUTE_HOME = scratchHome('-mute')
+  await rm(MUTE_HOME, { recursive: true, force: true })
+  const previousHome = process.env.DSH_HOME
+  const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000
+
+  const muteSeed = (disabledUntil) => JSON.stringify({
+    version: 2,
+    activeSetId: 'st-default',
+    ...(disabledUntil === undefined ? {} : { disabledUntil }),
+    sets: [{ id: 'st-default', name: '默认' }],
+    entries: [{ id: 'im-1', setId: 'st-default', title: '静音探针', content: '暂停期间不应注入', mode: 'always', when: '', priority: 1, enabled: true, tags: [], updatedAt: 1 }],
+    profiles: [{ id: 'pf-1', setId: 'st-default', name: '形象', content: '暂停期间也不应注入', enabled: true, updatedAt: 1 }],
+  })
+
+  const mountMute = async (name, hostAddress, seedDisabledUntil) => {
+    const home = join(MUTE_HOME, name)
+    await mkdir(join(home, 'instruction-memory'), { recursive: true })
+    process.env.DSH_HOME = home
+    await writeFile(join(home, 'instruction-memory', 'memory.json'), muteSeed(seedDisabledUntil), 'utf8')
+    let muteHandler = null
+    const muteApi = await import(new URL('./lib/index.js', import.meta.url).href + '?mute=' + name + Date.now())
+    muteApi.apply({
+      systemPrompt: { section: () => () => {} },
+      inject: (deps, callback) => {
+        callback({
+          webServer: { host: hostAddress, register: (route) => { muteHandler = route.handler; return () => {} } },
+          effect: (fn) => { fn(); return () => {} },
+        })
+        return null
+      },
+      get: () => undefined,
+      effect: (fn) => { fn(); return () => {} },
+    })
+    const rev = async () => (await callRoute(muteHandler, { method: 'state', args: null })).snapshot.data.rev
+    return { api: muteApi, handler: muteHandler, rev, storeFile: join(home, 'instruction-memory', 'memory.json') }
+  }
+
+  // A. Loopback bind: guarded, and the whole pause lifecycle works.
+  {
+    const { api, handler, rev, storeFile } = await mountMute('loopback', '127.0.0.1')
+    const call = (method, args) => callRoute(handler, { method, args })
+
+    const state0 = await call('state', null)
+    check('F12: the snapshot publishes security and diagnostics on a loopback bind',
+      state0.snapshot.security.hostGuarded === true
+      && state0.snapshot.security.boundHost === '127.0.0.1'
+      && typeof state0.snapshot.diagnostics.rev === 'number'
+      && typeof state0.snapshot.diagnostics.loadedFrom === 'string'
+      && state0.snapshot.diagnostics.loadedFrom !== '',
+      JSON.stringify({ sec: state0.snapshot.security, diag: state0.snapshot.diagnostics }))
+    check('F7: a v2 file without disabledUntil loads as unmuted',
+      state0.snapshot.data.disabledUntil === 0 && state0.snapshot.injection.muted === false
+      && state0.snapshot.injection.registered === true,
+      JSON.stringify({ u: state0.snapshot.data.disabledUntil, m: state0.snapshot.injection.muted }))
+
+    const pauseAt = Date.now() + 3600000
+    const paused = await call('set-options', { disabledUntil: pauseAt, baseRev: await rev() })
+    check('F7: a future disabledUntil pauses with a disclosure',
+      paused.ok === true && paused.saved === true
+      && String(paused.message).includes('已暂停注入至')
+      && paused.snapshot.injection.muted === true
+      && paused.snapshot.injection.registered === false
+      && paused.snapshot.preview === ''
+      && Math.abs(paused.snapshot.data.disabledUntil - pauseAt) < 5000,
+      JSON.stringify({ msg: paused.message, m: paused.snapshot.injection.muted }))
+    check('F7: the store file itself carries disabledUntil (format stays v2, no migration)',
+      JSON.parse(await readFile(storeFile, 'utf8')).disabledUntil === paused.snapshot.data.disabledUntil
+      && JSON.parse(await readFile(storeFile, 'utf8')).version === 2)
+
+    const exported = await call('export-data', null)
+    check('F7: the export envelope carries disabledUntil',
+      exported.export.data.disabledUntil === paused.snapshot.data.disabledUntil,
+      JSON.stringify(exported.export.data.disabledUntil))
+    const restored = await call('restore-data', { payload: exported.export, baseRev: await rev() })
+    check('F7: restoring the export round-trips disabledUntil',
+      restored.ok === true && restored.snapshot.data.disabledUntil === paused.snapshot.data.disabledUntil,
+      JSON.stringify({ u: restored.snapshot.data.disabledUntil }))
+    const source = await call('read-source', null)
+    check('F7: source mode shows the same field (the bytes a save would write)',
+      JSON.parse(source.source).disabledUntil === paused.snapshot.data.disabledUntil)
+
+    const resumed = await call('set-options', { disabledUntil: Date.now() - 5000, baseRev: await rev() })
+    check('F7: a past instant means resume-now and says so',
+      resumed.ok === true && resumed.snapshot.injection.muted === false
+      && resumed.snapshot.data.disabledUntil === 0
+      && String(resumed.message).includes('已恢复注入'),
+      JSON.stringify({ msg: resumed.message }))
+
+    const overCap = await call('set-options', { disabledUntil: Date.now() + SEVEN_DAYS + 86400000, baseRev: await rev() })
+    check('F7: beyond the 7-day ceiling the pause is clamped and disclosed',
+      overCap.ok === true && String(overCap.message).includes('7 天')
+      && overCap.snapshot.data.disabledUntil <= Date.now() + SEVEN_DAYS + 1000
+      && overCap.snapshot.data.disabledUntil >= Date.now() + SEVEN_DAYS - 60000,
+      JSON.stringify({ msg: overCap.message, u: overCap.snapshot.data.disabledUntil }))
+
+    await call('set-options', { disabledUntil: Date.now() + 3600000, baseRev: await rev() })
+    const switched = await call('set-options', { enabled: false, baseRev: await rev() })
+    check('F7: an explicit master-switch flip clears the pause (the switch outranks the timer)',
+      switched.snapshot.data.enabled === false && switched.snapshot.data.disabledUntil === 0
+      && String(switched.message).includes('暂停注入状态已一并清除'),
+      JSON.stringify({ msg: switched.message }))
+    await call('set-options', { enabled: true, baseRev: await rev() })
+
+    const junk = await call('set-options', { disabledUntil: 'soon', baseRev: await rev() })
+    check('F7: a non-number disabledUntil is refused with a reason',
+      junk.ok === false && String(junk.message).includes('disabledUntil'),
+      JSON.stringify(junk.message))
+
+    // The load path: a hand-edited unusable value is reset to 0 and disclosed.
+    await writeFile(storeFile, muteSeed('soon'), 'utf8')
+    const reloaded = await call('reload', null)
+    check('F7: a hand-edited disabledUntil is reset to 0 and disclosed on load',
+      reloaded.ok === true && reloaded.snapshot.data.disabledUntil === 0
+      && String(reloaded.snapshot.storage.warning).includes('disabledUntil'),
+      JSON.stringify({ u: reloaded.snapshot.data.disabledUntil, warn: reloaded.snapshot.storage.warning }))
+  }
+
+  // B. A non-loopback bind publishes hostGuarded:false and names the address.
+  {
+    const { handler } = await mountMute('open', '0.0.0.0')
+    const state1 = await callRoute(handler, { method: 'state', args: null })
+    check('F12: a non-loopback bind turns the guard off and the snapshot says so',
+      state1.snapshot.security.hostGuarded === false
+      && state1.snapshot.security.boundHost === '0.0.0.0'
+      && state1.ok === true,
+      JSON.stringify(state1.snapshot.security))
+  }
+
+  process.env.DSH_HOME = previousHome
+  await rm(MUTE_HOME, { recursive: true, force: true })
+}
+
 /* ---------------- first-run materialisation: what may and may not be overwritten ------- */
 
 // A store that appears AFTER boot (a hand-copied file, a backup dropped in by

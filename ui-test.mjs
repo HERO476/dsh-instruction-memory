@@ -15,6 +15,7 @@
  * snapshot shape) rather than a mock of it.
  */
 import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -155,8 +156,20 @@ const shim = {
       || previous.deps === null
       || previous.deps.length !== declared.length
       || previous.deps.some((value, i) => !Object.is(value, declared[i]))
-    this.fx[at] = { deps: declared }
-    if (changed) this.pending.push(fn)
+    // React semantics the old shim lacked: a re-run (deps changed, or a
+    // no-deps effect) runs the previous cleanup FIRST. Without this, the F7
+    // countdown interval leaked past the resume and kept every later settle()
+    // permanently noisy. Deps-less effects never report changed here, so the
+    // SSE close() still only runs on unmount — exactly like React.
+    if (changed && previous !== undefined && typeof previous.cleanup === 'function') previous.cleanup()
+    const slot = { deps: declared, cleanup: null }
+    this.fx[at] = slot
+    if (changed) {
+      this.pending.push(() => {
+        const cleanup = fn()
+        if (typeof cleanup === 'function') slot.cleanup = cleanup
+      })
+    }
   },
   useRef(initial) {
     const at = this.index
@@ -495,6 +508,100 @@ check('panel: the field shows the committed path',
 tree = await click(tree, '导出到备份目录')
 check('panel: export-to-dir reports the written path',
   texts(tree).some((line) => line.includes('已写入')), JSON.stringify(texts(tree).filter((l) => l.includes('已写入')).slice(0, 2)))
+
+// ---- F12: the diagnostics card (default collapsed; display-only) ----
+tree = await click(tree, '展开诊断')
+check('panel: the diagnostics card lists the operational fields',
+  hasTextContaining(tree, '自本次插件启动') && hasTextContaining(tree, '修订号（rev）')
+  && texts(tree).some((line) => line.includes('memory.json')),
+  JSON.stringify(texts(tree).filter((l) => l.includes('rev') || l.includes('存储文件')).slice(0, 4)))
+tree = await click(tree, '复制诊断信息')
+{
+  const dumpArea = anyElement(tree, (el) => el.type === 'textarea'
+    && typeof el.props.value === 'string' && el.props.value.includes('dsh-instruction-memory diagnostics'))
+  check('panel: copy degrades to a selectable dump when no clipboard exists', dumpArea !== undefined)
+  check('panel: the dump carries security/environment and never user text',
+    dumpArea !== undefined
+    && dumpArea.props.value.includes('hostGuarded: true')
+    && dumpArea.props.value.includes('boundHost:')
+    && dumpArea.props.value.includes('userAgent:')
+    && dumpArea.props.value.includes('源码改过的标题') === false,
+    dumpArea === undefined ? 'no dump' : dumpArea.props.value.slice(0, 160))
+}
+tree = await click(tree, '收起诊断')
+check('panel: the diagnostics card collapses again', !hasTextContaining(tree, '自本次插件启动'))
+
+// ---- F12: the non-loopback security warning ----
+// A second host instance whose web server reports a non-loopback bind; its
+// route replaces the handler for one reload, then the panel goes back.
+{
+  const warnHost = await import(new URL('./lib/index.js', import.meta.url).href + '?diag-warn-' + Date.now())
+  let warnHandler = null
+  warnHost.apply({
+    systemPrompt: { section: () => () => {} },
+    inject: (deps, callback) => {
+      callback({
+        webServer: { host: '0.0.0.0', register: (route) => { warnHandler = route.handler; return () => {} } },
+        effect: (fn) => { fn(); return () => {} },
+      })
+      return null
+    },
+    get: () => undefined,
+    effect: (fn) => { fn(); return () => {} },
+  })
+  const realHandler = handler
+  handler = warnHandler
+  tree = await click(tree, '重新载入')
+  check('panel: a non-loopback bind shows the security warning at the top',
+    hasTextContaining(tree, '非回环地址') && hasTextContaining(tree, '0.0.0.0'),
+    JSON.stringify(texts(tree).filter((l) => l.includes('回环')).slice(0, 2)))
+  handler = realHandler
+  tree = await click(tree, '重新载入')
+  check('panel: back on a loopback bind the warning is gone', !hasTextContaining(tree, '非回环地址'))
+}
+
+// ---- F7: pause injection (menu → countdown bar → resume; 50ms expiry smoke) ----
+check('panel: pre-pause the section is injected', injected().length > 0, injected().slice(0, 80))
+tree = await click(tree, '暂停注入…')
+check('panel: the pause menu offers the three durations and the hint',
+  buttons(tree, '30 分钟').length === 1 && buttons(tree, '1 小时').length === 1
+  && buttons(tree, '到今天结束').length === 1 && hasTextContaining(tree, '暂停期间不注入'),
+  JSON.stringify(texts(tree).filter((l) => l.includes('分钟') || l.includes('小时') || l.includes('今天')).slice(0, 4)))
+tree = await click(tree, '30 分钟')
+check('panel: pausing shows the countdown bar with resume',
+  hasTextContaining(tree, '注入已暂停') && hasTextContaining(tree, '剩余') && buttons(tree, '立即恢复').length === 1,
+  JSON.stringify(texts(tree).filter((l) => l.includes('暂停')).slice(0, 3)))
+check('ISOLATION while muted: nothing reaches the prompt', injected() === '', injected().slice(0, 80))
+tree = await click(tree, '立即恢复')
+check('panel: resume clears the bar and the section returns',
+  buttons(tree, '立即恢复').length === 0 && !hasTextContaining(tree, '注入已暂停') && injected().length > 0,
+  injected().slice(0, 80))
+
+// The host-side expiry timer: a 50ms pause ends on its own — no user action,
+// and (pinned via the file bytes) no write. The one real-timer smoke allowed
+// by the spec; everything else pins the clock through parameters.
+{
+  const pauseUntil = Date.now() + 50
+  const resp = await globalThis.fetch('http://instruction-memory.local', {
+    body: JSON.stringify({ method: 'set-options', args: { disabledUntil: pauseUntil } }),
+  })
+  await resp.json()
+  // The pause itself is a real write (it records the instant); expiry must add
+  // NOT ONE byte on top of that — the stale instant is simply ignored.
+  const afterPause = readFileSync(STORE_FILE, 'utf8')
+  check('F7: the pause is live right after the route call', injected() === '', injected().slice(0, 80))
+  await new Promise((resolve) => setTimeout(resolve, 300))
+  check('F7: a 50ms pause expires by itself (section re-registered, no user action)',
+    injected().length > 0, injected().slice(0, 80))
+  check('F7: the expiry wrote nothing (file bytes unchanged, stale instant left in place)',
+    readFileSync(STORE_FILE, 'utf8') === afterPause
+    && JSON.parse(afterPause).disabledUntil > 0)
+  tree = await settle()
+  check('panel: after expiry the bar is gone and the pause control is back',
+    !hasTextContaining(tree, '注入已暂停') && buttons(tree, '立即恢复').length === 0
+    && buttons(tree, '暂停注入…').length === 1,
+    JSON.stringify({ resume: buttons(tree, '立即恢复').length, menu: buttons(tree, '暂停注入…').length }))
+}
 
 // ---- master switch + budget still work through the UI ----
 tree = await click(tree, '重新载入')

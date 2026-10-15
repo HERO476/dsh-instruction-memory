@@ -3,7 +3,7 @@
  *   node smoke-test.mjs
  */
 import { isAbsolute, join } from 'node:path'
-import { MAX_BODY_CHARS, LIMITS, HISTORY_FILE_PATTERN, activeScope, buildBlock, canonicalIp, deviceTag, exportFileName, historyDeviceOf, historyEpochOf, historyFileName, historyRevOf, historyStamp, hostnameOf, inScope, planInjection, requestOriginVerdict, resolveStorePath, sanitizeEntry, sanitizeProfile, sanitizeSet, sanitizeTags, truncatedProfileFields, truncatedSetFields } from './lib/index.js'
+import { MAX_BODY_CHARS, LIMITS, HISTORY_FILE_PATTERN, activeScope, buildBlock, canonicalIp, deviceTag, exportFileName, historyDeviceOf, historyEpochOf, historyFileName, historyRevOf, historyStamp, hostnameOf, inScope, isMuted, muteExpired, planInjection, requestOriginVerdict, resolveStorePath, sanitizeEntry, sanitizeProfile, sanitizeSet, sanitizeTags, truncatedProfileFields, truncatedSetFields } from './lib/index.js'
 
 let failures = 0
 /**
@@ -687,6 +687,45 @@ check('a multi-line 适用场景 is collapsed',
   check('body ceiling: it still exceeds the largest store this plugin can export',
     MAX_BODY_CHARS > LIMITS.maxEntries * LIMITS.maxContent + LIMITS.maxProfiles * LIMITS.maxProfileContent,
     String(MAX_BODY_CHARS))
+}
+
+// ---- F7 临时静音：isMuted 真值表 + planInjection/buildBlock 的注入时钟 ----
+{
+  const NOW = 1_700_000_000_000
+  const muted = (over) => isMuted({ ...base, entries: [entry()], ...over }, NOW)
+
+  check('mute: a store without disabledUntil is never muted', muted({}) === false)
+  check('mute: disabledUntil 0 is not a pause', muted({ disabledUntil: 0 }) === false)
+  check('mute: a past instant is not a pause', muted({ disabledUntil: NOW - 1 }) === false)
+  check('mute: a future instant is a pause', muted({ disabledUntil: NOW + 1 }) === true)
+  check('mute: NaN is not a pause', muted({ disabledUntil: NaN }) === false)
+  check('mute: the master switch off overrides any pause',
+    muted({ enabled: false, disabledUntil: NOW + 1 }) === false)
+  check('mute: a null store is not muted', isMuted(null, NOW) === false)
+
+  check('mute: muteExpired matches only the lapsed instants',
+    muteExpired({ ...base, disabledUntil: NOW - 1 }, NOW) === true
+    && muteExpired({ ...base, disabledUntil: NOW + 1 }, NOW) === false
+    && muteExpired({ ...base, disabledUntil: 0 }, NOW) === false
+    && muteExpired({ ...base, enabled: false, disabledUntil: NOW - 1 }, NOW) === false)
+
+  // The injectable clock: the SAME store is byte-identical to enabled:false
+  // while the pause is live, and byte-identical to the never-paused store once
+  // the instant has passed. No real waiting anywhere — the clock is a param.
+  const live = { ...base, entries: [entry()], profiles: [{ id: 'p1', name: 'P', content: 'C', enabled: true }] }
+  const paused = { ...live, disabledUntil: NOW + 1000 }
+  check('mute: paused plan is byte-identical to enabled:false (text + every plan field)',
+    JSON.stringify(planInjection(paused, NOW)) === JSON.stringify(planInjection({ ...live, enabled: false }, NOW)))
+  check('mute: paused block is empty while the pause is live', buildBlock(paused, NOW) === '')
+  check('mute: the same store renders again once the instant has passed',
+    buildBlock(paused, NOW + 2000) === buildBlock(live, NOW + 2000)
+    && buildBlock(paused, NOW + 2000).length > 0)
+  check('mute: the wall-clock default equals an explicit now',
+    buildBlock({ ...base, entries: [entry()] }) === buildBlock({ ...base, entries: [entry()] }, Date.now()))
+  check('mute: personas are suppressed with the instructions while paused',
+    planInjection(paused, NOW).profiles.length === 0 && planInjection(paused, NOW).profileChars === 0)
+  check('mute: the clock parameters are optional (arity stays 1)',
+    planInjection.length === 1 && buildBlock.length === 1)
 }
 
 console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')
