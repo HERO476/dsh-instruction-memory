@@ -2164,6 +2164,208 @@ async function statusFor(headers, body) {
   await rm(FEATURE_HOME, { recursive: true, force: true })
 }
 
+/* ---------------- import fallback de-duplication (review fix) ---------------- */
+
+// The plan phase de-duplicates against the set an item DECLARES, but the commit
+// can retarget it into the active set (unknown set id, or the 20-set cap
+// blocking creation). That retarget used to skip the duplicate check entirely,
+// so an import could file a second copy of text the active set already had.
+// The shapes that must hold:
+//   a fallback whose body already exists in the active set -> skipped, with a
+//     disclosed count, and no write at all when nothing else is left;
+//   a DECLARED set that really gets created -> may hold the same text as the
+//     active set (per-set isolation is the design; this must not be broken);
+//   the same rules under the 20-set cap;
+//   two same-body fallbacks inside ONE batch -> exactly one insertion;
+//   an id that is taken in the fallback target -> re-minted, never duplicated.
+{
+  const IMPORT_HOME = scratchHome('-import-dedup')
+  await rm(IMPORT_HOME, { recursive: true, force: true })
+  const previousHome = process.env.DSH_HOME
+
+  const entryShape = (over) => ({
+    title: '重复探针', content: '与激活集中已有条目完全相同的正文',
+    mode: 'always', when: '', priority: 1, enabled: true, tags: [], updatedAt: 1, ...over,
+  })
+
+  /** One host on its own home, with the given sets pre-created in the store. */
+  const mountDedup = async (name, sets) => {
+    const home = join(IMPORT_HOME, name)
+    await mkdir(join(home, 'instruction-memory'), { recursive: true })
+    process.env.DSH_HOME = home
+    await writeFile(join(home, 'instruction-memory', 'memory.json'), JSON.stringify({
+      version: 2,
+      activeSetId: 'st-default',
+      sets,
+      entries: [{ id: 'im-x', setId: 'st-default', ...entryShape() }],
+      profiles: [],
+    }), 'utf8')
+    let dedupHandler = null
+    const dedupHost = await import(new URL('./lib/index.js', import.meta.url).href + '?dedup=' + name + Date.now())
+    dedupHost.apply({
+      systemPrompt: { section: () => () => {} },
+      inject: (deps, callback) => {
+        callback({
+          webServer: { register: (route) => { dedupHandler = route.handler; return () => {} } },
+          effect: (fn) => { fn(); return () => {} },
+        })
+        return null
+      },
+      get: () => undefined,
+      effect: (fn) => { fn(); return () => {} },
+    })
+    const rev = async () => (await callRoute(dedupHandler, { method: 'state', args: null })).snapshot.data.rev
+    return { handler: dedupHandler, rev }
+  }
+
+  // A. A fallback whose title+content already exists in the active set.
+  {
+    const { handler: dh, rev } = await mountDedup('fallback-dup', [{ id: 'st-default', name: '默认' }])
+    const before = await callRoute(dh, { method: 'state', args: null })
+    const n0 = before.snapshot.data.entries.length
+    const revBefore = await rev()
+    const res = await callRoute(dh, {
+      method: 'import-data',
+      args: {
+        payload: { entries: [entryShape({ id: 'im-dup', setId: 'st-nowhere' })] },
+        baseRev: revBefore,
+      },
+    })
+    check('import fallback: a retargeted duplicate of active-set content is skipped',
+      res.ok === true && res.saved === false
+      && res.snapshot.data.entries.length === n0
+      && String(res.message).includes('重复'),
+      JSON.stringify({ msg: res.message, n: res.snapshot.data.entries.length }))
+    check('import fallback: the skip writes nothing (rev still)',
+      res.snapshot.data.rev === revBefore,
+      JSON.stringify({ got: res.snapshot.data.rev, want: revBefore }))
+  }
+
+  // B. A declared set that really is created may hold the same text — the
+  // cross-set allowance must survive the fix untouched.
+  {
+    const { handler: dh2, rev } = await mountDedup('declared-ok', [{ id: 'st-default', name: '默认' }])
+    const okSet = await callRoute(dh2, {
+      method: 'import-data',
+      args: {
+        payload: {
+          sets: [{ id: 'st-declared', name: '声明的集合' }],
+          entries: [entryShape({ id: 'im-decl', setId: 'st-declared' })],
+        },
+        baseRev: await rev(),
+      },
+    })
+    check('import: a declared set is created and may hold the same text as the active set',
+      okSet.saved === true
+      && okSet.snapshot.data.sets.some((s) => s.id === 'st-declared')
+      && okSet.snapshot.sets.list.find((s) => s.id === 'st-declared').entries === 1,
+      JSON.stringify({ msg: okSet.message, sets: okSet.snapshot.sets.list }))
+  }
+
+  // C. The 20-set cap: the declared set cannot be created, so the item falls
+  // back — and the same de-duplication must apply on that path.
+  {
+    const fullSets = [{ id: 'st-default', name: '默认' }]
+    for (let i = 1; i < 20; i += 1) fullSets.push({ id: 'st-full' + i, name: '集' + i })
+    const { handler: fh, rev } = await mountDedup('cap', fullSets)
+    const capped = await callRoute(fh, {
+      method: 'import-data',
+      args: {
+        payload: {
+          sets: [{ id: 'st-extra', name: '放不下的集合' }],
+          entries: [entryShape({ id: 'im-cap', setId: 'st-extra' })],
+        },
+        baseRev: await rev(),
+      },
+    })
+    check('import fallback: at the 20-set cap the same duplicate is still skipped',
+      capped.saved === false
+      && capped.snapshot.data.sets.length === 20
+      && capped.snapshot.data.entries.length === 1
+      && String(capped.message).includes('重复'),
+      JSON.stringify({ msg: capped.message }))
+    const fresh = await callRoute(fh, {
+      method: 'import-data',
+      args: {
+        payload: {
+          sets: [{ id: 'st-extra2', name: '也放不下' }],
+          entries: [entryShape({ id: 'im-cap2', setId: 'st-extra2', title: '全新探针', content: '激活集中没有的正文' })],
+        },
+        baseRev: await rev(),
+      },
+    })
+    check('import fallback: a new body under a blocked set lands in the active set with a disclosure',
+      fresh.saved === true
+      && fresh.snapshot.data.entries.some((e) => e.id === 'im-cap2' && e.setId === 'st-default')
+      && String(fresh.message).includes('已归入当前配置集'),
+      JSON.stringify({ msg: fresh.message }))
+  }
+
+  // D. Two same-body fallbacks inside one batch must not duplicate each other.
+  {
+    const { handler: bh, rev } = await mountDedup('batch', [{ id: 'st-default', name: '默认' }])
+    const batched = await callRoute(bh, {
+      method: 'import-data',
+      args: {
+        payload: {
+          entries: [
+            entryShape({ id: 'im-b1', setId: 'st-ghost', title: '批内重复', content: '同批两项回退到同一集合' }),
+            entryShape({ id: 'im-b2', setId: 'st-ghost2', title: '批内重复', content: '同批两项回退到同一集合' }),
+          ],
+        },
+        baseRev: await rev(),
+      },
+    })
+    check('import fallback: two same-body fallbacks in one batch insert exactly once',
+      batched.saved === true
+      && batched.snapshot.data.entries.filter((e) => e.title === '批内重复').length === 1
+      && String(batched.message).includes('另有 1 项'),
+      JSON.stringify({ msg: batched.message, n: batched.snapshot.data.entries.length }))
+  }
+
+  // E. Personas follow the same rule on the fallback path (name+content key).
+  {
+    const { handler: ph2, rev } = await mountDedup('profile-dup', [{ id: 'st-default', name: '默认' }])
+    await callRoute(ph2, {
+      method: 'save-profile',
+      args: { profile: { id: 'pf-x', name: '已有形象', content: '与回退形象完全相同' }, baseRev: await rev() },
+    })
+    const pRes = await callRoute(ph2, {
+      method: 'import-data',
+      args: {
+        payload: { profiles: [{ id: 'pf-dup', setId: 'st-nowhere', name: '已有形象', content: '与回退形象完全相同' }] },
+        baseRev: await rev(),
+      },
+    })
+    check('import fallback: a retargeted duplicate profile is skipped too',
+      pRes.saved === false && pRes.snapshot.data.profiles.length === 1
+      && String(pRes.message).includes('重复'),
+      JSON.stringify({ msg: pRes.message }))
+  }
+
+  // F. An id that is taken in the fallback target must be re-minted, never
+  // duplicated inside one set (the body is new, so this is not a duplicate).
+  {
+    const { handler: ih, rev } = await mountDedup('id-mint', [{ id: 'st-default', name: '默认' }])
+    const res = await callRoute(ih, {
+      method: 'import-data',
+      args: {
+        payload: { entries: [entryShape({ id: 'im-x', setId: 'st-ghost9', title: '同 id 不同正文', content: '不是重复内容' })] },
+        baseRev: await rev(),
+      },
+    })
+    check('import fallback: a taken id in the fallback target is re-minted, not duplicated',
+      res.saved === true
+      && res.snapshot.data.entries.length === 2
+      && res.snapshot.data.entries.filter((e) => e.id === 'im-x').length === 1
+      && res.snapshot.data.entries.some((e) => e.title === '同 id 不同正文' && e.id !== 'im-x'),
+      JSON.stringify({ msg: res.message, ids: res.snapshot.data.entries.map((e) => e.id) }))
+  }
+
+  process.env.DSH_HOME = previousHome
+  await rm(IMPORT_HOME, { recursive: true, force: true })
+}
+
 /* ---------------- first-run materialisation: what may and may not be overwritten ------- */
 
 // A store that appears AFTER boot (a hand-copied file, a backup dropped in by
