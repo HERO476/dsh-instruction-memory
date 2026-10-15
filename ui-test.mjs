@@ -158,6 +158,17 @@ globalThis.document = {
   createElement: () => ({ setAttribute() {}, textContent: '', parentNode: null }),
   head: { appendChild() {} },
 }
+/**
+ * Pin the panel's language. Node >= 21 ships a global `navigator` reporting the
+ * MACHINE's language, so the same assertions passed on a zh dev box and failed
+ * on the English CI runners (where the panel renders "Instruction sets" and the
+ * Chinese labels this file looks for do not exist). defineProperty, because
+ * Node's navigator is getter-only and a plain assignment throws.
+ */
+Object.defineProperty(globalThis, 'navigator', {
+  value: { language: 'zh-CN', languages: ['zh-CN', 'zh', 'en'] },
+  configurable: true,
+})
 
 const clientModule = await import(new URL('./lib/client.js', import.meta.url).href)
 const plugin = globalThis.__spec.factory((id) => {
