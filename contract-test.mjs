@@ -2319,7 +2319,10 @@ async function statusFor(headers, body) {
     check('import fallback: two same-body fallbacks in one batch insert exactly once',
       batched.saved === true
       && batched.snapshot.data.entries.filter((e) => e.title === '批内重复').length === 1
-      && String(batched.message).includes('另有 1 项'),
+      && String(batched.message).includes('另有 1 项')
+      // The inserted-count quotes what landed (staged), not what passed the
+      // plan phase: 2 accepted − 1 fallback duplicate = 1 新增.
+      && String(batched.message).includes('新增指令 1 条'),
       JSON.stringify({ msg: batched.message, n: batched.snapshot.data.entries.length }))
   }
 
