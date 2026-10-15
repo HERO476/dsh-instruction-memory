@@ -31,7 +31,20 @@ let failures = 0
 const check = (label, ok, detail) => {
   if (!ok) failures += 1
   console.log((ok ? 'PASS  ' : 'FAIL  ') + label + (ok || detail === undefined ? '' : '  -> ' + detail))
+  // GitHub Actions annotation: surfaces the failing assertion on the public
+  // check-run without needing log access.
+  if (!ok) console.log('::error::' + label + (detail === undefined ? '' : ' | ' + String(detail).slice(0, 200)))
 }
+
+// A thrown error (e.g. click() finding no button) kills the suite without
+// reaching any check(); surface it the same way so the CI annotation carries
+// the actual reason.
+process.on('uncaughtException', (err) => {
+  console.log('::error::uncaught: ' + String(err && err.stack ? err.stack : err).slice(0, 400))
+})
+process.on('unhandledRejection', (err) => {
+  console.log('::error::unhandledRejection: ' + String(err && err.stack ? err.stack : err).slice(0, 400))
+})
 
 /* ---------------- the real Host, behind the real route ---------------- */
 

@@ -22,6 +22,9 @@ let failures = 0
 const check = (label, ok, detail) => {
   if (!ok) failures += 1
   console.log((ok ? 'PASS  ' : 'FAIL  ') + label + (ok || detail === undefined ? '' : '  -> ' + detail))
+  // GitHub Actions annotation: surfaces the failing assertion on the public
+  // check-run without needing log access.
+  if (!ok) console.log('::error::' + label + (detail === undefined ? '' : ' | ' + String(detail).slice(0, 200)))
 }
 
 /* ---------------- isolate the store: point DSH_HOME at a scratch dir ---------------- */

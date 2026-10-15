@@ -20,6 +20,9 @@ const check = (label, actual, predicate) => {
   if (!ok) {
     const shown = typeof predicate === 'function' || predicate === undefined ? actual : predicate
     console.log('      got: ' + JSON.stringify(shown).slice(0, 400))
+    // GitHub Actions annotation: surfaces the failing assertion on the public
+    // check-run without needing log access.
+    console.log('::error::' + label + ' | got: ' + JSON.stringify(shown).slice(0, 200))
   }
 }
 
