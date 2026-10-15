@@ -46,6 +46,67 @@ check('host: no longer depends on the harness fs service (data lives under DSH_H
 check('host: exports apply()', typeof host.apply === 'function', typeof host.apply)
 check('host: exports buildBlock()', typeof host.buildBlock === 'function', typeof host.buildBlock)
 
+/* ---------------- shipped JSON Schema (F15) ---------------- */
+
+// memory.schema.json is what a hand editor validates against, so it must agree
+// with the loader EXACTLY: a schema advertising a larger limit than the code
+// enforces would let a hand edit be silently truncated while the editor
+// reported it as valid. The numbers are compared against the host's published
+// LIMITS object rather than against literals, so both sides must move together.
+{
+  const schemaPath = new URL('./memory.schema.json', import.meta.url)
+  let schema = null
+  let threw = null
+  try {
+    schema = JSON.parse(readFileSync(schemaPath, 'utf8'))
+  } catch (err) {
+    threw = err
+  }
+  check('schema: memory.schema.json exists and parses', threw === null && schema !== null, threw && threw.message)
+
+  check('schema: it is shipped in the package (files whitelist)',
+    Array.isArray(PKG.files) && PKG.files.includes('memory.schema.json'), JSON.stringify(PKG.files))
+
+  if (schema !== null) {
+    const L = host.LIMITS
+    check('schema: the host publishes its limits for this comparison',
+      L !== null && typeof L === 'object' && typeof L.maxEntries === 'number', JSON.stringify(L))
+    const props = schema.properties || {}
+    const entryProps = (props.entries && props.entries.items && props.entries.items.properties) || {}
+    const profileProps = (props.profiles && props.profiles.items && props.profiles.items.properties) || {}
+    const setProps = (props.sets && props.sets.items && props.sets.items.properties) || {}
+    const tagItems = (entryProps.tags && entryProps.tags.items) || {}
+    const pairs = [
+      ['version enum', props.version && props.version.enum, [1, L.formatVersion]],
+      ['budgetChars.minimum', props.budgetChars && props.budgetChars.minimum, L.minBudget],
+      ['budgetChars.maximum', props.budgetChars && props.budgetChars.maximum, L.maxBudget],
+      ['backupDir.maxLength', props.backupDir && props.backupDir.maxLength, 512],
+      ['sets.maxItems', props.sets && props.sets.maxItems, L.maxSets],
+      ['sets name.maxLength', setProps.name && setProps.name.maxLength, L.maxSetName],
+      ['entries.maxItems', props.entries && props.entries.maxItems, L.maxEntries],
+      ['title.maxLength', entryProps.title && entryProps.title.maxLength, L.maxTitle],
+      ['content.maxLength', entryProps.content && entryProps.content.maxLength, L.maxContent],
+      ['when.maxLength', entryProps.when && entryProps.when.maxLength, L.maxWhen],
+      ['priority enum', entryProps.priority && entryProps.priority.enum, [0, 1, 2]],
+      ['mode enum', entryProps.mode && entryProps.mode.enum, ['always', 'auto']],
+      ['tags.maxItems', entryProps.tags && entryProps.tags.maxItems, L.maxTagsPerEntry],
+      ['tag.maxLength', tagItems.maxLength, L.maxTagLength],
+      ['profiles.maxItems', props.profiles && props.profiles.maxItems, L.maxProfiles],
+      ['profile name.maxLength', profileProps.name && profileProps.name.maxLength, L.maxProfileName],
+      ['profile content.maxLength', profileProps.content && profileProps.content.maxLength, L.maxProfileContent],
+    ]
+    const drifted = pairs.filter(([, actual, want]) => JSON.stringify(actual) !== JSON.stringify(want))
+    check('schema: every limit matches the code (no drift either way)',
+      drifted.length === 0,
+      drifted.map(([name, actual, want]) => name + ' schema=' + JSON.stringify(actual) + ' code=' + JSON.stringify(want)).join('; '))
+    check('schema: it documents the $schema option it tells editors to use',
+      props.$schema !== undefined, JSON.stringify(Object.keys(props).slice(0, 6)))
+    check('schema: version 1 files still validate (no required setId)',
+      !(entryProps.setId && entryProps.setId.required) && !(schema.required || []).includes('sets'),
+      JSON.stringify(schema.required))
+  }
+}
+
 /* ---------------- dsh.client declaration ---------------- */
 
 // `dsh.client.inject` is a list of PACKAGE NAMES. The client module system
@@ -447,18 +508,26 @@ if (captured && typeof captured.factory === 'function') {
   // the published body ceiling, ≈10 MB).
   if (plugin && typeof plugin.__importSizeVerdict === 'function') {
     const gate = plugin.__importSizeVerdict
-    const MAX_BODY_CHARS = 200 * (6000 + 120 + 200 + 200) * 2 + 100000
+    // The real ceiling, straight from the Host, instead of a local copy of the
+    // formula: a duplicated constant here silently stopped testing the gate the
+    // day the Host's own derivation changed.
+    const bodyCeiling = host.MAX_BODY_CHARS
+    check('client: the gate is tested against the Host\'s own ceiling',
+      typeof bodyCeiling === 'number' && bodyCeiling > 1000000, String(bodyCeiling))
     check('client: a normal export file passes the size gate',
-      gate(3 * 1048576, MAX_BODY_CHARS).ok === true)
+      gate(3 * 1048576, bodyCeiling).ok === true)
     check('client: a maximal own export (≈4 MB pretty-printed) still passes',
-      gate(4.2 * 1048576, MAX_BODY_CHARS).ok === true)
+      gate(4.2 * 1048576, bodyCeiling).ok === true)
     check('client: a clearly oversized file (50 MB) is refused with numbers in the message',
-      (() => { const v = gate(50 * 1048576, MAX_BODY_CHARS)
-        return v.ok === false && v.message.includes('50') && v.message.includes('10') })())
+      (() => {
+        const v = gate(50 * 1048576, bodyCeiling)
+        const limitMb = Math.max(1, Math.round(bodyCeiling * 4 / 1048576))
+        return v.ok === false && v.message.includes('50') && v.message.includes(String(limitMb))
+      })(), JSON.stringify(gate(50 * 1048576, bodyCeiling)))
     check('client: the gate is disabled without a published ceiling (older Host)',
       gate(500 * 1048576, undefined).ok === true)
     check('client: the gate tolerates a missing size (non-File callers)',
-      gate(NaN, MAX_BODY_CHARS).ok === true && gate(undefined, MAX_BODY_CHARS).ok === true)
+      gate(NaN, bodyCeiling).ok === true && gate(undefined, bodyCeiling).ok === true)
   } else {
     check('client: exposes __importSizeVerdict for this test', false, 'missing export')
   }
@@ -582,6 +651,90 @@ if (captured && typeof captured.factory === 'function') {
     check('client: exposes __parseTagInput for this test', false, 'missing export')
   }
 
+  // F17 local preview: the heuristic is pure, so its behaviour is pinnable —
+  // and it has to stay LOCAL (no fetch, no host call) to be honest about what
+  // it is: a literal keyword overlap, never the model's judgement.
+  if (plugin && typeof plugin.__relevancePreview === 'function' && typeof plugin.__relevanceTerms === 'function') {
+    const terms = plugin.__relevanceTerms
+    const preview = plugin.__relevancePreview
+    check('client: terms split a latin phrase into words',
+      JSON.stringify(terms('edit the config file')), (v) => v === JSON.stringify(['edit', 'the', 'config', 'file']),
+      JSON.stringify(terms('edit the config file')))
+    check('client: terms drop single characters and punctuation',
+      JSON.stringify(terms('a, b? c#d')), (v) => v === JSON.stringify(['cd']), JSON.stringify(terms('a, b? c#d')))
+    check('client: a CJK run becomes 2- and 3-character grams',
+      (() => { const t2 = terms('配置文件'); return t2.includes('配置') && t2.includes('置文') && t2.includes('文件') && t2.includes('配置文') })(),
+      JSON.stringify(terms('配置文件')))
+    check('client: a short CJK run is also kept whole',
+      terms('改配置').includes('改配置'), JSON.stringify(terms('改配置')))
+    check('client: terms are capped so a pasted paragraph cannot explode',
+      terms('前缀'.repeat(200)).length, (v) => v <= 40, String(terms('前缀'.repeat(200)).length))
+    check('client: an empty or non-string query yields no terms',
+      terms('') .length === 0 && terms('   ').length === 0 && terms(null).length === 0 && terms(undefined).length === 0)
+
+    const entry = (over) => ({ id: 'e', title: 'T', content: 'C', mode: 'auto', when: '', priority: 1, enabled: true, ...over })
+    const scored = preview([
+      entry({ id: 'hit', title: '配置文件规则', content: '关于配置' }),
+      entry({ id: 'miss', title: '聊天风格', content: '简短' }),
+      entry({ id: 'always', title: '配置文件', content: '配置', mode: 'always' }),
+    ], '帮我修改配置文件')
+    check('client: only 按需 entries are scored (始终 entries never appear)',
+      scored.results.every((hit) => hit.id !== 'always')
+      && scored.autoTotal === 2, JSON.stringify(scored.results))
+    check('client: a literal overlap is found and ranked above the miss',
+      scored.results.length === 1 && scored.results[0].id === 'hit',
+      JSON.stringify(scored.results))
+    check('client: the hit carries a level, the matched terms and a when-empty flag',
+      ['high', 'mid', 'low'].includes(scored.results[0].level)
+      && Array.isArray(scored.results[0].terms) && scored.results[0].terms.length > 0
+      && scored.results[0].whenEmpty === true,
+      JSON.stringify(scored.results[0]))
+    check('client: a scenario match outranks the same term in the body',
+      (() => {
+        const viaWhen = preview([entry({ id: 'w', when: '编写配置文件时' })], '配置文件')
+        const viaBody = preview([entry({ id: 'b', content: '关于配置文件的一切' })], '配置文件')
+        return viaWhen.results[0].score > viaBody.results[0].score
+      })())
+    check('client: an empty query scores nothing (and is not an error)',
+      preview([entry({})], '').results.length === 0)
+    check('client: junk input degrades to an empty result instead of throwing',
+      preview(null, 'x').results.length === 0 && preview([null, 42, {}], 'x').results.length === 0)
+    check('client: the ranking is deterministic',
+      JSON.stringify(preview([entry({ id: 'a', title: '配置' }), entry({ id: 'b', title: '文件配置' })], '配置文件'))
+      === JSON.stringify(preview([entry({ id: 'a', title: '配置' }), entry({ id: 'b', title: '文件配置' })], '配置文件')))
+  } else {
+    check('client: exposes __relevancePreview and __relevanceTerms for this test', false, 'missing exports')
+  }
+
+  // F16 source mode: the live verdict is ADVISORY (the authoritative answer
+  // comes from the save), but it must catch the cheap mistakes without a round
+  // trip and never throw on junk.
+  if (plugin && typeof plugin.__sourceParseVerdict === 'function') {
+    const verdict = plugin.__sourceParseVerdict
+    const valid = verdict(JSON.stringify({ version: 2, entries: [{ title: 'a' }], profiles: [{ name: 'n' }] }, null, 2))
+    check('client: a well-formed source is accepted and summarised',
+      valid.ok === true && valid.message.includes('1 条指令') && valid.message.includes('1 个形象')
+      && valid.message.includes('1 个配置集'),
+      JSON.stringify(valid))
+    check('client: an empty document is reported as empty',
+      verdict('').ok === false && verdict('   ').ok === false)
+    check('client: broken JSON is reported with the parser detail',
+      (() => { const v = verdict('{ "a": }'); return v.ok === false && v.message.includes('JSON') })(),
+      JSON.stringify(verdict('{ "a": }')))
+    check('client: a non-object document is refused',
+      verdict('[1,2]').ok === false && verdict('42').ok === false && verdict('null').ok === false)
+    check('client: a source with no sets counts as one implicit set',
+      verdict('{"entries":[]}').ok === true && verdict('{"entries":[]}').message.includes('1 个配置集'),
+      JSON.stringify(verdict('{"entries":[]}')))
+    check('client: past the size ceiling the live parse pauses (saving still guards)',
+      (() => {
+        const v = verdict('x'.repeat(600), 100)
+        return v.ok === false && v.paused === true
+      })(), JSON.stringify(verdict('x'.repeat(600), 100)))
+  } else {
+    check('client: exposes __sourceParseVerdict for this test', false, 'missing export')
+  }
+
   // i18n: the panel ships both locales from one dictionary pair. The lookup
   // chain falls back to zh, so a key missing from zh renders as the raw key;
   // a key missing from en silently degrades that user to Chinese. Placeholder
@@ -626,6 +779,70 @@ if (captured && typeof captured.factory === 'function') {
         .every((k) => k in zh && k in en),
       'missing: ' + ['profiles.section', 'profiles.new', 'profiles.use', 'profiles.count', 'profiles.chars']
         .filter((k) => !(k in zh) || !(k in en)).join(','))
+    check('i18n: the F13 instruction-set copy exists in both locales',
+      ['sets.section', 'sets.note', 'sets.total', 'sets.activeHint', 'sets.create', 'sets.rename',
+        'sets.duplicate', 'sets.delete', 'sets.nameLabel', 'sets.namePlaceholder', 'sets.confirm',
+        'sets.nameEmpty', 'sets.itemMeta', 'sets.activeBadge', 'sets.switch', 'sets.switchHint',
+        'sets.copySuffix', 'sets.deleteConfirm', 'sets.deleteActive']
+        .every((k) => k in zh && k in en),
+      'missing: ' + ['sets.section', 'sets.create', 'sets.switch', 'sets.itemMeta', 'sets.deleteConfirm']
+        .filter((k) => !(k in zh) || !(k in en)).join(','))
+    check('i18n: the F14 version-history copy exists in both locales',
+      ['history.section', 'history.subtitle', 'history.show', 'history.hide', 'history.count',
+        'history.loading', 'history.empty', 'history.itemMeta', 'history.itemMetaLite', 'history.foreign',
+        'history.restore', 'history.restoreConfirm', 'history.delete', 'history.deleteConfirm', 'history.dir',
+        'action.restore', 'restore.hint', 'restore.confirm']
+        .every((k) => k in zh && k in en),
+      'missing: ' + ['history.section', 'history.restore', 'history.dir', 'action.restore']
+        .filter((k) => !(k in zh) || !(k in en)).join(','))
+    check('i18n: the F16 source-mode copy exists in both locales',
+      ['source.mode', 'source.exit', 'source.section', 'source.subtitle', 'source.save', 'source.reload',
+        'source.valid', 'source.invalid', 'source.empty', 'source.notObject', 'source.keepDraft',
+        'source.reloadConfirm', 'source.editorOpen', 'source.truncatedInput']
+        .every((k) => k in zh && k in en),
+      'missing: ' + ['source.mode', 'source.save', 'source.invalid', 'source.keepDraft']
+        .filter((k) => !(k in zh) || !(k in en)).join(','))
+    check('i18n: the F17 preview copy exists in both locales',
+      ['sim.title', 'sim.toggle', 'sim.hide', 'sim.disclaimer', 'sim.placeholder', 'sim.hint',
+        'sim.levelHigh', 'sim.levelMid', 'sim.levelLow', 'sim.matched', 'sim.noWhen', 'sim.none',
+        'sim.onlyAuto', 'sim.summary', 'sim.omitted']
+        .every((k) => k in zh && k in en),
+      'missing: ' + ['sim.title', 'sim.disclaimer', 'sim.levelHigh', 'sim.summary']
+        .filter((k) => !(k in zh) || !(k in en)).join(','))
+    check('i18n: the F18 backup-location copy exists in both locales',
+      ['backup.section', 'backup.label', 'backup.placeholder', 'backup.apply', 'backup.exportToDir',
+        'backup.hint', 'backup.multiDevice']
+        .every((k) => k in zh && k in en),
+      'missing: ' + ['backup.section', 'backup.label', 'backup.apply', 'backup.hint']
+        .filter((k) => !(k in zh) || !(k in en)).join(','))
+    // The one wording rule this feature must not soften: the local preview has
+    // to SAY it is not the model's judgement, in both locales.
+    check('i18n: the preview disclaimer states it is not the model\'s judgement',
+      zh['sim.disclaimer'].includes('模型的真实判断')
+      && (zh['sim.disclaimer'].includes('≠') || zh['sim.disclaimer'].includes('不是'))
+      && /NOT the model/i.test(en['sim.disclaimer']),
+      zh['sim.disclaimer'].slice(0, 40) + ' / ' + en['sim.disclaimer'].slice(0, 40))
+
+    // The dictionaries having the same KEY SET is not enough: a key the panel
+    // actually calls but neither dictionary declares renders as the raw key at
+    // runtime ("sets.itemMeta" on screen), and the key-set check above would
+    // still pass. Every statically reachable t('…') call site is therefore
+    // resolved against both dictionaries, from the source text.
+    {
+      const clientSource = readFileSync(fileURLToPath(CLIENT_URL), 'utf8')
+      const used = new Set(Array.from(clientSource.matchAll(/\bt\(\s*'([^']+)'/g)).map((m) => m[1]))
+      const missingZhKeys = Array.from(used).filter((key) => !(key in zh))
+      const missingEnKeys = Array.from(used).filter((key) => !(key in en))
+      check('i18n: every t(\'…\') call site exists in both dictionaries',
+        used.size > 100 && missingZhKeys.length === 0 && missingEnKeys.length === 0,
+        'call sites=' + used.size + ' missing-zh=' + missingZhKeys.join(',') + ' missing-en=' + missingEnKeys.join(','))
+      // A key nothing calls is dead weight (or a half-finished feature). Two
+      // tags.* keys predate this check and are kept deliberately.
+      const allowedUnused = new Set(['tags.duplicate', 'tags.full'])
+      const unusedKeys = Object.keys(zh).filter((key) => !used.has(key) && !allowedUnused.has(key))
+      check('i18n: no dictionary key is left unused (dead copy)',
+        unusedKeys.length === 0, unusedKeys.join(','))
+    }
 
     // dictionaryT is the built-in translator that carries the panel until the
     // official locale service publishes — and forever on hosts without it.

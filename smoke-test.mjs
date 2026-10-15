@@ -3,14 +3,24 @@
  *   node smoke-test.mjs
  */
 import { isAbsolute, join } from 'node:path'
-import { buildBlock, canonicalIp, hostnameOf, planInjection, requestOriginVerdict, resolveStorePath, sanitizeEntry, sanitizeProfile, sanitizeTags, truncatedProfileFields } from './lib/index.js'
+import { MAX_BODY_CHARS, LIMITS, HISTORY_FILE_PATTERN, activeScope, buildBlock, canonicalIp, deviceTag, exportFileName, historyDeviceOf, historyEpochOf, historyFileName, historyRevOf, historyStamp, hostnameOf, inScope, planInjection, requestOriginVerdict, resolveStorePath, sanitizeEntry, sanitizeProfile, sanitizeSet, sanitizeTags, truncatedProfileFields, truncatedSetFields } from './lib/index.js'
 
 let failures = 0
+/**
+ * Three call shapes are accepted, because the later blocks want the shorter
+ * ones: `(label, value, predicate)`, `(label, boolean)` — where the value must
+ * BE true — and `(label, boolean, detail)` where the third argument is only
+ * text for the failure line. (Requiring a comparator for every boolean
+ * assertion used to crash instead of failing.)
+ */
 const check = (label, actual, predicate) => {
-  const ok = predicate(actual)
+  const ok = typeof predicate === 'function' ? predicate(actual) : actual === true
   if (!ok) failures += 1
   console.log((ok ? 'PASS  ' : 'FAIL  ') + label)
-  if (!ok) console.log('      got: ' + JSON.stringify(actual).slice(0, 400))
+  if (!ok) {
+    const shown = typeof predicate === 'function' || predicate === undefined ? actual : predicate
+    console.log('      got: ' + JSON.stringify(shown).slice(0, 400))
+  }
 }
 
 const entry = (over) => ({
@@ -502,6 +512,181 @@ check('a multi-line 适用场景 is collapsed',
   ])
   check('profile: rendering is deterministic',
     planInjection(data).text === planInjection(JSON.parse(JSON.stringify(data))).text, truthy)
+}
+
+// ---- F13 配置集: scope resolution, membership, and the cwd red line ----
+//
+// The one rule this feature must never break: nothing derives a set from the
+// process's working directory. The incident that rule comes from is documented
+// in the README (a cwd-derived store location made memory look like it had
+// vanished when DSH was relaunched from another folder). These checks pin the
+// pure half of it — resolution is a function of the DATA alone.
+{
+  const truthy = (v) => v === true
+  const set = (id, name) => ({ id, name })
+  const item = (over) => ({ id: 'e', title: 'T', content: 'C', setId: 'st-a', ...over })
+
+  check('scope: a store with no sets is the legacy single-set shape',
+    activeScope({ entries: [] }).scoped === false, JSON.stringify(activeScope({ entries: [] })))
+  check('scope: an empty sets array is not a scope either',
+    activeScope({ sets: [], activeSetId: 'st-a' }).scoped === false, 'expected scoped=false')
+  check('scope: null and junk degrade to "everything in scope"',
+    activeScope(null).scoped === false && activeScope('x').scoped === false
+    && inScope(item(), activeScope(null)) === true, truthy)
+  check('scope: sets + activeSetId resolve to that set',
+    activeScope({ sets: [set('st-a', 'A'), set('st-b', 'B')], activeSetId: 'st-b' }).activeId === 'st-b')
+  check('scope: an unknown activeSetId falls back to the FIRST set (as the loader does)',
+    activeScope({ sets: [set('st-a', 'A'), set('st-b', 'B')], activeSetId: 'st-gone' }).activeId === 'st-a')
+  check('scope: a missing activeSetId falls back to the first set too',
+    activeScope({ sets: [set('st-a', 'A')] }).activeId === 'st-a')
+  check('scope: set entries without an id are ignored',
+    activeScope({ sets: [{ name: 'no id' }, set('st-a', 'A')] }).ids.join(','), (v) => v === 'st-a')
+
+  const scope = activeScope({ sets: [set('st-a', 'A'), set('st-b', 'B')], activeSetId: 'st-a' })
+  check('scope: an item of the active set is in scope', inScope(item({ setId: 'st-a' }), scope) === true)
+  check('scope: an item of another set is NOT', inScope(item({ setId: 'st-b' }), scope) === false)
+  check('scope: an unattributed item follows the active set (never disappears)',
+    inScope(item({ setId: '' }), scope) === true && inScope({ id: 'x' }, scope) === true)
+  check('ISOLATION: only the active set reaches the block',
+    (() => {
+      const data = {
+        version: 2, enabled: true, budgetChars: 4000,
+        activeSetId: 'st-a',
+        sets: [set('st-a', 'A'), set('st-b', 'B')],
+        entries: [
+          { ...entry({ id: 'in', title: 'IN-A', content: 'AAA' }), setId: 'st-a' },
+          { ...entry({ id: 'out', title: 'IN-B', content: 'BBB' }), setId: 'st-b' },
+        ],
+        profiles: [
+          { ...sanitizeProfile({ id: 'p-in', name: 'pa', content: 'pa' }), setId: 'st-a' },
+          { ...sanitizeProfile({ id: 'p-out', name: 'pb', content: 'pb' }), setId: 'st-b' },
+        ],
+      }
+      const planA = planInjection(data)
+      const planB = planInjection({ ...data, activeSetId: 'st-b' })
+      return planA.text.includes('IN-A') && !planA.text.includes('IN-B')
+        && !planA.text.includes('### pb') && planA.profiles.length === 1
+        && planB.text.includes('IN-B') && !planB.text.includes('IN-A')
+        && planB.included.length === 1 && planB.included[0].id === 'out'
+    })(), truthy)
+  check('ISOLATION: switching sets is the ONLY thing that changes the text (deterministic)',
+    (() => {
+      const data = {
+        version: 2, enabled: true, budgetChars: 4000, activeSetId: 'st-a',
+        sets: [set('st-a', 'A'), set('st-b', 'B')],
+        entries: [{ ...entry({ id: 'in', title: 'IN-A', content: 'AAA' }), setId: 'st-a' }],
+      }
+      return buildBlock(data) === buildBlock(JSON.parse(JSON.stringify(data)))
+        && buildBlock(data) !== buildBlock({ ...data, activeSetId: 'st-b' })
+    })(), truthy)
+  check('scope: a store with sets but no matching items injects nothing at all',
+    (() => {
+      const data = {
+        version: 2, enabled: true, budgetChars: 4000, activeSetId: 'st-b',
+        sets: [set('st-a', 'A'), set('st-b', 'B')],
+        entries: [{ ...entry({ id: 'in', title: 'IN-A', content: 'AAA' }), setId: 'st-a' }],
+      }
+      return buildBlock(data) === '' && planInjection(data).included.length === 0
+    })(), truthy)
+  check('scope: a legacy store (no sets) still injects everything, as before',
+    ((v) => v.includes('IN-A') && v.includes('IN-B'))(buildBlock({
+      version: 1, enabled: true, budgetChars: 4000,
+      entries: [
+        { ...entry({ id: 'a', title: 'IN-A', content: 'AAA' }), setId: 'st-whatever' },
+        { ...entry({ id: 'b', title: 'IN-B', content: 'BBB' }), setId: 'st-other' },
+      ],
+    })), truthy)
+
+  // sanitizeSet
+  check('set: a blank name is rejected',
+    sanitizeSet(null) === null && sanitizeSet({ name: '   ' }) === null
+    && sanitizeSet({ name: '\n\n' }) === null, truthy)
+  check('set: a name is forced onto one line and capped at 30',
+    (() => { const s = sanitizeSet({ name: 'a\nb' + 'x'.repeat(60) }); return s.name.indexOf('\n') === -1 && s.name.length === 30 })(),
+    truthy)
+  check('set: a missing id is minted with the st- prefix; a supplied one is kept',
+    (() => { const minted = sanitizeSet({ name: 'n' }); const kept = sanitizeSet({ id: 'st-1', name: 'n' }); return /^st-/.test(minted.id) && kept.id === 'st-1' })(),
+    truthy)
+  check('set: truncatedSetFields reports an over-long name',
+    JSON.stringify(truncatedSetFields({ name: 'x'.repeat(40) })), (v) => v === JSON.stringify(['配置集名称']))
+  check('set: scope readers ignore a malformed sets entry',
+    activeScope({ sets: [{ id: 42, name: 'x' }], activeSetId: 1 }).scoped === false)
+}
+
+// ---- F13/F14: entry & profile membership survives sanitisation ----
+{
+  const truthy = (v) => v === true
+  check('member: sanitizeEntry keeps a declared setId',
+    sanitizeEntry({ title: 't', content: 'c', setId: 'st-work' }).setId === 'st-work')
+  check('member: a missing setId becomes empty (unattributed), not an error',
+    sanitizeEntry({ title: 't', content: 'c' }).setId === '')
+  check('member: a non-string/id-less setId degrades to empty',
+    sanitizeEntry({ title: 't', content: 'c', setId: 7 }).setId === ''
+    && sanitizeEntry({ title: 't', content: 'c', setId: '' }).setId === '')
+  check('member: sanitizeProfile keeps a declared setId too',
+    sanitizeProfile({ name: 'n', content: 'c', setId: 'st-work' }).setId === 'st-work')
+}
+
+// ---- F14: snapshot naming is a pinned format, and pruning is per device ----
+{
+  const truthy = (v) => v === true
+  // Both helpers format in UTC (the store must not change meaning with the
+  // machine's timezone), so the expectation is the plain UTC wall clock.
+  const epoch = Date.UTC(2026, 9, 15, 15, 23, 55, 123)
+  const stamp = historyStamp(epoch)
+  check('history: the stamp is a fixed-width UTC string',
+    stamp.length === 19 && /^\d{8}T\d{9}Z$/.test(stamp), stamp)
+  const name = historyFileName(epoch, 12, 'laptop')
+  check('history: a snapshot name carries stamp + revision + device',
+    name === '20261015T152355123Z-r12-laptop.json', name)
+  check('history: the plugin recognises its own names only',
+    HISTORY_FILE_PATTERN.test(name) === true
+    && HISTORY_FILE_PATTERN.test('memory.json') === false
+    && HISTORY_FILE_PATTERN.test('20261015T072355123Z.json') === false
+    && HISTORY_FILE_PATTERN.test('../' + name) === false
+    && HISTORY_FILE_PATTERN.test('20261015T072355123Z-r12-LAPTOP.json') === false, truthy)
+  check('history: name parsing round-trips stamp, rev and device',
+    historyEpochOf(name) === epoch
+    && historyRevOf(name) === 12 && historyDeviceOf(name) === 'laptop',
+    JSON.stringify({ e: historyEpochOf(name), r: historyRevOf(name), d: historyDeviceOf(name) }))
+  check('history: a foreign name yields no metadata instead of throwing',
+    historyEpochOf('memory.json') === 0 && historyRevOf(null) === 0 && historyDeviceOf({}) === '')
+  check('history: sorting names sorts chronologically (fixed width pays off)',
+    [historyFileName(2000, 2, 'a'), historyFileName(1000, 1, 'a')].sort().join(','),
+    (v) => v === historyFileName(1000, 1, 'a') + ',' + historyFileName(2000, 2, 'a'))
+  check('history: revision 0 and a huge revision both format',
+    historyFileName(0, 0, 'd') === '19700101T000000000Z-r0-d.json'
+    && historyRevOf(historyFileName(0, 987654321, 'd')) === 987654321,
+    historyFileName(0, 0, 'd'))
+
+  check('device: a hostname is sanitised into a filename-safe tag',
+    deviceTag('DESKTOP-ABC 123') === 'desktop_abc_123'
+    && deviceTag('..\\/evil') === 'evil'
+    && deviceTag('') === 'unknown' && deviceTag('中文') === 'unknown', JSON.stringify([
+    deviceTag('DESKTOP-ABC 123'), deviceTag('..\\/evil'), deviceTag('中文'),
+  ]))
+  check('device: the tag is capped so a long hostname cannot bloat the name',
+    deviceTag('a'.repeat(64)).length === 16, String(deviceTag('a'.repeat(64)).length))
+  check('export: the manual export filename carries a UTC stamp',
+    exportFileName(epoch) === 'dsh-instruction-memory-20261015-152355Z.json',
+    exportFileName(epoch))
+}
+
+// ---- the published limits object (the schema is pinned to it) ----
+{
+  const truthy = (v) => v === true
+  check('limits: the published object carries every ceiling the UI quotes',
+    LIMITS.formatVersion === 2 && LIMITS.maxEntries === 200 && LIMITS.maxTitle === 120
+    && LIMITS.maxContent === 6000 && LIMITS.maxWhen === 200 && LIMITS.maxTagsPerEntry === 8
+    && LIMITS.maxTagLength === 24 && LIMITS.maxProfiles === 50 && LIMITS.maxProfileName === 40
+    && LIMITS.maxProfileContent === 4000 && LIMITS.maxSets === 20 && LIMITS.maxSetName === 30
+    && LIMITS.minBudget === 800 && LIMITS.maxBudget === 40000 && LIMITS.maxHistory === 20,
+    JSON.stringify(LIMITS))
+  check('limits: the object is frozen (a consumer cannot mutate the ceilings)',
+    Object.isFrozen(LIMITS) === true)
+  check('body ceiling: it still exceeds the largest store this plugin can export',
+    MAX_BODY_CHARS > LIMITS.maxEntries * LIMITS.maxContent + LIMITS.maxProfiles * LIMITS.maxProfileContent,
+    String(MAX_BODY_CHARS))
 }
 
 console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')

@@ -1,0 +1,167 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/HERO476/dsh-instruction-memory/memory.schema.json",
+  "title": "dsh-instruction-memory 存储文件",
+  "description": "DSH「指令记忆」插件的存储文件（memory.json）。默认位于 <DSH_HOME>/instruction-memory/memory.json。手改此文件时把 \"$schema\" 指向本文件即可获得编辑器的字段校验与补全；宿主也会把本文件的副本放在 memory.json 旁边，因此 \"$schema\": \"./memory.schema.json\" 开箱即用。注意：本 Schema 只校验文件形状与长度上限，**不校验**语义——例如指向不存在配置集的 setId 不会被这里报错，而是在载入时按规则修正并在设置页披露。",
+  "type": "object",
+  "required": [],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "本文件的 Schema 引用。宿主写入时固定为 ./memory.schema.json（与 memory.json 同目录的那份副本）。"
+    },
+    "version": {
+      "type": "integer",
+      "enum": [1, 2],
+      "description": "存储格式版本。1 = 单套记忆（无配置集）；2 = 引入配置集（sets / activeSetId / setId）。缺失视为 1。其它数字会被插件拒绝载入并暂停修改，以防数据损坏。",
+      "default": 2
+    },
+    "rev": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "存储修订号，由插件在每次成功写入时递增并落盘，用于多窗口/多进程的冲突拒绝。请勿手填。",
+      "default": 0
+    },
+    "enabled": {
+      "type": "boolean",
+      "description": "总开关。为 false 时指令与用户形象都不注入。",
+      "default": true
+    },
+    "budgetChars": {
+      "type": "integer",
+      "minimum": 800,
+      "maximum": 40000,
+      "description": "指令注入字数上限（字符，非 token）。超出部分按优先级取舍，未注入的条目会在设置页标记。用户形象不占用此上限。",
+      "default": 4000
+    },
+    "backupDir": {
+      "type": "string",
+      "maxLength": 512,
+      "description": "自定义备份位置（绝对路径）。留空表示与存储文件同目录。它决定版本快照目录与「另存到备份目录」的去向；存储文件本身与它的跨进程锁不会移动。这是**本机设置**，从备份文件恢复时不会被改写。",
+      "default": ""
+    },
+    "activeSetId": {
+      "type": "string",
+      "description": "当前激活的配置集 id。只有它包含的条目与用户形象会被注入。缺失或指向不存在的配置集时，插件回退到 sets 中的第一个集合并予以披露；插件**绝不**根据工作目录（cwd）自动创建或切换配置集。",
+      "default": "st-default"
+    },
+    "sets": {
+      "type": "array",
+      "maxItems": 20,
+      "description": "配置集列表。每个配置集只有 id 与名称，内容由 entries / profiles 的 setId 指向，因此「切换配置集」不会移动任何一条用户文本。缺失或为空时，插件会合成一个名为「默认」的集合，并把所有条目归入其中（旧版文件即由此平滑迁移）。",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "配置集 id，条目与用户形象通过 setId 引用它。"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 30,
+            "description": "配置集名称（单行，最多 30 字符）。"
+          }
+        }
+      },
+      "default": [{ "id": "st-default", "name": "默认" }]
+    },
+    "entries": {
+      "type": "array",
+      "maxItems": 200,
+      "description": "指令条目。全部配置集合计最多 200 条；超出的条目在载入时会被剔除并明确披露（下次保存即从文件中移除）。",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "条目 id（插件生成，形如 im-xxxx）。缺失或重复时载入时会补发新 id。"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "标题（单行，最多 120 字符）。与内容同时为空时该条目会被剔除。留空时自动取内容前 40 字符。"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 6000,
+            "description": "指令正文，最多 6000 字符。超长会被截断并在设置页披露。"
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["always", "auto"],
+            "description": "生效方式：always = 无条件遵守；auto = 由模型按相关性判断，配合 when 描述适用场景。",
+            "default": "always"
+          },
+          "when": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "适用场景（单行，最多 200 字符），仅对 mode=auto 有意义；写清楚有助于模型判断何时生效。"
+          },
+          "priority": {
+            "type": "integer",
+            "enum": [0, 1, 2],
+            "description": "优先级：2 高 / 1 普通 / 0 低。超出注入字数上限时按优先级保留。",
+            "default": 1
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "是否启用该条目。",
+            "default": true
+          },
+          "tags": {
+            "type": "array",
+            "maxItems": 8,
+            "description": "标签：仅用于设置页分组与筛选，**不会**进入注入文本，也不影响注入顺序与取舍。",
+            "items": { "type": "string", "maxLength": 24 }
+          },
+          "setId": {
+            "type": "string",
+            "description": "所属配置集 id。指向不存在的配置集时会归入当前激活集合并披露；留空视为「跟随当前激活集合」。"
+          },
+          "updatedAt": {
+            "type": "integer",
+            "description": "最近更新时间（epoch 毫秒），由插件维护；同一优先级内按它倒序注入，以保持提示词前缀稳定。"
+          }
+        }
+      }
+    },
+    "profiles": {
+      "type": "array",
+      "maxItems": 50,
+      "description": "用户形象：关于**用户本人**的身份背景、喜好、性格与追求。它们不参与指令字数上限，始终完整注入，并带有一段「仅供调整表达侧重、不得为迎合而改变事实」的护栏说明；形象不是让模型扮演的角色。",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "形象 id（插件生成，形如 im-xxxx）。"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "短标签（单行，最多 40 字符），如「职业背景」「沟通偏好」。留空时取内容前 20 字符。"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 4000,
+            "description": "形象描述，最多 4000 字符。"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "是否使用该形象；不勾选时完全不注入。",
+            "default": true
+          },
+          "setId": {
+            "type": "string",
+            "description": "所属配置集 id；规则与指令条目相同。"
+          },
+          "updatedAt": {
+            "type": "integer",
+            "description": "最近更新时间（epoch 毫秒）。"
+          }
+        }
+      }
+    }
+  }
+}

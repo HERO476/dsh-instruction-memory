@@ -1,5 +1,9 @@
 node_modules/
-.test-dsh-home/
+# Every scratch harness home the suites create (.test-dsh-home,
+# .test-dsh-home-features, .test-dsh-home-ui, …). They are re-created on each
+# run and removed at the end; the ignore rule is only so a crashed or
+# sandbox-blocked cleanup can never leave untracked noise in the tree.
+.test-dsh-home*/
 *.migrated
 .DS_Store
 Thumbs.db

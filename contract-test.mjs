@@ -378,13 +378,17 @@ for (const scenario of scenarios) {
 }
 
 // A store declaring a FUTURE format version must be refused, not best-effort
-// parsed as v1: fields could mean something else, and the next save would
-// rewrite the file in the wrong shape. Mutations must be paused while the
-// file is in that state — the file itself stays untouched on disk.
+// parsed: fields could mean something else, and the next save would rewrite the
+// file in the wrong shape. Mutations must be paused while the file is in that
+// state — the file itself stays untouched on disk.
+//
+// This also IS the downgrade guard: an older build of this plugin (which knows
+// version 1 only) refuses a version 2 file the same way, so data written by a
+// newer build is never silently half-read and then rewritten by an older one.
 {
   await writeFile(STORE_FILE, JSON.stringify({
-    version: 2, rev: 9, enabled: true, budgetChars: 4000,
-    entries: [{ id: 'v2-e', title: 'FROM-THE-FUTURE', content: 'v2 payload', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 1 }],
+    version: 3, rev: 9, enabled: true, budgetChars: 4000,
+    entries: [{ id: 'v3-e', title: 'FROM-THE-FUTURE', content: 'v3 payload', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 1 }],
   }), 'utf8')
 
   const refused = await callRoute(handler, { method: 'reload', args: null })
@@ -406,8 +410,16 @@ for (const scenario of scenarios) {
   const optionsRefused = await callRoute(handler, { method: 'set-options', args: { enabled: false } })
   check('future version: set-options is paused too',
     optionsRefused.ok === false, JSON.stringify(optionsRefused.message))
-  check('future version: the file on disk is untouched (still version 2)',
-    JSON.parse(await readFile(STORE_FILE, 'utf8')).version === 2)
+  // Reading the "source" in this state would hand out the placeholder in-memory
+  // store — i.e. an EMPTY document that looks saveable. It must refuse and point
+  // at the file instead.
+  const sourceRefused = await callRoute(handler, { method: 'read-source', args: null })
+  check('future version: source mode is paused (it would show an empty store)',
+    sourceRefused.ok === false && sourceRefused.source === undefined
+    && String(sourceRefused.message).includes('重新载入'),
+    JSON.stringify(sourceRefused.message))
+  check('future version: the file on disk is untouched (still version 3)',
+    JSON.parse(await readFile(STORE_FILE, 'utf8')).version === 3)
 
   // Restoring a v1 file and reloading lifts the pause.
   await writeFile(STORE_FILE, JSON.stringify({
@@ -1658,6 +1670,486 @@ async function statusFor(headers, body) {
 
   process.env.DSH_HOME = previousHome
   await rm(PROFILE_HOME, { recursive: true, force: true })
+}
+
+/* ---------------- F13–F18: sets, history, source mode, backup location -------- */
+
+// One isolated home for the whole block: a seeded v1 store, then the real
+// route driving every new command. Isolated because these tests MOVE the
+// active set and rewrite the store; the suites above assume a single set.
+{
+  const FEATURE_HOME = fileURLToPath(new URL('./.test-dsh-home-features/', import.meta.url))
+  await rm(FEATURE_HOME, { recursive: true, force: true })
+  const previousHome = process.env.DSH_HOME
+  process.env.DSH_HOME = FEATURE_HOME
+  const featureStore = join(FEATURE_HOME, 'instruction-memory', 'memory.json')
+  const featureDir = join(FEATURE_HOME, 'instruction-memory')
+  await mkdir(featureDir, { recursive: true })
+
+  // A v1 file: the migration path is what the whole block runs on top of.
+  await writeFile(featureStore, JSON.stringify({
+    version: 1,
+    rev: 4,
+    enabled: true,
+    budgetChars: 4000,
+    entries: [
+      { id: 'old-1', title: 'V1-RULE', content: '来自版本 1 的指令', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 5 },
+    ],
+    profiles: [{ id: 'old-p', name: '旧形象', content: '版本 1 的形象', enabled: true, updatedAt: 5 }],
+  }), 'utf8')
+
+  let featureHandler = null
+  const featureSections = []
+  const featureCtx = {
+    systemPrompt: {
+      section: (spec) => {
+        featureSections.push(spec)
+        return () => {
+          const i = featureSections.indexOf(spec)
+          if (i >= 0) featureSections.splice(i, 1)
+        }
+      },
+    },
+    inject: (deps, callback) => {
+      const names = Array.isArray(deps) ? deps : Object.keys(deps)
+      if (names.includes('webServer')) {
+        callback({
+          webServer: { register: (route) => { featureHandler = route.handler; return () => {} } },
+          effect: (fn) => { fn(); return () => {} },
+        })
+      }
+      return null
+    },
+    get: () => undefined,
+    effect: (fn) => { fn(); return () => {} },
+  }
+  const featureHost = await import(new URL('./lib/index.js', import.meta.url).href + '?features=' + Date.now())
+  featureHost.apply(featureCtx)
+
+  const call = (method, args) => callRoute(featureHandler, { method, args })
+  const snap = async () => (await call('state', null)).snapshot
+  const rev = async () => (await snap()).data.rev
+  const injected = () => featureSections
+    .map((section) => (typeof section.text === 'function' ? section.text({}) : section.text))
+    .filter((text) => text.length > 0)
+    .join('\n\n')
+
+  // ---- migration ----
+  const migrated = await snap()
+  check('sets: a v1 store loads as version 2 with one 默认 set',
+    migrated.data.version === 2 && migrated.data.sets.length === 1
+    && migrated.data.sets[0].name === '默认' && migrated.data.activeSetId === 'st-default'
+    && migrated.data.entries.every((entry) => entry.setId === 'st-default')
+    && migrated.data.profiles.every((profile) => profile.setId === 'st-default'),
+    JSON.stringify(migrated.data.sets))
+  check('sets: the migration is disclosed, naming the default set and the version',
+    typeof migrated.storage.warning === 'string' && migrated.storage.warning.includes('默认')
+    && migrated.storage.warning.includes('版本 2'),
+    JSON.stringify(migrated.storage.warning))
+  check('sets: migration does not change what is injected',
+    injected().includes('V1-RULE') && injected().includes('版本 1 的形象'), injected().slice(0, 120))
+  check('sets: the v1 file is NOT rewritten until a save happens',
+    JSON.parse(readFileSync(featureStore, 'utf8')).version === 1)
+
+  // ---- create / switch / isolation ----
+  const created = await call('save-set', { set: { id: '', name: '工作' }, baseRev: await rev() })
+  check('sets: create adds a set, writes once, and does NOT activate it',
+    created.ok === true && created.saved === true
+    && created.snapshot.data.sets.length === 2
+    && created.snapshot.data.activeSetId === 'st-default'
+    && created.snapshot.storage.warning === null,
+    JSON.stringify({ n: created.snapshot.data.sets.length, active: created.snapshot.data.activeSetId }))
+  const workId = created.snapshot.data.sets.find((set) => set.name === '工作').id
+  check('sets: the v2 shape is on disk now (version + sets + setId)',
+    (() => {
+      const onDisk = JSON.parse(readFileSync(featureStore, 'utf8'))
+      return onDisk.version === 2 && onDisk.sets.length === 2 && onDisk.entries[0].setId === 'st-default'
+        && onDisk.$schema === './memory.schema.json'
+    })(), readFileSync(featureStore, 'utf8').slice(0, 120))
+
+  const duplicateName = await call('save-set', { set: { id: '', name: '工作' }, baseRev: await rev() })
+  check('sets: a duplicate name is refused',
+    duplicateName.ok === false && duplicateName.saved === false, JSON.stringify(duplicateName.message))
+
+  const switched = await call('set-active-set', { id: workId, baseRev: await rev() })
+  check('sets: switching activates the target and empties the visible list',
+    switched.ok === true && switched.saved === true
+    && switched.snapshot.data.activeSetId === workId
+    && switched.snapshot.data.entries.length === 0,
+    JSON.stringify({ active: switched.snapshot.data.activeSetId, n: switched.snapshot.data.entries.length }))
+  check('ISOLATION: the previous set is no longer injected',
+    !injected().includes('V1-RULE'), injected().slice(0, 120))
+  check('ISOLATION: the previous set profile is gone from the prompt too',
+    !injected().includes('版本 1 的形象'), injected().slice(0, 120))
+  check('sets: store-wide counts stay visible while a set is active',
+    switched.snapshot.sets.total.entries === 1
+    && switched.snapshot.sets.list.find((set) => set.name === '默认').entries === 1
+    && switched.snapshot.sets.list.find((set) => set.name === '工作').entries === 0,
+    JSON.stringify(switched.snapshot.sets))
+
+  const sameSwitch = await call('set-active-set', { id: workId, baseRev: await rev() })
+  check('sets: re-selecting the active set writes nothing', sameSwitch.ok === true && sameSwitch.saved === false)
+
+  const inWork = await call('save-entry', {
+    entry: { id: '', title: 'WORK-RULE', content: '只属于工作集', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 },
+    baseRev: await rev(),
+  })
+  check('sets: a new entry is filed under the ACTIVE set (server-side)',
+    inWork.ok === true && inWork.snapshot.data.entries.length === 1
+    && inWork.snapshot.data.entries[0].setId === workId,
+    JSON.stringify(inWork.snapshot.data.entries))
+  check('sets: injection now carries the new set only',
+    injected().includes('WORK-RULE') && !injected().includes('V1-RULE'), injected().slice(0, 200))
+
+  const crossDelete = await call('delete-entry', { id: 'old-1', baseRev: await rev() })
+  check('ISOLATION: deleting an id from another set is a no-op (no write)',
+    crossDelete.ok === true && crossDelete.saved === false
+    && crossDelete.snapshot.sets.list.find((set) => set.name === '默认').entries === 1,
+    JSON.stringify(crossDelete.snapshot.sets.list))
+  const crossBatch = await call('batch', { op: 'add-tags', ids: ['old-1'], value: ['x'], baseRev: await rev() })
+  check('ISOLATION: a batch over another set\'s id is reported as missing, not applied',
+    crossBatch.ok === true && crossBatch.saved === false && String(crossBatch.message).includes('未找到'),
+    JSON.stringify(crossBatch.message))
+
+  // A cross-set UUID collision must not let one set's save overwrite another's
+  // entry: entries are addressed by id only, so this is the guard that matters.
+  const cloned = await call('save-entry', {
+    entry: { id: 'old-1', title: 'Hijack?', content: 'should not touch the other set', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 },
+    baseRev: await rev(),
+  })
+  check('sets: saving an id that exists in ANOTHER set creates here instead of overwriting there',
+    cloned.ok === true
+    && cloned.snapshot.data.entries.some((entry) => entry.title === 'Hijack?')
+    && cloned.snapshot.sets.list.find((set) => set.name === '默认').entries === 1
+    && String(cloned.message).includes('新 id'),
+    JSON.stringify({ msg: cloned.message, sets: cloned.snapshot.sets.list }))
+
+  // ---- duplicate + delete rules ----
+  const copied = await call('duplicate-set', { id: workId, name: '客户A', baseRev: await rev() })
+  check('sets: duplicate copies the content into a new, inactive set',
+    copied.ok === true && copied.saved === true
+    && copied.snapshot.data.activeSetId === workId
+    && copied.snapshot.sets.list.find((set) => set.name === '客户A').entries === 2
+    && copied.snapshot.data.entries.every((entry) => entry.id !== 'old-1'),
+    JSON.stringify(copied.snapshot.sets.list))
+  const clientId = copied.snapshot.data.sets.find((set) => set.name === '客户A').id
+  const deleteActive = await call('delete-set', { id: workId, baseRev: await rev() })
+  check('sets: deleting the ACTIVE set is refused with a reason',
+    deleteActive.ok === false && String(deleteActive.message).includes('激活'), JSON.stringify(deleteActive.message))
+  const deletedOther = await call('delete-set', { id: clientId, baseRev: await rev() })
+  check('sets: deleting another set removes its items and reports the counts',
+    deletedOther.ok === true && deletedOther.saved === true
+    && deletedOther.snapshot.data.sets.length === 2
+    && deletedOther.snapshot.sets.total.entries === 3
+    && String(deletedOther.message).includes('已删除配置集'),
+    JSON.stringify({ msg: deletedOther.message, n: deletedOther.snapshot.sets.total.entries }))
+  const lastSet = await call('save-set', { set: { id: 'st-default', name: '默认' }, baseRev: await rev() })
+  check('sets: renaming a set to its own name is a no-op',
+    lastSet.ok === true && lastSet.saved === false, JSON.stringify(lastSet.message))
+
+  // ---- history ----
+  const historyDir = join(featureDir, 'history')
+  const historyNames = await readdir(historyDir)
+  check('history: snapshots land in a history/ subdirectory (never watched)',
+    historyNames.length >= 4 && historyNames.every((name) => /\.json$/.test(name)),
+    JSON.stringify(historyNames))
+  const mismatch = historyNames.filter((name) => !/^\d{8}T\d{9}Z-r\d+-[a-z0-9_]+\.json$/.test(name))
+  check('history: every snapshot name carries stamp + rev + device', mismatch.length === 0, JSON.stringify(mismatch))
+
+  const listed = await call('history-list', null)
+  check('history: list is newest-first with metadata',
+    listed.ok === true && listed.history.items.length === historyNames.length
+    && listed.history.items[0].name > listed.history.items[1].name
+    && typeof listed.history.items[0].epoch === 'number' && listed.history.items[0].epoch > 0
+    && typeof listed.history.items[0].rev === 'number'
+    && listed.history.items[0].foreign === false
+    && listed.history.items[0].entries !== null,
+    JSON.stringify(listed.history.items.slice(0, 2)))
+  check('history: list also reports the directory on the snapshot block',
+    listed.snapshot.storage.historyDir === historyDir
+    && listed.snapshot.storage.historyCount === listed.history.items.length,
+    JSON.stringify({ dir: listed.snapshot.storage.historyDir }))
+
+  // Roll back to the OLDEST snapshot of this run: the v1 content must return
+  // and the revision must move FORWARD (never backwards).
+  const oldest = listed.history.items[listed.history.items.length - 1]
+  const revBeforeRollback = listed.snapshot.data.rev
+  const rolled = await call('history-restore', { name: oldest.name, baseRev: revBeforeRollback })
+  check('history: rollback adopts the snapshot and moves rev forward',
+    rolled.ok === true && rolled.saved === true && rolled.snapshot.data.rev === revBeforeRollback + 1,
+    JSON.stringify({ ok: rolled.ok, saved: rolled.saved, rev: rolled.snapshot.data.rev }))
+  const badName = await call('history-restore', { name: '../memory.json', baseRev: await rev() })
+  check('history: a traversal-style name is refused before touching the disk',
+    badName.ok === false && String(badName.message).includes('无效'), JSON.stringify(badName.message))
+
+  const beforeSnapshotDelete = (await readdir(historyDir)).length
+  const deletedSnapshot = await call('history-delete', { name: oldest.name })
+  check('history: deleting one snapshot leaves the store untouched',
+    deletedSnapshot.ok === true && deletedSnapshot.saved === false
+    && (await readdir(historyDir)).length === beforeSnapshotDelete - 1,
+    JSON.stringify(deletedSnapshot.message))
+
+  // Retention: 20 per device. Drive enough saves to overflow it and check that
+  // the count is exactly the cap (oldest evicted, newest kept).
+  for (let i = 0; i < 22; i += 1) {
+    await call('save-entry', {
+      entry: { id: 'fill-' + i, title: 'FILL ' + i, content: 'x', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 },
+      baseRev: await rev(),
+    })
+  }
+  const afterFill = await call('history-list', null)
+  check('history: retention keeps exactly the newest 20 snapshots',
+    afterFill.history.items.length === 20, String(afterFill.history.items.length))
+  const keptRevs = afterFill.history.items.map((item) => item.rev)
+  check('history: the newest snapshot is the current revision',
+    keptRevs[0] === afterFill.snapshot.data.rev
+    && Math.min(...keptRevs) > 4,
+    JSON.stringify(keptRevs.slice(0, 3) + ' ... ' + keptRevs.slice(-2)))
+
+  // ---- source mode (F16) ----
+  const source = await call('read-source', null)
+  check('source: read-source returns the exact serialisation',
+    source.ok === true && typeof source.source === 'string'
+    && source.source.includes('"$schema": "./memory.schema.json"')
+    && source.source.includes('"version": 2'),
+    source.source.slice(0, 100))
+  check('source: the text is byte-identical to what a save would write',
+    source.source === readFileSync(featureStore, 'utf8'))
+
+  const parsedSource = JSON.parse(source.source)
+  parsedSource.entries = parsedSource.entries.map((entry) => (entry.title === 'FILL 21' ? { ...entry, title: 'EDITED-IN-SOURCE' } : entry))
+  const wroteSource = await call('write-source', { text: JSON.stringify(parsedSource, null, 2), baseRev: source.snapshot.data.rev })
+  check('source: write-source adopts the edit and reports the shape',
+    wroteSource.ok === true && wroteSource.saved === true
+    && String(wroteSource.message).includes('已按源码保存')
+    && wroteSource.snapshot.data.entries.some((entry) => entry.title === 'EDITED-IN-SOURCE'),
+    JSON.stringify(wroteSource.message))
+
+  const brokenSource = await call('write-source', { text: '{ "entries": [', baseRev: await rev() })
+  check('source: broken JSON is refused with the parser message',
+    brokenSource.ok === false && String(brokenSource.message).includes('JSON'), JSON.stringify(brokenSource.message))
+  const emptyObject = await call('write-source', { text: '{}', baseRev: await rev() })
+  check('source: an empty object cannot wipe the store', emptyObject.ok === false,
+    JSON.stringify(emptyObject.message))
+  const arraySource = await call('write-source', { text: '[1,2,3]', baseRev: await rev() })
+  check('source: a non-object document is refused', arraySource.ok === false, JSON.stringify(arraySource.message))
+  const futureSource = await call('write-source', { text: JSON.stringify({ version: 9, entries: [] }), baseRev: await rev() })
+  check('source: a future format version is refused', futureSource.ok === false
+    && String(futureSource.message).includes('版本'), JSON.stringify(futureSource.message))
+  const staleSource = await call('write-source', { text: source.source, baseRev: 3 })
+  check('source: a stale baseRev is a conflict, not an overwrite',
+    staleSource.ok === false && staleSource.conflict === true)
+  const droppedSource = await call('write-source', {
+    text: JSON.stringify({
+      version: 2,
+      budgetChars: 999999,
+      activeSetId: 'st-nowhere',
+      entries: [{ title: 'A', content: 'B' }, { title: '', content: '' }],
+      sets: [{ id: 'st-default', name: '默认' }, { id: 'st-ghost', name: '幽灵' }],
+    }, null, 2),
+    baseRev: await rev(),
+  })
+  check('source: corrections are disclosed (dropped item, option fix, orphan activeSetId)',
+    droppedSource.ok === true && String(droppedSource.message).includes('1 条条目未能载入')
+    && String(droppedSource.message).includes('budgetChars')
+    && String(droppedSource.message).includes('activeSetId')
+    && String(droppedSource.message).includes('没有该配置集'),
+    JSON.stringify(droppedSource.message))
+  check('source: the adopted store really has the corrected values',
+    droppedSource.snapshot.data.budgetChars === 40000
+    && droppedSource.snapshot.data.entries.length === 1
+    && droppedSource.snapshot.data.activeSetId === 'st-default'
+    && droppedSource.snapshot.data.entries[0].setId === 'st-default'
+    && droppedSource.snapshot.data.sets.length === 2,
+    JSON.stringify({
+      budget: droppedSource.snapshot.data.budgetChars,
+      active: droppedSource.snapshot.data.activeSetId,
+      sets: droppedSource.snapshot.data.sets,
+    }))
+  // Truncation is the other silent-loss channel a source paste could open:
+  // an over-long field must be cut AND reported, never cut quietly.
+  const longSource = await call('write-source', {
+    text: JSON.stringify({
+      version: 2,
+      sets: [{ id: 'st-default', name: '默认' }],
+      activeSetId: 'st-default',
+      entries: [{ title: 'x'.repeat(200), content: 'y'.repeat(7000) }],
+      profiles: [{ name: 'n', content: 'z'.repeat(5000) }],
+    }, null, 2),
+    baseRev: await rev(),
+  })
+  check('source: over-long fields are truncated AND disclosed',
+    longSource.ok === true && String(longSource.message).includes('已被截断')
+    && longSource.snapshot.data.entries[0].title.length === 120
+    && longSource.snapshot.data.entries[0].content.length === 6000
+    && longSource.snapshot.data.profiles[0].content.length === 4000,
+    JSON.stringify(longSource.message))
+
+  // ---- restore-data: the whole-store replace door (F14) ----
+  const backupEnvelope = {
+    app: 'dsh-instruction-memory',
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    data: {
+      version: 2,
+      enabled: true,
+      budgetChars: 2500,
+      backupDir: 'D:\\should-not-be-adopted',
+      activeSetId: 'st-restored',
+      sets: [{ id: 'st-restored', name: '恢复到这套' }],
+      entries: [{ id: 'r1', title: 'RESTORED', content: '整体替换进来的指令', mode: 'always', when: '', priority: 1, enabled: true, tags: [], setId: 'st-restored', updatedAt: 1 }],
+      profiles: [],
+    },
+  }
+  const beforeRestore = await rev()
+  const restored = await call('restore-data', { payload: backupEnvelope, baseRev: beforeRestore })
+  check('restore: the whole store is replaced by the payload',
+    restored.ok === true && restored.saved === true
+    && restored.snapshot.data.sets.length === 1
+    && restored.snapshot.data.sets[0].name === '恢复到这套'
+    && restored.snapshot.data.entries.length === 1
+    && restored.snapshot.data.entries[0].title === 'RESTORED'
+    && restored.snapshot.data.budgetChars === 2500
+    && restored.snapshot.data.rev === beforeRestore + 1,
+    JSON.stringify({ msg: restored.message }))
+  check('restore: the machine-local backup location is preserved, not adopted',
+    restored.snapshot.data.backupDir === '' && restored.snapshot.storage.backupDir === '',
+    JSON.stringify(restored.snapshot.data.backupDir))
+  const restoredJournal = await call('history-list', null)
+  check('restore: the replaced content is still recoverable from history',
+    restoredJournal.history.items.some((item) => item.rev === beforeRestore),
+    JSON.stringify(restoredJournal.history.items.slice(0, 4).map((item) => item.rev)))
+  const restoreJunk = await call('restore-data', { payload: { hello: 'world' }, baseRev: await rev() })
+  check('restore: an unrelated JSON object is refused', restoreJunk.ok === false, JSON.stringify(restoreJunk.message))
+  const restoreStale = await call('restore-data', { payload: backupEnvelope, baseRev: 1 })
+  check('restore: a stale baseRev is a conflict', restoreStale.ok === false && restoreStale.conflict === true)
+
+  // ---- export shape + import set mapping ----
+  const exported = await call('export-data', null)
+  check('export: the envelope carries every set and the file-format version',
+    exported.ok === true && exported.saved === false && exported.export.version === 2
+    && exported.export.data.version === 2
+    && Array.isArray(exported.export.data.sets)
+    && exported.export.data.activeSetId === 'st-restored'
+    && exported.export.data.$schema === './memory.schema.json',
+    JSON.stringify(Object.keys(exported.export)))
+
+  const imported = await call('import-data', {
+    payload: {
+      app: 'dsh-instruction-memory',
+      version: 2,
+      data: {
+        version: 2,
+        activeSetId: 'st-imported',
+        sets: [{ id: 'st-imported', name: '导入的集合' }],
+        entries: [{ id: 'imp-1', title: 'IMPORTED', content: '带配置集导入', mode: 'always', when: '', priority: 1, enabled: true, tags: [], setId: 'st-imported', updatedAt: 1 }],
+        profiles: [],
+      },
+    },
+    baseRev: await rev(),
+  })
+  check('import: a declared set is created and the entry is filed into it',
+    imported.ok === true && imported.saved === true
+    && imported.snapshot.data.sets.length === 2
+    && imported.snapshot.sets.list.find((set) => set.name === '导入的集合').entries === 1
+    && String(imported.message).includes('新建配置集 1 个'),
+    JSON.stringify({ msg: imported.message, sets: imported.snapshot.sets.list }))
+  const reimported = await call('import-data', {
+    payload: {
+      data: {
+        version: 2,
+        sets: [{ id: 'st-imported', name: '导入的集合' }],
+        entries: [{ id: 'imp-1', title: 'IMPORTED', content: '带配置集导入', mode: 'always', when: '', priority: 1, enabled: true, tags: [], setId: 'st-imported', updatedAt: 1 }],
+      },
+    },
+    baseRev: await rev(),
+  })
+  check('import: re-importing the same file stays a no-op (per-set de-duplication)',
+    reimported.ok === true && reimported.saved === false
+    && reimported.snapshot.sets.list.find((set) => set.name === '导入的集合').entries === 1,
+    JSON.stringify({ msg: reimported.message }))
+  const orphanImport = await call('import-data', {
+    payload: {
+      data: {
+        entries: [{ id: 'orphan-1', title: 'ORPHAN', content: 'x', mode: 'always', when: '', priority: 1, enabled: true, tags: [], setId: 'st-does-not-exist', updatedAt: 1 }],
+      },
+    },
+    baseRev: await rev(),
+  })
+  check('import: an item naming an unknown set falls back to the active set and says so',
+    orphanImport.ok === true && orphanImport.saved === true
+    && String(orphanImport.message).includes('已归入当前配置集')
+    && orphanImport.snapshot.data.entries.some((entry) => entry.title === 'ORPHAN'),
+    JSON.stringify(orphanImport.message))
+
+  // ---- F18: backup location ----
+  const backupRoot = join(FEATURE_HOME, 'cloud backups')
+  await mkdir(backupRoot, { recursive: true })
+  const relative = await call('set-options', { backupDir: 'relative/dir', baseRev: await rev() })
+  check('backup: a relative path is refused with the reason',
+    relative.ok === false && String(relative.message).includes('绝对路径'), JSON.stringify(relative.message))
+  const missing = await call('set-options', { backupDir: join(FEATURE_HOME, 'nope'), baseRev: await rev() })
+  check('backup: a non-existent directory is refused before it is stored',
+    missing.ok === false && (await snap()).data.backupDir === '', JSON.stringify(missing.message))
+  // A FILE where a directory is expected is the other easy mistake.
+  const filePath = join(FEATURE_HOME, 'not-a-dir.txt')
+  await writeFile(filePath, 'x', 'utf8')
+  const notADir = await call('set-options', { backupDir: filePath, baseRev: await rev() })
+  check('backup: a path that is a file is refused with "not a directory"',
+    notADir.ok === false && String(notADir.message).includes('不是目录'), JSON.stringify(notADir.message))
+  const applied = await call('set-options', { backupDir: backupRoot, baseRev: await rev() })
+  check('backup: a usable directory is accepted, persisted and reported',
+    applied.ok === true && applied.saved === true
+    && applied.snapshot.storage.backupDir === backupRoot
+    && applied.snapshot.storage.isDefaultBackupDir === false
+    && String(applied.message).includes('备份位置已更新'),
+    JSON.stringify(applied.message))
+
+  const exportToDir = await call('export-to-dir', null)
+  const backupFiles = await readdir(backupRoot)
+  check('backup: export-to-dir writes a dated export into the custom folder',
+    exportToDir.ok === true && String(exportToDir.message).includes(backupRoot)
+    && backupFiles.some((name) => /^dsh-instruction-memory-\d{8}-\d{6}Z\.json$/.test(name)),
+    JSON.stringify(backupFiles))
+  check('backup: the export written there is a complete store (all sets)',
+    (() => {
+      const name = backupFiles.find((file) => file.startsWith('dsh-instruction-memory-'))
+      const envelope = JSON.parse(readFileSync(join(backupRoot, name), 'utf8'))
+      return envelope.app === 'dsh-instruction-memory' && Array.isArray(envelope.data.sets)
+        && envelope.data.sets.length >= 2
+    })(), JSON.stringify(backupFiles))
+
+  // A save after setting the location must leave BOTH rolling copies: the one
+  // next to the store (what crash recovery reads) and the custom one.
+  await call('save-entry', {
+    entry: { id: 'after-backup', title: 'AFTER-BACKUP', content: 'x', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 },
+    baseRev: await rev(),
+  })
+  check('backup: both rolling copies exist after a save',
+    existsSync(join(featureDir, 'memory.json.bak')) && existsSync(join(backupRoot, 'memory.json.bak')),
+    JSON.stringify(await readdir(backupRoot)))
+  check('backup: history follows the custom location',
+    (await readdir(join(backupRoot, 'history'))).length > 0,
+    JSON.stringify(await readdir(backupRoot)))
+  const cleared = await call('set-options', { backupDir: '', baseRev: await rev() })
+  check('backup: clearing it returns to the default and says so',
+    cleared.ok === true && cleared.snapshot.storage.isDefaultBackupDir === true
+    && String(cleared.message).includes('默认备份位置'),
+    JSON.stringify(cleared.message))
+
+  // ---- the schema file the plugin leaves next to the store ----
+  check('schema: a copy of memory.schema.json sits next to the store and parses',
+    (() => {
+      try {
+        const schema = JSON.parse(readFileSync(join(featureDir, 'memory.schema.json'), 'utf8'))
+        return schema.title !== undefined && schema.properties.entries !== undefined
+      } catch {
+        return false
+      }
+    })(), JSON.stringify(await readdir(featureDir)))
+
+  process.env.DSH_HOME = previousHome
+  await rm(FEATURE_HOME, { recursive: true, force: true })
 }
 
 console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')

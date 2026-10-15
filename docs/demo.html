@@ -84,6 +84,42 @@
     ],
   }
 
+  // F13 配置集：演示数据里放两套，好让「切换」真的改变注入内容。所有既有条目
+  // 归入「默认」，另加一条只属于「工作（示例）」的条目。
+  ;(function seedSets() {
+    DEMO_STORE.version = 2
+    DEMO_STORE.$schema = './memory.schema.json'
+    DEMO_STORE.backupDir = ''
+    DEMO_STORE.activeSetId = 'st-demo-default'
+    DEMO_STORE.sets = [
+      { id: 'st-demo-default', name: '默认' },
+      { id: 'st-demo-work', name: '工作（示例）' },
+    ]
+    DEMO_STORE.entries.forEach(function (e) { e.setId = 'st-demo-default' })
+    ;(DEMO_STORE.profiles || []).forEach(function (p) { p.setId = 'st-demo-default' })
+    DEMO_STORE.entries.push({
+      id: 'im-demo-work',
+      title: '工作集专属',
+      content: '这条只属于「工作（示例）」配置集。切换到它时，上面几条指令与用户形象都不会被注入——和真实宿主一样，注入只渲染当前激活的那一套。',
+      mode: 'always', when: '', priority: 1, enabled: true, tags: ['演示'],
+      setId: 'st-demo-work', updatedAt: Date.now() - 3600000,
+    })
+  })()
+
+  /** 与宿主 activeScope/inScope 同义：'' 归属当前集合。 */
+  function demoInScope(item) {
+    var own = item && typeof item.setId === 'string' && item.setId !== '' ? item.setId : DEMO_STORE.activeSetId
+    return own === DEMO_STORE.activeSetId
+  }
+
+  function demoScopedEntries() {
+    return DEMO_STORE.entries.filter(demoInScope)
+  }
+
+  function demoScopedProfiles() {
+    return (DEMO_STORE.profiles || []).filter(demoInScope)
+  }
+
   // A compact, faithful copy of the Host's injection planning (see
   // planInjection in lib/index.js): it generates both the preview text and
   // the per-entry included/omitted plan the Client's F1 budget meter renders,
@@ -111,7 +147,7 @@
   ].join('\n')
 
   function demoProfilesBlock() {
-    var active = (Array.isArray(DEMO_STORE.profiles) ? DEMO_STORE.profiles : [])
+    var active = demoScopedProfiles()
       .filter(function (p) { return p && p.enabled === true && p.content })
     if (active.length === 0) return { text: '', profiles: [], chars: 0 }
     var blocks = active.map(function (p) {
@@ -144,7 +180,7 @@
     }
     if (DEMO_STORE.enabled !== true) return blank()
     var persona = demoProfilesBlock()
-    var active = DEMO_STORE.entries.filter(function (e) { return e.enabled && e.content !== '' })
+    var active = demoScopedEntries().filter(function (e) { return e.enabled && e.content !== '' })
 
     var blocks = []
     var included = []
@@ -198,16 +234,56 @@
     }
   }
 
+  /** Where a fresh set id comes from (mirrors the Host's st- prefix). */
+  function demoSetId() {
+    return 'st-demo-' + Math.random().toString(36).slice(2, 8)
+  }
+
   function demoSnapshot() {
     var plan = demoPlan()
+    // The panel edits and lists ONLY the active set (exactly like the real
+    // Host's snapshot), so a demo switch really empties the list.
+    var full = JSON.parse(JSON.stringify(DEMO_STORE))
+    var data = full
+    data.entries = demoScopedEntries().map(function (e) { return JSON.parse(JSON.stringify(e)) })
+    data.profiles = demoScopedProfiles().map(function (p) { return JSON.parse(JSON.stringify(p)) })
+    var belongsTo = function (item, id) {
+      var own = item && typeof item.setId === 'string' && item.setId !== '' ? item.setId : DEMO_STORE.activeSetId
+      return own === id
+    }
+    var setList = (DEMO_STORE.sets || []).map(function (s) {
+      return {
+        id: s.id,
+        name: s.name,
+        active: s.id === DEMO_STORE.activeSetId,
+        entries: (DEMO_STORE.entries || []).filter(function (e) { return belongsTo(e, s.id) }).length,
+        profiles: (DEMO_STORE.profiles || []).filter(function (p) { return belongsTo(p, s.id) }).length,
+      }
+    })
     return {
-      data: JSON.parse(JSON.stringify(DEMO_STORE)),
+      data: data,
+      sets: {
+        activeId: DEMO_STORE.activeSetId,
+        scoped: true,
+        total: { entries: full.entries.length, profiles: full.profiles.length },
+        list: setList,
+      },
       storage: {
+        // The store file NEVER moves with the backup location — only the
+        // backup copies do (same rule as the real host).
         path: 'C:\\Users\\demo\\.dsh\\instruction-memory\\memory.json',
         error: null,
         warning: null,
         savedAt: Date.now() - 5 * 60000,
         migratedFrom: null,
+        onDisk: true,
+        backupDir: DEMO_STORE.backupDir || '',
+        isDefaultBackupDir: !DEMO_STORE.backupDir,
+        backupPath: (DEMO_STORE.backupDir || 'C:\\Users\\demo\\.dsh\\instruction-memory') + '\\memory.json.bak',
+        historyDir: (DEMO_STORE.backupDir || 'C:\\Users\\demo\\.dsh\\instruction-memory') + '\\history',
+        historyCount: 0,
+        historyError: null,
+        schemaFile: 'C:\\Users\\demo\\.dsh\\instruction-memory\\memory.schema.json',
       },
       injection: {
         registered: plan.text !== '',
@@ -226,8 +302,69 @@
       limits: {
         minBudget: 800, maxBudget: 40000, maxEntries: 200,
         maxProfiles: 50, maxProfileName: 40, maxProfileContent: 4000,
+        maxSets: 20, maxSetName: 30, maxHistory: 20, maxBackupDir: 512,
+        maxBodyChars: 3218000,
       },
     }
+  }
+
+  /** A no-op answer: ok, nothing written (mirrors the real envelope). */
+  function demoNoop() {
+    return {
+      ok: true,
+      json: async function () {
+        return { ok: true, saved: false, message: null, snapshot: demoSnapshot() }
+      },
+    }
+  }
+
+  /** Uniform route envelope for the demo host (the real one answers the same shape). */
+  function demoReply(ok, message) {
+    return {
+      ok: true,
+      json: async function () {
+        return {
+          ok: ok === true,
+          saved: ok === true,
+          message: message === undefined ? null : message,
+          snapshot: demoSnapshot(),
+        }
+      },
+    }
+  }
+
+  /**
+   * Adopt a whole store object (源码模式 / 整体替换). Mirrors the parts of the
+   * Host's loader a demo needs to stay believable: sets are kept, every item is
+   * stamped onto an existing set, missing ids are minted.
+   */
+  function demoAdoptStore(parsed) {
+    DEMO_STORE.version = 2
+    DEMO_STORE.enabled = parsed.enabled !== false
+    DEMO_STORE.budgetChars = typeof parsed.budgetChars === 'number' ? parsed.budgetChars : 4000
+    DEMO_STORE.sets = Array.isArray(parsed.sets) && parsed.sets.length > 0
+      ? parsed.sets.map(function (s) { return { id: String(s.id), name: String(s.name).slice(0, 30) } })
+      : [{ id: 'st-demo-default', name: '默认' }]
+    DEMO_STORE.activeSetId = DEMO_STORE.sets.some(function (s) { return s.id === parsed.activeSetId })
+      ? parsed.activeSetId
+      : DEMO_STORE.sets[0].id
+    DEMO_STORE.entries = (Array.isArray(parsed.entries) ? parsed.entries : []).map(function (e) {
+      var entry = JSON.parse(JSON.stringify(e))
+      entry.id = entry.id || ('im-demo-' + Math.random().toString(36).slice(2, 8))
+      entry.setId = DEMO_STORE.sets.some(function (s) { return s.id === entry.setId })
+        ? entry.setId
+        : DEMO_STORE.activeSetId
+      entry.tags = Array.isArray(entry.tags) ? entry.tags : []
+      return entry
+    })
+    DEMO_STORE.profiles = (Array.isArray(parsed.profiles) ? parsed.profiles : []).map(function (p) {
+      var profile = JSON.parse(JSON.stringify(p))
+      profile.id = profile.id || ('pf-demo-' + Math.random().toString(36).slice(2, 8))
+      profile.setId = DEMO_STORE.sets.some(function (s) { return s.id === profile.setId })
+        ? profile.setId
+        : DEMO_STORE.activeSetId
+      return profile
+    })
   }
 
   window.fetch = async function (url, options) {
@@ -237,6 +374,14 @@
         var entry = Object.assign({}, payload.args.entry)
         if (!entry.id) entry.id = 'im-demo-' + Math.random().toString(36).slice(2, 8)
         entry.updatedAt = Date.now()
+        // The interactive path always files into the ACTIVE set (same rule as
+        // the real Host — an edit can never move an item between sets), and an
+        // id owned by another set is re-minted rather than replaced.
+        entry.setId = DEMO_STORE.activeSetId
+        var foreignId = DEMO_STORE.entries.some(function (e) {
+          return e.id === entry.id && e.setId !== DEMO_STORE.activeSetId
+        })
+        if (foreignId) entry.id = 'im-demo-' + Math.random().toString(36).slice(2, 8)
         var list = DEMO_STORE.entries
         var index = -1
         for (var i = 0; i < list.length; i += 1) if (list[i].id === entry.id) { index = i; break }
@@ -244,13 +389,26 @@
         else list.push(entry)
         break
       }
-      case 'delete-entry':
-        DEMO_STORE.entries = DEMO_STORE.entries.filter(function (e) { return e.id !== payload.args.id })
+      case 'delete-entry': {
+        var doomed = payload.args.id
+        var owned = DEMO_STORE.entries.some(function (e) {
+          return e.id === doomed && demoInScope(e)
+        })
+        if (!owned) return demoNoop()
+        DEMO_STORE.entries = DEMO_STORE.entries.filter(function (e) { return e.id !== doomed })
         break
-      case 'set-options':
+      }
+      case 'set-options': {
         if (typeof payload.args.enabled === 'boolean') DEMO_STORE.enabled = payload.args.enabled
         if (typeof payload.args.budgetChars === 'number') DEMO_STORE.budgetChars = payload.args.budgetChars
+        if (typeof payload.args.backupDir === 'string') {
+          DEMO_STORE.backupDir = payload.args.backupDir.trim()
+          return demoReply(true, DEMO_STORE.backupDir === ''
+            ? '已恢复默认备份位置（版本历史与导出与存储文件同目录）'
+            : '备份位置已更新：' + DEMO_STORE.backupDir + '（版本历史与「导出到备份目录」随之改变；存储文件本身不移动）')
+        }
         break
+      }
       case 'batch': {
         // Demo stand-in for the Host's single-transaction batch route.
         var b = payload.args || {}
@@ -306,13 +464,136 @@
         DEMO_STORE.profiles = (DEMO_STORE.profiles || [])
           .filter(function (p) { return p.id !== payload.args.id })
         break
+      // ---- F13 配置集 ----
+      case 'save-set': {
+        var wanted = Object.assign({}, payload.args.set)
+        var wantedName = typeof wanted.name === 'string'
+          ? wanted.name.split(/\r?\n/).join(' ').trim().slice(0, 30)
+          : ''
+        if (wantedName === '') return demoReply(false, '配置集名称不能为空（单行，最多 30 字符）')
+        var sameName = function (s) { return s.name === wantedName && s.id !== wanted.id }
+        if (DEMO_STORE.sets.some(sameName)) return demoReply(false, '已存在同名配置集「' + wantedName + '」')
+        if (!wanted.id) {
+          if (DEMO_STORE.sets.length >= 20) return demoReply(false, '最多创建 20 个配置集')
+          DEMO_STORE.sets.push({ id: demoSetId(), name: wantedName })
+          return demoReply(true, '已创建配置集「' + wantedName + '」；它是空的，点击「切换」后才会注入它')
+        }
+        var renameAt = -1
+        for (var si = 0; si < DEMO_STORE.sets.length; si += 1) {
+          if (DEMO_STORE.sets[si].id === wanted.id) { renameAt = si; break }
+        }
+        if (renameAt < 0) return demoReply(false, '没有该配置集（可能已被其他窗口删除）')
+        DEMO_STORE.sets[renameAt].name = wantedName
+        return demoReply(true, '已重命名为「' + wantedName + '」')
+      }
+      case 'delete-set': {
+        var deleteId = payload.args.id
+        var targetSet = null
+        DEMO_STORE.sets.forEach(function (s) { if (s.id === deleteId) targetSet = s })
+        if (targetSet === null) return demoReply(false, '没有该配置集')
+        if (DEMO_STORE.sets.length <= 1) return demoReply(false, '至少要保留一个配置集')
+        if (deleteId === DEMO_STORE.activeSetId) return demoReply(false, '不能删除当前激活的配置集；请先切换到其他配置集')
+        DEMO_STORE.sets = DEMO_STORE.sets.filter(function (s) { return s.id !== deleteId })
+        DEMO_STORE.entries = DEMO_STORE.entries.filter(function (e) { return e.setId !== deleteId })
+        DEMO_STORE.profiles = (DEMO_STORE.profiles || []).filter(function (p) { return p.setId !== deleteId })
+        return demoReply(true, '已删除配置集「' + targetSet.name + '」及其中的条目与形象')
+      }
+      case 'set-active-set': {
+        var activeId = payload.args.id
+        var found = DEMO_STORE.sets.some(function (s) { return s.id === activeId })
+        if (!found) return demoReply(false, '没有该配置集（可能已被其他窗口删除）')
+        if (activeId === DEMO_STORE.activeSetId) return demoNoop()
+        DEMO_STORE.activeSetId = activeId
+        var activeName = ''
+        DEMO_STORE.sets.forEach(function (s) { if (s.id === activeId) activeName = s.name })
+        return demoReply(true, '已切换到配置集「' + activeName + '」，注入内容已随之更新')
+      }
+      case 'duplicate-set': {
+        var copyFrom = null
+        DEMO_STORE.sets.forEach(function (s) { if (s.id === payload.args.id) copyFrom = s })
+        if (copyFrom === null) return demoReply(false, '没有该配置集')
+        if (DEMO_STORE.sets.length >= 20) return demoReply(false, '最多 20 个配置集')
+        var copyName = (payload.args.name || copyFrom.name + ' 副本').trim().slice(0, 30)
+        if (DEMO_STORE.sets.some(function (s) { return s.name === copyName })) return demoReply(false, '已存在同名配置集「' + copyName + '」')
+        var copyId = demoSetId()
+        var stamp = Date.now()
+        var copiedEntries = DEMO_STORE.entries.filter(function (e) { return e.setId === copyFrom.id })
+          .map(function (e) {
+            var copy = JSON.parse(JSON.stringify(e))
+            copy.id = 'im-demo-' + Math.random().toString(36).slice(2, 8)
+            copy.setId = copyId
+            copy.updatedAt = stamp
+            return copy
+          })
+        DEMO_STORE.sets.push({ id: copyId, name: copyName })
+        Array.prototype.push.apply(DEMO_STORE.entries, copiedEntries)
+        return demoReply(true, '已复制为「' + copyName + '」（' + copiedEntries.length + ' 条指令）；点击「切换」后才会注入它')
+      }
+      // ---- F14 版本历史（演示页面不落盘，因此没有快照可列） ----
+      case 'history-list':
+        return {
+          ok: true,
+          json: async function () {
+            return {
+              ok: true, saved: false, message: null, snapshot: demoSnapshot(),
+              history: { dir: '（演示页面不写历史快照；真实宿主会在存储目录的 history/ 子目录里保留最近 20 份）', items: [] },
+            }
+          },
+        }
+      case 'history-restore':
+      case 'history-delete':
+        return demoReply(false, '演示页面没有历史快照')
+      // ---- F16 源码模式 ----
+      case 'read-source':
+        return {
+          ok: true,
+          json: async function () {
+            return { ok: true, saved: false, message: null, source: JSON.stringify(DEMO_STORE, null, 2) + '\n', snapshot: demoSnapshot() }
+          },
+        }
+      case 'write-source': {
+        var text = payload.args.text
+        if (typeof text !== 'string' || text.trim() === '') return demoReply(false, '源码不能为空')
+        var parsedSource = null
+        try {
+          parsedSource = JSON.parse(text)
+        } catch (err) {
+          return demoReply(false, '源码不是有效的 JSON：' + (err && err.message ? err.message : err))
+        }
+        if (parsedSource === null || typeof parsedSource !== 'object' || Array.isArray(parsedSource)) {
+          return demoReply(false, '顶层必须是一个 JSON 对象')
+        }
+        if (typeof parsedSource.version === 'number' && parsedSource.version !== 2) {
+          return demoReply(false, '内容声明为格式版本 ' + parsedSource.version + '，本插件支持的格式版本为 1 / 2')
+        }
+        demoAdoptStore(parsedSource)
+        return demoReply(true, '已按源码保存（演示页面只改内存，不写文件）：'
+          + DEMO_STORE.entries.length + ' 条指令 / ' + (DEMO_STORE.profiles || []).length + ' 个用户形象 / '
+          + DEMO_STORE.sets.length + ' 个配置集')
+      }
+      // ---- F14 整体替换恢复 ----
+      case 'restore-data': {
+        var restorePayload = payload.args.payload
+        if (restorePayload === null || typeof restorePayload !== 'object') return demoReply(false, '恢复内容不是有效的 JSON 对象')
+        var restoreInner = restorePayload.data !== null && typeof restorePayload.data === 'object' ? restorePayload.data : restorePayload
+        var looksLikeStore = ['version', 'enabled', 'budgetChars', 'activeSetId', 'sets', 'entries', 'profiles']
+          .some(function (key) { return key in restoreInner })
+        if (!looksLikeStore) return demoReply(false, '内容不像本插件的存储文件')
+        demoAdoptStore(restoreInner)
+        return demoReply(true, '已用备份整体替换当前记忆（演示页面只改内存，不写文件）')
+      }
+      // ---- F18 备份位置 ----
+      case 'export-to-dir':
+        return demoReply(true, '演示页面不会真的写文件；真实宿主会把导出写入「'
+          + (DEMO_STORE.backupDir || '存储目录') + '」，文件名形如 dsh-instruction-memory-20261015-152355Z.json')
       case 'export-data':
         return {
           ok: true,
           json: async function () {
             return {
-              ok: true, saved: true, message: null,
-              export: { app: 'dsh-instruction-memory', version: 1, exportedAt: new Date().toISOString(), data: JSON.parse(JSON.stringify(DEMO_STORE)) },
+              ok: true, saved: false, message: null,
+              // 导出的是整份存储（所有配置集），不是当前激活的那一套。
+              export: { app: 'dsh-instruction-memory', version: 2, exportedAt: new Date().toISOString(), data: JSON.parse(JSON.stringify(DEMO_STORE)) },
               snapshot: demoSnapshot(),
             }
           },
