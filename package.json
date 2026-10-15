@@ -1,6 +1,6 @@
 {
   "name": "dsh-instruction-memory",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "User-only instruction memory for DSH: long-term instructions maintained in the settings UI and auto-injected into every conversation — the model has no write access. 指令记忆：只由用户在设置页维护的长期指令，自动注入此后每轮对话；模型没有任何写入口。",
   "license": "MIT",
   "type": "module",
@@ -29,6 +29,7 @@
     "README.md",
     "CHANGELOG.md",
     "LICENSE",
+    "memory.schema.json",
     "docs/screenshot.png"
   ],
   "keywords": [
@@ -57,7 +58,7 @@
   "author": "huangpeiyan",
   "scripts": {
     "lint": "node lint.mjs",
-    "test": "node lint.mjs && node host-range-test.mjs && node smoke-test.mjs && node contract-test.mjs && node verify.mjs",
+    "test": "node lint.mjs && node host-range-test.mjs && node smoke-test.mjs && node contract-test.mjs && node verify.mjs && node ui-test.mjs",
     "prepublishOnly": "node check-metadata.mjs"
   },
   "dsh": {
