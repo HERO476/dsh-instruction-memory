@@ -589,8 +589,14 @@ check('panel: resume clears the bar and the section returns',
   // The pause itself is a real write (it records the instant); expiry must add
   // NOT ONE byte on top of that — the stale instant is simply ignored.
   const afterPause = readFileSync(STORE_FILE, 'utf8')
-  check('F7: the pause is live right after the route call', injected() === '', injected().slice(0, 80))
-  await new Promise((resolve) => setTimeout(resolve, 300))
+  // Whether the 50ms mute is still live at THIS line is a race against the
+  // scheduler (a loaded CI runner can lapse it before we look), so the
+  // deterministic evidence that the pause landed is the recorded instant in
+  // the file — the expiry itself is what this smoke asserts, after a wait
+  // generous enough for a loaded runner.
+  check('F7: the 50ms pause landed (the instant is recorded in the store file)',
+    JSON.parse(afterPause).disabledUntil > 0, JSON.parse(afterPause).disabledUntil)
+  await new Promise((resolve) => setTimeout(resolve, 1000))
   check('F7: a 50ms pause expires by itself (section re-registered, no user action)',
     injected().length > 0, injected().slice(0, 80))
   check('F7: the expiry wrote nothing (file bytes unchanged, stale instant left in place)',
