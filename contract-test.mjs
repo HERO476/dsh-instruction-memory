@@ -103,11 +103,16 @@ async function rawRoute(handler, rawBody, headers) {
   const res = makeResponse()
   handler(req, res)
   req.fire()
-  for (let i = 0; i < 200; i += 1) {
+  // Poll for up to 15s of WALL TIME: a loaded runner can stall a route that
+  // does a real disk write (lock, two backup copies, rename, history
+  // snapshot) past any iteration count, which is what the isolated ubuntu
+  // cell failures were.
+  const deadline = Date.now() + 15000
+  for (;;) {
     if (res.read().body !== '') return res.read()
+    if (Date.now() > deadline) throw new Error('route never responded')
     await new Promise((resolve) => setTimeout(resolve, 10))
   }
-  throw new Error('route never responded')
 }
 
 async function callRoute(handler, payload) {

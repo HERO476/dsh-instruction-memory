@@ -98,11 +98,14 @@ async function rawRoute(body) {
   }
   handler(req, res)
   req.fire()
-  for (let i = 0; i < 400; i += 1) {
+  // Poll for up to 15s of WALL TIME: a loaded runner can stall a route that
+  // does a real disk write past any iteration count.
+  const deadline = Date.now() + 15000
+  for (;;) {
     if (out.body !== '') return out
+    if (Date.now() > deadline) throw new Error('route never responded')
     await new Promise((resolve) => setTimeout(resolve, 5))
   }
-  throw new Error('route never responded')
 }
 
 // The panel talks to the Host through fetch; route that straight into the
@@ -268,8 +271,13 @@ async function settle(rounds = 30, wait = 25) {
     // A host round trip started by this pass must LAND before the pass can
     // count as quiet: the panel's state changes only when the response is
     // absorbed, so breaking early is how a stale tree used to be returned.
-    for (let guard = 0; guard < 600 && inFlight > 0; guard += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 5))
+    // Wall-clock bound (15s): a loaded runner can stall a disk-writing route
+    // past any iteration count.
+    {
+      const inFlightDeadline = Date.now() + 15000
+      while (inFlight > 0 && Date.now() < inFlightDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 5))
+      }
     }
     await new Promise((resolve) => setTimeout(resolve, wait))
     // A round trip has to be allowed to LAND before the tree is treated as
