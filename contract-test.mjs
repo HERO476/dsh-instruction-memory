@@ -29,7 +29,19 @@ const check = (label, ok, detail) => {
 // The Host resolves its own data file under the harness home. Redirecting
 // DSH_HOME here is what guarantees this suite never reads or writes the user's
 // real memory store.
-const SCRATCH_HOME = fileURLToPath(new URL('./.test-dsh-home/', import.meta.url))
+/**
+ * Scratch homes carry a per-PROCESS suffix ("-p<pid>"). Every block deletes
+ * and re-creates its home around itself, so two concurrent runs of this suite
+ * (an IDE test task plus "npm test", say) would otherwise delete each other's
+ * store mid-write — which surfaced as a baffling ENOTEMPTY crash inside a
+ * cleanup rather than as a test failure. The gitignore pattern
+ * ".test-dsh-home-star" covers every variant. (No literal "star-slash" here:
+ * inside a block comment it would terminate the comment early.)
+ */
+const scratchHome = (name) =>
+  fileURLToPath(new URL('./.test-dsh-home' + name + '-p' + process.pid + '/', import.meta.url))
+
+const SCRATCH_HOME = scratchHome('')
 const STORE_FILE = join(SCRATCH_HOME, 'instruction-memory', 'memory.json')
 process.env.DSH_HOME = SCRATCH_HOME
 await rm(SCRATCH_HOME, { recursive: true, force: true })
@@ -1042,7 +1054,7 @@ async function statusFor(headers, body) {
   // synchronous tick as apply(), so a pre-fix host always delivered one
   // (empty) frame immediately.
   {
-    const BOOT_HOME = fileURLToPath(new URL('./.test-dsh-home-boot/', import.meta.url))
+    const BOOT_HOME = scratchHome('-boot')
     await rm(BOOT_HOME, { recursive: true, force: true })
     await mkdir(join(BOOT_HOME, 'instruction-memory'), { recursive: true })
     await writeFile(join(BOOT_HOME, 'instruction-memory', 'memory.json'), JSON.stringify({
@@ -1105,7 +1117,7 @@ async function statusFor(headers, body) {
  * settings page reading `state`.
  * ==================================================================== */
 {
-  const LAZY_HOME = fileURLToPath(new URL('./.test-dsh-home-lazy/', import.meta.url))
+  const LAZY_HOME = scratchHome('-lazy')
   await rm(LAZY_HOME, { recursive: true, force: true })
 
   const previousHome = process.env.DSH_HOME
@@ -1213,7 +1225,7 @@ async function statusFor(headers, body) {
  * this also pins the seam between the two halves.
  * ==================================================================== */
 {
-  const PLAN_HOME = fileURLToPath(new URL('./.test-dsh-home-plan/', import.meta.url))
+  const PLAN_HOME = scratchHome('-plan')
   await rm(PLAN_HOME, { recursive: true, force: true })
   const previousHome = process.env.DSH_HOME
   process.env.DSH_HOME = PLAN_HOME
@@ -1347,7 +1359,7 @@ async function statusFor(headers, body) {
  * are refused.
  * ==================================================================== */
 {
-  const BATCH_HOME = fileURLToPath(new URL('./.test-dsh-home-batch/', import.meta.url))
+  const BATCH_HOME = scratchHome('-batch')
   await rm(BATCH_HOME, { recursive: true, force: true })
   const previousHome = process.env.DSH_HOME
   process.env.DSH_HOME = BATCH_HOME
@@ -1507,7 +1519,7 @@ async function statusFor(headers, body) {
  * shape, injection placement/toggle, conflict guard, and import merge.
  * ==================================================================== */
 {
-  const PROFILE_HOME = fileURLToPath(new URL('./.test-dsh-home-profiles/', import.meta.url))
+  const PROFILE_HOME = scratchHome('-profiles')
   await rm(PROFILE_HOME, { recursive: true, force: true })
   const previousHome = process.env.DSH_HOME
   process.env.DSH_HOME = PROFILE_HOME
@@ -1678,7 +1690,7 @@ async function statusFor(headers, body) {
 // route driving every new command. Isolated because these tests MOVE the
 // active set and rewrite the store; the suites above assume a single set.
 {
-  const FEATURE_HOME = fileURLToPath(new URL('./.test-dsh-home-features/', import.meta.url))
+  const FEATURE_HOME = scratchHome('-features')
   await rm(FEATURE_HOME, { recursive: true, force: true })
   const previousHome = process.env.DSH_HOME
   process.env.DSH_HOME = FEATURE_HOME
@@ -2150,6 +2162,103 @@ async function statusFor(headers, body) {
 
   process.env.DSH_HOME = previousHome
   await rm(FEATURE_HOME, { recursive: true, force: true })
+}
+
+/* ---------------- first-run materialisation: what may and may not be overwritten ------- */
+
+// A store that appears AFTER boot (a hand-copied file, a backup dropped in by
+// another tool, a sync client) must never be destroyed by the settings page
+// opening. Three outcomes, and they are not interchangeable:
+//   nothing there -> materialise the empty store (the documented first run);
+//   readable      -> adopt it, write nothing;
+//   unreadable    -> keep the bytes, report the parse failure.
+// The third case used to be silent data loss: the file was replaced with an
+// empty store and the response said ok:true.
+{
+  const BOOT_HOME = scratchHome('-boot2')
+  await rm(BOOT_HOME, { recursive: true, force: true })
+  const previousHome = process.env.DSH_HOME
+
+  /** Mount a fresh Host on its own home, run prepare(), then call `state`. */
+  const bootCase = async (name, prepare) => {
+    const home = join(BOOT_HOME, name)
+    await mkdir(join(home, 'instruction-memory'), { recursive: true })
+    process.env.DSH_HOME = home
+    const storeFile = join(home, 'instruction-memory', 'memory.json')
+
+    let bootHandler = null
+    const bootHost = await import(new URL('./lib/index.js', import.meta.url).href + '?boot=' + name + Date.now())
+    bootHost.apply({
+      systemPrompt: { section: () => () => {} },
+      inject: (deps, callback) => {
+        callback({
+          webServer: { register: (route) => { bootHandler = route.handler; return () => {} } },
+          effect: (fn) => { fn(); return () => {} },
+        })
+        return null
+      },
+      get: () => undefined,
+      effect: (fn) => { fn(); return () => {} },
+    })
+    // Let the boot read settle before the file appears — that is the whole
+    // premise of these cases.
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    await prepare(storeFile)
+    const response = await callRoute(bootHandler, { method: 'state', args: null })
+    let onDisk = null
+    try {
+      onDisk = readFileSync(storeFile, 'utf8')
+    } catch {
+      onDisk = null
+    }
+    return { response, onDisk }
+  }
+
+  // A. Nothing ever appears: the first-run behaviour must be unchanged.
+  {
+    const { response, onDisk } = await bootCase('empty', async () => {})
+    check('first run: state materialises an empty v2 store and says it wrote',
+      response.ok === true && response.saved === true
+      && response.snapshot.data.version === 2 && response.snapshot.data.entries.length === 0
+      && response.snapshot.storage.onDisk === true
+      && JSON.parse(onDisk).version === 2,
+      JSON.stringify({ saved: response.saved, bytes: String(onDisk).length }))
+  }
+
+  // B. A readable store appears: adopt it, do not rewrite it.
+  {
+    const seeded = JSON.stringify({
+      version: 1,
+      enabled: true,
+      budgetChars: 4000,
+      entries: [{ id: 'late', title: 'LATE-FILE', content: 'copied in after boot', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 1 }],
+    })
+    const { response, onDisk } = await bootCase('readable', async (storeFile) => { await writeFile(storeFile, seeded, 'utf8') })
+    check('first run: a store that appears after boot is ADOPTED, not overwritten',
+      response.ok === true && response.saved === false
+      && response.snapshot.data.entries.length === 1
+      && response.snapshot.data.entries[0].title === 'LATE-FILE'
+      && response.snapshot.data.entries[0].setId === 'st-default'
+      && onDisk === seeded,
+      JSON.stringify({ saved: response.saved, same: onDisk === seeded }))
+  }
+
+  // C. An unreadable store appears: keep every byte and report it.
+  {
+    const corrupt = '{ "entries": [ this is not json'
+    const { response, onDisk } = await bootCase('corrupt', async (storeFile) => { await writeFile(storeFile, corrupt, 'utf8') })
+    check('first run: a CORRUPT store that appears after boot is left untouched and reported',
+      response.ok === true && response.saved === false
+      && onDisk === corrupt
+      && typeof response.snapshot.storage.error === 'string'
+      && response.snapshot.storage.error.includes('解析失败')
+      && response.snapshot.storage.onDisk === true
+      && response.snapshot.data.entries.length === 0,
+      JSON.stringify({ saved: response.saved, same: onDisk === corrupt, err: response.snapshot.storage.error }))
+  }
+
+  process.env.DSH_HOME = previousHome
+  await rm(BOOT_HOME, { recursive: true, force: true })
 }
 
 console.log(failures === 0 ? '\nALL PASS' : '\n' + failures + ' FAILED')

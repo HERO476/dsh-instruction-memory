@@ -18,7 +18,9 @@ import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const SCRATCH_HOME = fileURLToPath(new URL('./.test-dsh-home-ui/', import.meta.url))
+// Per-process scratch home: two concurrent runs must not delete each other's
+// store mid-write (see the same note in contract-test.mjs).
+const SCRATCH_HOME = fileURLToPath(new URL('./.test-dsh-home-ui-p' + process.pid + '/', import.meta.url))
 const STORE_FILE = join(SCRATCH_HOME, 'instruction-memory', 'memory.json')
 process.env.DSH_HOME = SCRATCH_HOME
 await rm(SCRATCH_HOME, { recursive: true, force: true })
@@ -89,12 +91,27 @@ async function rawRoute(body) {
 
 // The panel talks to the Host through fetch; route that straight into the
 // handler above so nothing is stubbed but the transport.
+//
+// `inFlight` is what makes this suite deterministic: a fixed number of "quiet"
+// render passes is a RACE (a write that takes longer than the window — a cold
+// page cache, an antivirus scanning freshly written files — left an assertion
+// sampling the tree before the response was absorbed). The counter stays up
+// until the response BODY has been consumed, because the client parses it and
+// then updates state in the same microtask chain.
+let inFlight = 0
 globalThis.fetch = async (url, options) => {
+  inFlight += 1
   const out = await rawRoute(options.body)
   return {
     ok: out.status >= 200 && out.status < 300,
     status: out.status,
-    json: async () => JSON.parse(out.body),
+    json: async () => {
+      try {
+        return JSON.parse(out.body)
+      } finally {
+        inFlight -= 1
+      }
+    },
   }
 }
 
@@ -219,6 +236,12 @@ async function settle(rounds = 30, wait = 25) {
       } catch (err) {
         check('effect runs without throwing', false, String(err && err.message ? err.message : err))
       }
+    }
+    // A host round trip started by this pass must LAND before the pass can
+    // count as quiet: the panel's state changes only when the response is
+    // absorbed, so breaking early is how a stale tree used to be returned.
+    for (let guard = 0; guard < 600 && inFlight > 0; guard += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
     }
     await new Promise((resolve) => setTimeout(resolve, wait))
     // A round trip has to be allowed to LAND before the tree is treated as

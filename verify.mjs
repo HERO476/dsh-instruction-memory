@@ -19,7 +19,11 @@ const PKG = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
 
 // The Host resolves its data file under the harness home; pin it to a scratch
 // directory so this suite can never read or write the user's real store.
-process.env.DSH_HOME = fileURLToPath(new URL('./.test-dsh-home/', import.meta.url))
+// Per-process scratch home: two concurrent runs must not delete each other's
+// store mid-write (see the same note in contract-test.mjs).
+const SCRATCH_HOME = fileURLToPath(new URL('./.test-dsh-home-p' + process.pid + '/', import.meta.url))
+const STORE_FILE = join(SCRATCH_HOME, 'instruction-memory', 'memory.json')
+process.env.DSH_HOME = SCRATCH_HOME
 
 let failures = 0
 const check = (label, ok, detail) => {
@@ -192,7 +196,7 @@ function fakeInject(services) {
 // Regression guard for the "memory must not be gated on the UI" rule: with no
 // web server anywhere, the prompt section must still be registered.
 {
-  const store = fileURLToPath(new URL('./.test-dsh-home/instruction-memory/memory.json', import.meta.url))
+  const store = STORE_FILE
   mkdirSync(dirname(store), { recursive: true })
   writeFileSync(store, JSON.stringify({
     version: 1,
@@ -228,7 +232,7 @@ function fakeInject(services) {
 // requirement is that none of it can change what gets injected — the same store
 // must render byte-identically with and without a logger attached.
 {
-  const store = fileURLToPath(new URL('./.test-dsh-home/instruction-memory/memory.json', import.meta.url))
+  const store = STORE_FILE
   mkdirSync(dirname(store), { recursive: true })
   writeFileSync(store, JSON.stringify({
     version: 1,
