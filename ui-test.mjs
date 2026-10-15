@@ -373,10 +373,37 @@ check('panel: the new set appears and stays inactive',
   JSON.stringify(texts(tree).filter((l) => l === '使用中' || l === '工作')))
 check('panel: creating a set does not change what is injected', injected().includes('回答语言'), injected().slice(0, 80))
 
+// ---- Review-fix regression (defect 1): a draft left open across a set ----
+// switch used to survive it, so the form on screen belonged to the OLD set
+// while 保存 filed into the NEW one (the server-side cross-set guard kept the
+// data safe; the UX was still wrong). Two structural facts shape this block:
+// the entry editor is a FULL TAKEOVER (the set switcher is not reachable while
+// it is open — pinned here so a future layout change cannot hide that), and
+// the persona editor renders INLINE inside the header, so the switcher stays
+// reachable — that is the path the bug ships through, and the block below
+// drives the real fix through it.
+tree = await click(tree, '＋ 新增指令')
+check('panel: the entry editor is open and takes over the panel (no switcher reachable)',
+  anyElement(tree, (el) => el.type === 'textarea' && el.props.maxLength === 6000) !== undefined
+  && buttons(tree, '切换').length === 0,
+  JSON.stringify({ switchButtons: buttons(tree, '切换').length }))
+tree = await click(tree, '取消')
+check('panel: cancelling the blank entry editor returns to the list',
+  buttons(tree, '切换').length === 1)
+
+tree = await click(tree, '＋ 新增形象')
+check('panel: the persona editor is open before the set switch',
+  anyElement(tree, (el) => el.type === 'textarea' && el.props.maxLength === 4000) !== undefined)
+
 tree = await click(tree, '切换')
 check('panel: switching reports back and empties the list',
   texts(tree).some((line) => line.includes('已切换到配置集')) && !hasText(tree, '回答语言'),
   JSON.stringify(texts(tree).filter((l) => l.includes('切换')).slice(0, 3)))
+check('panel: the set switch closed the persona editor that was open',
+  anyElement(tree, (el) => el.type === 'textarea' && el.props.maxLength === 4000) === undefined)
+check('panel: the closed draft is disclosed in the notice',
+  texts(tree).some((line) => line.includes('已关闭切换前打开的编辑草稿')),
+  JSON.stringify(texts(tree).filter((l) => l.includes('草稿') || l.includes('切换')).slice(0, 3)))
 check('ISOLATION through the UI: the old set is no longer injected', !injected().includes('回答语言'), injected().slice(0, 120))
 check('ISOLATION through the UI: personas follow the set too', !injected().includes('后端工程师'))
 
