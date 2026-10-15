@@ -26,6 +26,17 @@ const check = (label, actual, predicate) => {
   }
 }
 
+// A crash (route timeout, a throwing predicate) must still surface: print the
+// annotation and keep exit code 1 without cutting off the buffered output.
+process.on('uncaughtException', (err) => {
+  process.exitCode = 1
+  console.log('::error::uncaught: ' + String(err && err.stack ? err.stack : err).slice(0, 400))
+})
+process.on('unhandledRejection', (err) => {
+  process.exitCode = 1
+  console.log('::error::unhandledRejection: ' + String(err && err.stack ? err.stack : err).slice(0, 400))
+})
+
 const entry = (over) => ({
   id: 'im-1', title: 'T', content: 'C', mode: 'always', when: '',
   priority: 1, enabled: true, updatedAt: 1, ...over,

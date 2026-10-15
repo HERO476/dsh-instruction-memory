@@ -38,11 +38,13 @@ const check = (label, ok, detail) => {
 
 // A thrown error (e.g. click() finding no button) kills the suite without
 // reaching any check(); surface it the same way so the CI annotation carries
-// the actual reason.
+// the actual reason, and keep exit code 1 without cutting buffered output.
 process.on('uncaughtException', (err) => {
+  process.exitCode = 1
   console.log('::error::uncaught: ' + String(err && err.stack ? err.stack : err).slice(0, 400))
 })
 process.on('unhandledRejection', (err) => {
+  process.exitCode = 1
   console.log('::error::unhandledRejection: ' + String(err && err.stack ? err.stack : err).slice(0, 400))
 })
 

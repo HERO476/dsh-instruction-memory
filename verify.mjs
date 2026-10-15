@@ -34,6 +34,17 @@ const check = (label, ok, detail) => {
   if (!ok) console.log('::error::' + label + (detail === undefined ? '' : ' | ' + String(detail).slice(0, 200)))
 }
 
+// A crash outside any check() must still surface: print the annotation and
+// keep exit code 1 without cutting off the buffered output.
+process.on('uncaughtException', (err) => {
+  process.exitCode = 1
+  console.log('::error::uncaught: ' + String(err && err.stack ? err.stack : err).slice(0, 400))
+})
+process.on('unhandledRejection', (err) => {
+  process.exitCode = 1
+  console.log('::error::unhandledRejection: ' + String(err && err.stack ? err.stack : err).slice(0, 400))
+})
+
 /**
  * Poll until `predicate` holds instead of trusting a fixed sleep: a loaded CI
  * runner can take longer than any constant for the async boot read to reach

@@ -27,6 +27,17 @@ const check = (label, ok, detail) => {
   if (!ok) console.log('::error::' + label + (detail === undefined ? '' : ' | ' + String(detail).slice(0, 200)))
 }
 
+// A crash (route timeout, a throwing predicate) must still surface: print the
+// annotation and keep exit code 1 without cutting off the buffered output.
+process.on('uncaughtException', (err) => {
+  process.exitCode = 1
+  console.log('::error::uncaught: ' + String(err && err.stack ? err.stack : err).slice(0, 400))
+})
+process.on('unhandledRejection', (err) => {
+  process.exitCode = 1
+  console.log('::error::unhandledRejection: ' + String(err && err.stack ? err.stack : err).slice(0, 400))
+})
+
 /* ---------------- isolate the store: point DSH_HOME at a scratch dir ---------------- */
 
 // The Host resolves its own data file under the harness home. Redirecting
