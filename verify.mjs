@@ -514,6 +514,8 @@ if (captured && typeof captured.factory === 'function') {
       norm(envelope({ snapshot: null })) === null)
     check('client: a snapshot without data is unusable (absorb must show an error, not blank the panel)',
       norm(envelope({ snapshot: { storage: {} } })) === null)
+    check('client: a snapshot with data:null is equally unusable (absorb reads data.budgetChars)',
+      norm(envelope({ snapshot: { data: null, storage: {} } })) === null)
     check('client: an array response is unusable',
       norm([snap]) === null)
     check('client: null is unusable',

@@ -246,6 +246,12 @@
     var plan = demoPlan()
     // The panel edits and lists ONLY the active set (exactly like the real
     // Host's snapshot), so a demo switch really empties the list.
+    // sets.total is the WHOLE-STORE count (same rule as the real host), so it
+    // is captured from DEMO_STORE BEFORE the scoped arrays replace these
+    // fields below — `data` aliases `full`, and counting after the reassign
+    // used to report the current-set numbers as the store-wide totals.
+    var totalEntries = (DEMO_STORE.entries || []).length
+    var totalProfiles = (DEMO_STORE.profiles || []).length
     var full = JSON.parse(JSON.stringify(DEMO_STORE))
     var data = full
     data.entries = demoScopedEntries().map(function (e) { return JSON.parse(JSON.stringify(e)) })
@@ -268,7 +274,7 @@
       sets: {
         activeId: DEMO_STORE.activeSetId,
         scoped: true,
-        total: { entries: full.entries.length, profiles: full.profiles.length },
+        total: { entries: totalEntries, profiles: totalProfiles },
         list: setList,
       },
       storage: {
