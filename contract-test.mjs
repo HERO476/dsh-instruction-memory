@@ -2547,8 +2547,9 @@ async function statusFor(headers, body) {
       effect: (fn) => { fn(); return () => {} },
     })
     // Let the boot read settle before the file appears — that is the whole
-    // premise of these cases.
-    await new Promise((resolve) => setTimeout(resolve, 80))
+    // premise of these cases. A loaded runner can take longer than a small
+    // constant for the async boot, so wait generously.
+    await new Promise((resolve) => setTimeout(resolve, 250))
     await prepare(storeFile)
     const response = await callRoute(bootHandler, { method: 'state', args: null })
     let onDisk = null

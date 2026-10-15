@@ -338,7 +338,10 @@ async function type(node, predicate, value) {
  */
 async function settleAfterDebounce() {
   await settle()
-  await new Promise((resolve) => setTimeout(resolve, 300))
+  // The source editor validates 250 ms after the last keystroke; a loaded
+  // runner can push that timer past any small constant, so wait generously
+  // before the post-debounce settle.
+  await new Promise((resolve) => setTimeout(resolve, 800))
   return settle()
 }
 

@@ -31,6 +31,22 @@ const check = (label, ok, detail) => {
   console.log((ok ? 'PASS  ' : 'FAIL  ') + label + (ok || detail === undefined ? '' : '  -> ' + detail))
 }
 
+/**
+ * Poll until `predicate` holds instead of trusting a fixed sleep: a loaded CI
+ * runner can take longer than any constant for the async boot read to reach
+ * section registration, and a fixed 60ms wait is what an ubuntu cell
+ * occasionally lost to. Bounded at 5s; a timeout returns false and lets the
+ * assertion report the actual state.
+ */
+const waitFor = async (predicate, deadlineMs = 5000) => {
+  const start = Date.now()
+  for (;;) {
+    if (predicate()) return true
+    if (Date.now() - start >= deadlineMs) return false
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+}
+
 /* ---------------- Host half ---------------- */
 
 const host = await import(HOST_URL)
@@ -225,7 +241,7 @@ function fakeInject(services) {
   } catch (err) {
     threw = err
   }
-  await new Promise((resolve) => setTimeout(resolve, 60))
+  await waitFor(() => sections.length === 1)
   check('host: prompt section registers with NO web server at all', threw === null && sections.length === 1,
     'threw=' + (threw && threw.message) + ' sections=' + sections.length)
 }
@@ -255,7 +271,7 @@ function fakeInject(services) {
     }
     if (logger !== null) ctx.logger = logger
     host.apply(ctx)
-    await new Promise((resolve) => setTimeout(resolve, 60))
+    await waitFor(() => sections.length === 1)
     return sections.map((s) => (typeof s.text === 'function' ? s.text({}) : s.text)).join('')
   }
 
