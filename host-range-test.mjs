@@ -288,6 +288,8 @@ const MUST_PASS = [
   '0.2.1-alpha.0',
   '0.2.1-alpha.1',
   '0.2.1-alpha.2',
+  '0.2.1-alpha.3',
+  '0.2.1-alpha.4',
   '0.2.1-rc.2',
   '0.2.1',
   '0.3.0',
@@ -327,10 +329,13 @@ for (const version of MUST_FAIL) {
 // tuple only, so a 0.2.1 prerelease failed under npm's default semantics
 // while the host's includePrerelease gate still admitted it — the exact
 // silent two-mode split this file exists to prevent.
-// 0.2.1-alpha.2 (published 2026-10-09, current alpha dist-tag) was verified
-// live end to end on 2026-10-10 (contract matrix + a real host boot, 21/21);
-// pinned here so a future range rewrite cannot silently drop the newest line.
-for (const host of ['0.1.6-alpha.2', '0.1.7-rc.2', '0.2.1-alpha.1', '0.2.1-alpha.2']) {
+// 0.2.1-alpha.2 (published 2026-10-09) was verified live end to end on
+// 2026-10-10 (contract matrix + a real host boot, 21/21); pinned here so a
+// future range rewrite cannot silently drop the newest line. The same rule
+// pinned 0.2.1-alpha.3 / 0.2.1-alpha.4 after their 2026-10-16 verification
+// (contract matrix + a real host boot each, 21/21 both); alpha.4 has been the
+// alpha dist-tag since 2026-10-15 and is the version this machine actually runs.
+for (const host of ['0.1.6-alpha.2', '0.1.7-rc.2', '0.2.1-alpha.1', '0.2.1-alpha.2', '0.2.1-alpha.3', '0.2.1-alpha.4']) {
   const plain = semver.satisfies(host, declared)
   const pre = semver.satisfies(host, declared, { includePrerelease: true })
   check('REGRESSION GUARD: the shipped host ' + host + ' is admitted by both modes',
