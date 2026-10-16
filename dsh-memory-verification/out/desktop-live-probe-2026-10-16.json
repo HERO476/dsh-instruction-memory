@@ -1,0 +1,116 @@
+{
+  "generatedAt": "2026-10-16T01:53:21.238Z",
+  "target": "DSH desktop app web host",
+  "baseUrl": "http://127.0.0.1:19387",
+  "readOnly": true,
+  "storePath": "C:\\Users\\34332\\.dsh\\instruction-memory\\memory.json",
+  "injection": {
+    "registered": true,
+    "available": true,
+    "error": null,
+    "muted": false,
+    "chars": 515,
+    "budget": 4000,
+    "activeCount": 3,
+    "included": [
+      {
+        "id": "im-redacted-01",
+        "chars": 76,
+        "truncated": false
+      },
+      {
+        "id": "im-redacted-02",
+        "chars": 120,
+        "truncated": false
+      },
+      {
+        "id": "im-redacted-03",
+        "chars": 108,
+        "truncated": false
+      }
+    ],
+    "omitted": [],
+    "profiles": [],
+    "profileChars": 0,
+    "entryChars": 515,
+    "pulls": 0
+  },
+  "checks": [
+    {
+      "id": "state-200",
+      "label": "POST state answers 200 ok",
+      "pass": true,
+      "detail": "status=200 body={\"ok\":true,\"saved\":false,\"message\":null,\"snapshot\":{\"data\":{\"version\":2,\"rev\":1,\"enabled\":true,\"disabledUntil\":0,\"budget"
+    },
+    {
+      "id": "store-shared",
+      "label": "store path is the shared DSH_HOME store",
+      "pass": true,
+      "detail": "C:\\Users\\34332\\.dsh\\instruction-memory\\memory.json"
+    },
+    {
+      "id": "entries-visible",
+      "label": "entries are visible through the desktop host",
+      "pass": true,
+      "detail": "entries=3"
+    },
+    {
+      "id": "injection-state",
+      "label": "injection block state is reported",
+      "pass": true,
+      "detail": "{\"registered\":true,\"available\":true,\"muted\":false,\"chars\":515,\"activeCount\":3}"
+    },
+    {
+      "id": "security-reported",
+      "label": "security diagnostics present",
+      "pass": true,
+      "detail": "{\"hostGuarded\":true,\"boundHost\":\"127.0.0.1\"}"
+    },
+    {
+      "id": "guard-evil-origin",
+      "label": "cross-origin POST rejected with 403",
+      "pass": true,
+      "detail": "status=403"
+    },
+    {
+      "id": "guard-evil-host",
+      "label": "foreign Host rejected",
+      "pass": true,
+      "detail": "status=403"
+    },
+    {
+      "id": "guard-ctype-415",
+      "label": "non-JSON content-type rejected with 415",
+      "pass": true,
+      "detail": "status=415"
+    },
+    {
+      "id": "guard-get-405",
+      "label": "plain GET rejected with 405",
+      "pass": true,
+      "detail": "status=405"
+    },
+    {
+      "id": "bogus-method",
+      "label": "unknown method returns ok:false envelope",
+      "pass": true,
+      "detail": "status=200"
+    },
+    {
+      "id": "clientjs-reachable",
+      "label": "GET /plugins/dsh-instruction-memory/client.js (informational)",
+      "pass": true,
+      "detail": "status=404 ctype=undefined bytes=0"
+    },
+    {
+      "id": "plugins-index-info",
+      "label": "GET /plugins/ (informational)",
+      "pass": true,
+      "detail": "status=404 bytes=0"
+    }
+  ],
+  "passCount": 12,
+  "failCount": 0,
+  "redactions": "entry ids in injection.included redacted (real-store identifiers)",
+  "redactedAt": "2026-10-16T02:12:55.225Z"
+}

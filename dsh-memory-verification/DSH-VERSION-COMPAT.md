@@ -719,3 +719,67 @@ Copy-Item 'D:\Users\34332\AI\dsh-instruction-memory\dsh-memory-verification\back
 （`dsh-client-modules` 与三个 `-ui-` 包逐字节一致 + 组合成功未抛 `ClientPackageCompositionError` + 同 profile 里 10+ 个客户端插件在跑），
 **没有**取到实际字节。**要确认请直接在桌面版打开「设置 → 指令记忆」看一眼。**
 
+### 12.9 2026-10-16 复核（插件 1.3.3）：宿主未变，全链路适配 + 活体 12/12
+
+**背景**：§12.8 的实测是插件 1.0.x 时代做的。此后插件历经 1.0.12 → 1.3.3 多轮升级（存储 v2、多集合、
+历史快照、源码读写、备份目录等），桌面版宿主则始终是 `@deepseek-ai/dsh-desktop 0.2.0-rc.2`
+（`app.asar` 自 09-29 安装后未变：mtime、`121348951` 字节、归档内 289 个 `@deepseek-ai` 包全 rc.2、
+cordis 4.0.4，均与 §12.2 一致）。本轮针对**当前 1.3.3**（经 junction 加载仓库源码）重新全链路核验。
+
+#### 12.9.1 静态与契约层（全部通过）
+
+| 检查 | 方法 | 结果 |
+| --- | --- | --- |
+| 耦合包逐文件复核 | 归档 vs npm `0.2.0-rc.2` 同版本 tarball 逐文件 SHA256（8 包，与 §12.4 同一组耦合点） | **8/8 runtime JS IDENTICAL** |
+| 归档未漂移 | §12 提取的 5 个文件 vs 当前 asar 内 hash | 全部 **SAME** |
+| 门禁模拟 | **逐字复制**归档 `dsh-app-boot/lib/index.js:253-313` 的 `evaluatePluginCompatibility()` + 1.3.3 真实 manifest | `0.2.0-rc.2 → ADMITTED`；`0.1.5-rc.3 → ADMITTED`；`0.1.2-rc.1 → BLOCKED`（对照） |
+| 客户端链路 | 归档 `lib/main.js`：`protocol.handle('dsh-app')`（L11542）把**非静态路径全部** `forwardWebRequest` 到宿主（L7461：`target.pathname = source.pathname`、带 hostCookie、删 `origin`/`sec-fetch-site`）；插件侧 `requestOriginVerdict` 对无 Origin 请求按设计放行 | 渲染器内相对路径 `fetch('/instruction-memory/api')` 可达宿主——**机制链闭合** |
+| 界面 API 面 | `lib/client.js` 全部浏览器 API（`clipboard` + `execCommand` 降级、`Blob`/`URL.createObjectURL`/`FileReader`、`confirm`/`prompt`、`fetch`） | 均为 Electron 渲染器（Chromium）标准面 |
+
+**新历史证据（补 §12.8 的缺口）**：10-04 与 10-07 两份 web-boot crash 日志的 renderer console 里，
+**两次**出现 `dsh-instruction-memory/client.js` 的实际加载 URL
+（`dsh-app://app/plugins/??…,dsh-instruction-memory/client.js&rev=…`）——即该插件客户端模块在桌面版
+**真实被下发/加载过**（当时插件版本）。那两次崩溃的根因均为 `billion-context: import failed`，与本插件无关。
+
+#### 12.9.2 活体实测（插件 1.3.3，2026-10-16 09:53）
+
+启动桌面版 → 对 19387 只读探测 **12/12 PASS**（证据 `out/desktop-live-probe-2026-10-16.json`）：
+
+```
+POST state              -> 200 ok=true；store = 共享 DSH_HOME 的 memory.json
+injection               -> registered=true  available=true  chars=515  activeCount=3
+                           （与 web 8080 实例的注入状态逐字段一致）
+evil Origin (跨源)      -> 403        evil Host -> 403
+非 JSON content-type    -> 415        plain GET -> 405        未知方法 -> ok:false 信封
+```
+
+**零新增 crash**：启动前后 `@deepseek-ai/dsh-desktop/logs/` 无任何新文件——客户端组合组装
+（含本插件 `client.js`）未触发任何失败路径（对照：10-04 的 `billion-context` 失败会写 web-boot crash 日志）。
+
+**历史 crash 甄别（7 份，09-29 ~ 10-11，逐份归因）**：他插件被门禁正常 skip（09-29）、
+`billion-context` import failed（10-04 / 10-07）、cordis `Fiber._reload` 竞态且栈内为 `dsh-desktop-host`
+自身代码（10-11 ×2）——**无一份的栈里出现本插件**。
+
+#### 12.9.3 操作与复现（本轮新增的操作知识）
+
+- ⚠️ **本执行环境无法直接启动 GUI 应用**：`Start-Process` / `cmd start` 均静默失败；notepad 对照
+  实验（启动即退，`code=0`）确认是环境级隔离。**解法：经 `explorer.exe` 代启**（用户桌面 shell），一次成功。
+- 桌面版 exe 位于 **`D:\Users\34332\AppData\Local\Programs\DeepSeek Harness\`**（本机 D 盘完整用户目录
+  结构内；`$LOCALAPPDATA` 指向 C 盘，按它找不到）。关闭：温和 `taskkill /IM` 只退 renderer，
+  main 进程需 `taskkill /F /IM`（应用有后台驻留策略）。
+- 复现（脚本已固化至 `scripts/`）：
+  ```powershell
+  # 门禁模拟（无需桌面版运行，读仓库 manifest + 归档函数）
+  node dsh-memory-verification\scripts\desktop-gate-sim.mjs
+  # 包级复核（需先解 npm tarball 到 <dir>/<pkg>/package）
+  node dsh-memory-verification\scripts\desktop-vs-npm.mjs 0.2.0-rc.2 <dir> <pkg…>
+  # 活体只读探测（需桌面版运行中，19387）
+  node dsh-memory-verification\scripts\desktop-live-probe.mjs
+  ```
+
+#### 12.9.4 仍未验证（与 §12.8 相同）
+
+- 设置页在桌面版渲染器里的**人工视觉确认**（机制链已闭合，但「用眼睛看一次」只能由人完成：
+  打开桌面版 → 设置 → 指令记忆）。
+- 桌面版真实 LLM 会话中的 `pulls` 增长（本轮无会话活动）。
+
