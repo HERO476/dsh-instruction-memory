@@ -4,10 +4,16 @@
  *   node install.mjs           # install
  *   node install.mjs --remove  # roll back completely
  *
- * Two idempotent steps:
+ * Three idempotent steps:
  *   1. make the package resolvable from the profile's node_modules (junction)
  *   2. register it in `dsh.profile.bundles`, so the boot composes its
  *      cordis.patch.yml host row
+ *   3. declare it in the profile's `dependencies` as `link:<this checkout>`.
+ *      A junction plus a bundle entry is enough for the HOST to load the
+ *      plugin, but NOT enough to be seen by the market: dshmarket's installed
+ *      list is built from the profile's `dependencies` only
+ *      (`readInstalled` in dshmarket/src/profile.ts), so a plugin installed
+ *      by steps 1-2 alone runs while showing up nowhere under 「已安装」.
  *
  * The profile package.json is backed up before the first modification.
  */
@@ -58,12 +64,21 @@ if (remove) {
     touched = true
   }
   const pkg = readPkg()
-  const bundles = bundlesOf(pkg)
-  const index = bundles.indexOf(NAME)
+  let changed = false
+  if (pkg.dependencies !== undefined && Object.hasOwn(pkg.dependencies, NAME)) {
+    delete pkg.dependencies[NAME]
+    changed = true
+    console.log('removed from dependencies')
+  }
+  const bundles = pkg.dsh?.profile?.bundles
+  const index = Array.isArray(bundles) ? bundles.indexOf(NAME) : -1
   if (index >= 0) {
     bundles.splice(index, 1)
-    writePkg(pkg)
+    changed = true
     console.log('removed from dsh.profile.bundles')
+  }
+  if (changed) {
+    writePkg(pkg)
     touched = true
   }
   if (existsSync(backupPath)) console.log('backup kept at: ' + backupPath)
@@ -95,14 +110,31 @@ if (!existsSync(backupPath)) {
 }
 
 const pkg = readPkg()
+let changed = false
+
+// Step 3: a link: dependency, so the market lists it under 「已安装」.
+// package.json only — the target is the junction from step 1, so no
+// reinstall of the package itself is needed.
+const spec = 'link:' + SRC.replaceAll('\\', '/')
+pkg.dependencies = pkg.dependencies || {}
+if (pkg.dependencies[NAME] === spec) {
+  console.log('already a profile dependency: ' + spec)
+} else {
+  pkg.dependencies[NAME] = spec
+  changed = true
+  console.log('declared as a profile dependency: ' + spec)
+}
+
 const bundles = bundlesOf(pkg)
 if (bundles.includes(NAME)) {
   console.log('already in dsh.profile.bundles')
 } else {
   bundles.push(NAME)
-  writePkg(pkg)
+  changed = true
   console.log('added to dsh.profile.bundles (position ' + bundles.length + ')')
 }
+
+if (changed) writePkg(pkg)
 
 console.log('\nINSTALLED. Restart DSH to mount the plugin.')
 console.log('Roll back with:  node install.mjs --remove')

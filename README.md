@@ -37,7 +37,7 @@ dsh plugin --profile web remove dsh-instruction-memory
 | `lib/index.js` | Host 半：读取/保存记忆，注册 `systemPrompt` 段落，暴露同源 JSON 路由 |
 | `lib/client.js` | Client 半：在 `settings.section` 注册「指令记忆」设置页（手写模块，无需构建） |
 | `cordis.patch.yml` | bundle patch：把 Host 行插入宿主组合 |
-| `install.mjs` | 开发安装脚本：从本仓库检出安装时，把包链接进 web profile 的 `node_modules`（junction）并注册 `dsh.profile.bundles`；`--remove` 完整回滚，改 profile 前自动备份 |
+| `install.mjs` | 开发安装脚本：从本仓库检出安装时，把包链接进 web profile 的 `node_modules`（junction）、注册 `dsh.profile.bundles`，并在 profile `dependencies` 里声明 `link:<本仓库路径>`（缺这一步插件能跑，但插件市场的「已安装」列表看不到它——市场只读 `dependencies`）；`--remove` 三步完整回滚，改 profile 前自动备份 |
 | `contract-test.mjs` | 契约测试：驱动真实路由，验证两半之间的响应格式（含配置集、版本历史、源码模式、备份位置） |
 | `ui-test.mjs` | 设置页行为测试：用一个 ~60 行的 React 垫片真实渲染面板、点按钮/填输入框，再断言注入内容随之变化（不出图、不依赖浏览器） |
 | `verify.mjs` | 装载验证：按 DSH 的方式加载两半，并逐项断言 `memory.schema.json` 与代码中的上限一致 |
@@ -380,6 +380,122 @@ DSH 就会得到第二份空记忆，看起来像"记忆消失"。
 地址**（主动对外发布）时，页面顶部会出现醒目橙色警告：同一网络内的设备可无鉴权访问此页面、
 请勿在不可信网络暴露，并指向下节「经反向代理对外发布」。该判定与路由实际执行的 Host 校验
 是**同一个开关**；快照同时携带 `boundHost`（路由注册时捕获的绑定地址），警告会点名具体地址。
+
+## 反馈邮件（可选配置）
+
+设置页最上方（第一块）新增「反馈」按钮：填写问题类型、标题、正文与可选联系方式后，由 **Host 进程**
+直接通过 SMTP 把邮件发到维护者邮箱。客户端只提交表单，不接触任何服务凭证；
+未配置时按钮仍可点开，提交会返回一条带配置指引的错误，并保留已填内容以便重试。
+
+**隐私边界**：邮件自动附带插件版本、Node/DSH 版本、平台与架构、界面语言、时区、
+`User-Agent` 和提交时间；**绝不附带**任何条目正文、形象内容或整份 `memory.json`。
+
+**回复路径**：`From` 固定为认证的发件账号；若「联系方式」是一个纯邮箱地址，Host 会把它写成
+`Reply-To`，维护者点「回复」即可直接回到反馈者（微信、GitHub 用户名等自由文本不会进入邮件头）。
+
+配置只认环境变量或仓库外的 JSON 文件，**不要写进 `cordis.patch.yml` 或任何提交进仓库的文件**。
+
+### 环境变量（优先）
+
+| 变量 | 必填 | 说明 |
+| --- | --- | --- |
+| `DSH_INSTRUCTION_MEMORY_FEEDBACK_TO` | 是 | 收件邮箱（单个地址） |
+| `DSH_INSTRUCTION_MEMORY_FEEDBACK_SMTP_HOST` | 是 | SMTP 服务器主机名 |
+| `DSH_INSTRUCTION_MEMORY_FEEDBACK_FROM` | 否 | 发件地址，默认取 SMTP 用户名；部分服务商要求与登录账号同域 |
+| `DSH_INSTRUCTION_MEMORY_FEEDBACK_SMTP_PORT` | 否 | 1–65535，默认按 `_SMTP_SECURE` 取 465 / 587 |
+| `DSH_INSTRUCTION_MEMORY_FEEDBACK_SMTP_SECURE` | 否 | `1/true/yes` 走隐式 TLS（465）；默认 `0` 并用 STARTTLS 升级（587） |
+| `DSH_INSTRUCTION_MEMORY_FEEDBACK_SMTP_USER` | 否 | 登录用户名；与密码必须成对出现 |
+| `DSH_INSTRUCTION_MEMORY_FEEDBACK_SMTP_PASS` | 否 | 登录密码 / 应用专用密码 |
+| `DSH_CRB_SMTP_URL` | 否 | 复用的 URL 形凭据（格式见下节），优先级低于上面五个 `..._SMTP_*` 变量 |
+| `DSH_INSTRUCTION_MEMORY_FEEDBACK_CONFIG` | 否 | 配置文件路径，默认 `<存储目录>/feedback.json` |
+| `DSH_INSTRUCTION_MEMORY_FEEDBACK_COOLDOWN_MS` | 否 | 两次发送的最小间隔，默认 `30000`，`0` 关闭 |
+| `DSH_INSTRUCTION_MEMORY_FEEDBACK_SECRET` | 否 | 解密 `toEncrypted` 的密钥，至少 16 个字符；只在环境变量里提供，不要写进配置文件或仓库 |
+
+存储目录默认是 `%USERPROFILE%\.dsh\instruction-memory`（受 `DSH_HOME` 影响），
+即默认配置文件为 `…\instruction-memory\feedback.json`。
+
+### 复用已有的 `DSH_CRB_SMTP_URL`（可选）
+
+如果本机其他工具已经在 **Windows 用户级环境变量** `DSH_CRB_SMTP_URL` 里保存了可用的
+SMTP 凭据，插件可以直接复用，不必再把主机/账号/密码抄一份到本插件的变量或文件里：
+
+```
+smtps://用户:密码@smtp.qq.com:465
+smtp://用户:密码@smtp.example.com:587?secure=0&from=bot@example.com
+```
+
+- `smtps://` 走隐式 TLS（通常 465）；`smtp://` 默认 STARTTLS，可用 `secure=1/0` 覆盖；
+  `smtp://` 且端口为 465 时按隐式 TLS 处理（服务商常见约定）。
+- 用户名、密码中的 `@ : / %` 等字符必须 URL 编码，例如 `1234567890%40qq.com`。
+- 逐字段优先级：本插件专用 `..._SMTP_*` 变量 > `DSH_CRB_SMTP_URL` > `feedback.json`。
+  因此可以只把密码留在共享 URL 里，其他字段仍用插件变量覆盖。
+- `from` 可用 `?from=` 指定；缺省取 SMTP 用户名（若像邮箱），否则取收件人。
+- 这个变量携带密码：不要写进仓库、不要截图；修改后需要重启 DSH 才会被新进程读到。
+
+### 配置文件（与环境变量逐字段合并，环境变量优先）
+
+```json
+{
+  "to": "feedback@example.com",
+  "from": "dsh-bot@example.com",
+  "smtp": {
+    "host": "smtp.example.com",
+    "port": 465,
+    "secure": true,
+    "user": "dsh-bot@example.com",
+    "pass": "应用专用密码"
+  }
+}
+```
+
+文件权限请自行收紧（Windows 可用 `icacls feedback.json /inheritance:r /grant:r "%USERNAME%:R"`）。
+凭据缺失时只报"未配置"，不会把已配置的密码回显到页面或日志。
+
+### 收件邮箱加密（可选）
+
+如果不想让收件邮箱以明文留在 `feedback.json` 里（例如担心截图、误提交或备份泄漏），
+可以把 `"to"` 换成密文字段 `"toEncrypted"`，密钥只放在环境变量里：
+
+```json
+{
+  "toEncrypted": "im1:……",
+  "smtp": { "host": "smtp.qq.com", "port": 465, "secure": true, "user": "…", "pass": "授权码" }
+}
+```
+
+1. 设置密钥环境变量（至少 16 个字符，不能写进仓库）：
+   `DSH_INSTRUCTION_MEMORY_FEEDBACK_SECRET=……`
+2. 用插件自带的小工具生成密文（密钥从环境变量读取，不会打印到终端）：
+   `node lib/mailer.js encrypt-to you@example.com`
+3. 把输出的 `im1:…` 粘贴为 `toEncrypted`，删除 `"to"`，然后重启 DSH（环境变量只在启动时读取）。
+
+实现是 AES-256-GCM + scrypt 派生密钥，密文带认证标签：改错一个字符或密钥不匹配都会明确报
+`无法解密反馈收件邮箱`，不会静默换收件人。若同时存在 `to`（环境变量或文件），明文优先，
+方便临时覆盖。
+
+**能力边界（请勿误解）**：SMTP 信封必须把收件人明文交给服务器，TLS 只保护传输链路；
+本加密保护的是配置文件**静态副本**，不防"能以同一 Windows 用户身份读取环境变量和文件"的攻击者，
+也不隐藏邮件服务商看到的收件人。需要更强隔离时，应使用独立的 Windows 账户或独立机器运行 DSH。
+`node lib/mailer.js encrypt-to` 生成的密文与密钥绑定，换机/换密钥后需重新生成。
+
+国内邮箱示例：QQ 邮箱填 `smtp.qq.com`、端口 465、`"secure": true`，用户名为完整 QQ 邮箱地址，
+密码填在 QQ 邮箱「设置 → 账户」开启 SMTP 后生成的**授权码**（不是登录密码）。
+若收件人是该 QQ 邮箱、发件人另用其他账号，`from` 要与发件账号同域，否则可能被服务端拒收。
+
+### 发送行为与排查
+
+- 465 端口：直接 TLS；587 端口：EHLO → STARTTLS → 再次 EHLO →（有账号时）`AUTH LOGIN`/`AUTH PLAIN`。
+- **拒绝在明文连接上发送密码**：服务器不提供 STARTTLS 时会直接失败，而不是降级。
+- 主题与正文均为 UTF-8（RFC 2047 编码主题、base64 正文），中文不会乱码。
+- 成功后清空草稿并提示"反馈已发送"；失败时保留草稿，页面显示原因，宿主日志记一行脱敏错误。
+- 默认 30 秒冷却：同一进程内连续提交会被拒绝（防误触重复发信），可用上面的变量调整。
+
+常见失败：`尚未配置反馈收件邮箱` → 环境变量/文件未生效（环境变量改完要重启 DSH；
+配置文件每次发送都会重新读取，无需重启）；`反馈收件邮箱已加密，但未设置 …SECRET` 或
+`无法解密反馈收件邮箱` → 密钥缺失/不匹配，重新执行 `encrypt-to` 并同步更新环境变量；
+`SMTP 连接失败` → 主机/端口/防火墙；`STARTTLS 失败` → 服务商要求 465 隐式 TLS；
+`认证失败` → 用户名/密码或应用专用密码，部分邮箱需先开启 SMTP 服务；
+`发件地址被拒绝` → 显式设置 `FROM` 为与账号同域的地址。
 
 ## 请求来源防护（Host / Origin）
 

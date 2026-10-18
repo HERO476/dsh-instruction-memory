@@ -569,6 +569,73 @@ tree = await click(tree, '复制诊断信息')
 tree = await click(tree, '收起诊断')
 check('panel: the diagnostics card collapses again', !hasTextContaining(tree, '自本次插件启动'))
 
+// ---- feedback: button → form → local validation → host refusal → clear ----
+{
+  const savedEnv = {}
+  const feedbackEnvNames = [
+    'DSH_INSTRUCTION_MEMORY_FEEDBACK_TO',
+    'DSH_INSTRUCTION_MEMORY_FEEDBACK_FROM',
+    'DSH_INSTRUCTION_MEMORY_FEEDBACK_SMTP_HOST',
+    'DSH_INSTRUCTION_MEMORY_FEEDBACK_SMTP_PORT',
+    'DSH_INSTRUCTION_MEMORY_FEEDBACK_SMTP_SECURE',
+    'DSH_INSTRUCTION_MEMORY_FEEDBACK_SMTP_USER',
+    'DSH_INSTRUCTION_MEMORY_FEEDBACK_SMTP_PASS',
+    'DSH_INSTRUCTION_MEMORY_FEEDBACK_CONFIG',
+    'DSH_INSTRUCTION_MEMORY_FEEDBACK_COOLDOWN_MS',
+    'DSH_INSTRUCTION_MEMORY_FEEDBACK_SECRET',
+  ]
+  for (const name of feedbackEnvNames) {
+    savedEnv[name] = process.env[name]
+    delete process.env[name]
+  }
+  try {
+    check('panel: the feedback button is present and the form starts closed',
+      buttons(tree, '反馈').length === 1 && !hasTextContaining(tree, '问题类型'),
+      JSON.stringify(texts(tree).filter((l) => l.includes('反馈')).slice(0, 4)))
+    const order = walk(tree)
+    const feedbackIndex = order.findIndex((el) => el.props !== undefined && el.props.className === 'im-feedback')
+    const titleIndex = order.findIndex((el) => el.type === 'h3')
+    check('panel: feedback is the first block of the settings card, above the title',
+      feedbackIndex !== -1 && titleIndex !== -1 && feedbackIndex < titleIndex,
+      'feedback=' + feedbackIndex + ' title=' + titleIndex)
+    tree = await click(tree, '反馈')
+    check('panel: opening feedback renders the form fields',
+      anyElement(tree, (el) => el.type === 'select') !== undefined
+      && anyElement(tree, (el) => el.type === 'input' && el.props.placeholder === '一句话概括问题或建议') !== undefined
+      && anyElement(tree, (el) => el.type === 'textarea' && String(el.props.placeholder).includes('复现步骤')) !== undefined
+      && anyElement(tree, (el) => el.type === 'input' && String(el.props.placeholder).includes('便于回复')),
+      JSON.stringify(texts(tree).filter((l) => l.includes('联系方式')).slice(0, 3)))
+    check('panel: the form states what is attached automatically and what is not',
+      hasTextContaining(tree, '不包含你的指令内容'))
+    tree = await click(tree, '发送反馈')
+    check('panel: submitting an empty form reports the missing title locally',
+      hasTextContaining(tree, '请填写标题'), JSON.stringify(texts(tree).filter((l) => l.includes('标题')).slice(0, 3)))
+
+    tree = await type(tree, (el) => el.type === 'input' && el.props.placeholder === '一句话概括问题或建议', '反馈按钮没反应')
+    tree = await type(tree, (el) => el.type === 'textarea' && String(el.props.placeholder).includes('复现步骤'), '点了发送以后没有任何提示。')
+    tree = await click(tree, '发送反馈')
+    check('panel: an unconfigured host surfaces the configuration hint, not a generic failure',
+      hasTextContaining(tree, '尚未配置反馈收件邮箱')
+      && hasTextContaining(tree, 'DSH_INSTRUCTION_MEMORY_FEEDBACK_TO'),
+      JSON.stringify(texts(tree).filter((l) => l.includes('反馈') || l.includes('配置')).slice(0, 5)))
+    check('panel: a failed send keeps the draft so it can be retried',
+      anyElement(tree, (el) => el.type === 'input' && el.props.value === '反馈按钮没反应') !== undefined)
+
+    tree = await click(tree, '清空')
+    check('panel: clear empties the draft and the message',
+      anyElement(tree, (el) => el.type === 'input' && el.props.value === '反馈按钮没反应') === undefined
+      && !hasTextContaining(tree, '尚未配置反馈收件邮箱'))
+    tree = await click(tree, '收起反馈')
+    check('panel: collapsing feedback removes the form from the card',
+      !hasTextContaining(tree, '问题类型') && buttons(tree, '反馈').length === 1)
+  } finally {
+    for (const name of feedbackEnvNames) {
+      if (savedEnv[name] === undefined) delete process.env[name]
+      else process.env[name] = savedEnv[name]
+    }
+  }
+}
+
 // ---- F12: the non-loopback security warning ----
 // A second host instance whose web server reports a non-loopback bind; its
 // route replaces the handler for one reload, then the panel goes back.

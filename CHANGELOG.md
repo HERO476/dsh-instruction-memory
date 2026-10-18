@@ -7,6 +7,38 @@
 > 1.0.13 起由 CI 经 OIDC Trusted Publishing 发布（首个带 provenance 的版本）。
 > 这些历史 tag **不应回填**——npm 上的版本号已被占用。
 
+## [1.4.0] — 2026-10-18
+
+### 新增
+
+- **设置页「反馈」按钮（可选 SMTP 邮件）**：位于设置卡片最上方，填写问题类型、标题、正文与可选联系方式后，
+  由 Host 进程通过 `node:net` / `node:tls` 手写的 SMTP 会话直接发信，**未引入任何第三方依赖**。
+  正文自动附带插件版本（运行时读 `package.json`，不硬编码）、Node/DSH 版本、平台与架构、
+  界面语言、时区、`User-Agent` 与提交时间，**不附带任何条目正文或形象内容**。
+  新增 `lib/mailer.js`（表单校验、环境变量/仓库外 `feedback.json` 配置、MIME 组信、SMTP 会话）
+  与 Host 的 `send-feedback` 分发方法；客户端补充加载态、成功/失败提示、30 秒冷却与错误日志。
+  收件邮箱、SMTP 主机与凭证只从环境变量或仓库外配置文件读取，**不写入仓库**。
+  表单「联系方式」若为纯邮箱地址会自动写入 `Reply-To`，维护者可一键回复反馈者；自由文本不会进入邮件头。
+- **收件邮箱静态加密（可选）**：`feedback.json` 支持 `toEncrypted`（`im1:` + AES-256-GCM 密文，
+  scrypt 派生密钥，含认证标签），密钥只从 `DSH_INSTRUCTION_MEMORY_FEEDBACK_SECRET` 读取；
+  `node lib/mailer.js encrypt-to <email>` 生成密文。错误提示、页面与日志中的发件/收件地址会被隐藏。
+  明确边界：SMTP 信封仍向服务器明文提交收件人，本项只保护配置文件静态副本。
+- **复用已有 SMTP 凭据**：可读取本机共享的 Windows 用户级 `DSH_CRB_SMTP_URL`
+  （`smtps://user:pass@host:port`），逐字段优先级为插件专用 `..._SMTP_*` > 该 URL > `feedback.json`；
+  `smtp://` 默认 STARTTLS、端口 465 自动按隐式 TLS，特殊字符需 URL 编码，错误信息不回显 URL/密码。
+- 测试新增 `feedback-test.mjs`（纯函数 + 假 SMTP 服务器 + 真实路由端到端 + 加解密/密钥错误用例），
+  并在 `ui-test.mjs` 覆盖按钮/表单/本地校验/未配置提示/清空/收起及「反馈位于卡片最上方」。
+  README 增加配置、加密与排查说明。
+
+### 修复
+
+- **开发安装后，插件能运行但不出现在插件市场的「已安装」列表**：宿主只需 junction +
+  `dsh.profile.bundles` 就能装载插件，而 dshmarket 的已安装列表只取 profile `package.json`
+  的 `dependencies`（`readInstalled()`），因此「开发安装」的插件一直对市场不可见。
+  `install.mjs` 现在增加第三步，把 `dsh-instruction-memory: link:<本仓库路径>` 写进 profile
+  依赖（`--remove` 同步删除），幂等且与 `pnpm-lock.yaml` 一致。
+  仅影响开发安装流程；npm 包内容不变（`files` 不含 `install.mjs`）。
+
 ## [1.3.3] — 2026-10-16
 
 一处注释整理，无代码与行为变更。
