@@ -9,9 +9,10 @@
 import { mkdirSync, writeFileSync, rmSync, readdirSync, readFileSync, existsSync, statSync } from 'node:fs'
 import { zstdDecompressSync } from 'node:zlib'
 import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = join(HERE, '..', '..')
 const ROOT = join(HERE, '..')
 const DSH_HOME = process.env.DSH_HOME ?? join(process.env.USERPROFILE ?? '', '.dsh')
 
@@ -33,7 +34,7 @@ function mountAt(home, label) {
       inject: () => null,
       logger: () => ({ info: (m) => lines.push('info  ' + m), debug: (m) => lines.push('debug ' + m) }),
     }
-    const mod = await import('file:///D:/Users/34332/AI/dsh-instruction-memory/lib/index.js?v=' + Math.random())
+    const mod = await import(pathToFileURL(join(REPO_ROOT, 'lib', 'index.js')).href + '?v=' + Math.random())
     mod.apply(ctx)
     const deadline = Date.now() + 3000
     while (!lines.some((l) => l.includes('mounted:')) && Date.now() < deadline) {
@@ -85,7 +86,8 @@ function decompressAll(buf) {
   return out
 }
 
-const SESSION = join(DSH_HOME, 'sessions', '--D-Users-34332-AI-dsh-instruction-memory--', 'session-ce78e7c0-552b-435c-8e71-3d4b3662d21a', 'session.v4.jsonl.zstd')
+const SESSION = process.env.IM_PROBE_SESSION
+if (!SESSION) { console.error('set IM_PROBE_SESSION=<captured session.v4.jsonl.zstd path>'); process.exit(2) }
 const records = decompressAll(readFileSync(SESSION)).split('\n').filter((l) => l.trim() !== '').map((l) => JSON.parse(l))
 const local = (ms) => new Date(ms).toLocaleString('sv-SE').replace('T', ' ')
 

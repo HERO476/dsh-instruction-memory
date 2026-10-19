@@ -5,10 +5,14 @@
  * restart (i.e. is the divergence in-memory only)?
  */
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
-const HOST_URL = 'file:///D:/Users/34332/AI/dsh-instruction-memory/lib/index.js'
-const HOME = 'D:/Users/34332/AI/dsh-instruction-memory/dsh-memory-verification/tmp/home-failsave'
+const HERE = dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = join(HERE, '..', '..')
+const ROOT = join(HERE, '..')
+const HOST_URL = pathToFileURL(join(REPO_ROOT, 'lib', 'index.js')).href
+const HOME = join(ROOT, 'tmp', 'home-failsave')
 mkdirSync(join(HOME, 'instruction-memory'), { recursive: true })
 const entry = (id, title, content) => ({ id, title, content, mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 1700000000000 })
 writeFileSync(join(HOME, 'instruction-memory', 'memory.json'), JSON.stringify({ version: 1, enabled: true, budgetChars: 4000, entries: [entry('keep', 'KEEP', 'durable IM-KEEP-0001')] }, null, 2))

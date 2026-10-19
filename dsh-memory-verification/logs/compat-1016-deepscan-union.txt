@@ -1,0 +1,258 @@
+﻿
+### @busabase/dsh-plugin@0.1.15  packed=true
+  deps: @deepseek-ai/dsh-mcp-client, @deepseek-ai/dsh-skill-filesystem, @deepseek-ai/dsh-util-code-language, @deepseek-ai/dsh-util-values, @deepseek-ai/dsh-util-workspace-path, @deepseek-ai/schemastery, @deepseek-ai/cordis, @deepseek-ai/dsh-api-session-controller, @deepseek-ai/dsh-credentials, @deepseek-ai/dsh-host-webserver, @deepseek-ai/dsh-skill, @deepseek-ai/dsh-client-ui-conversation, @deepseek-ai/dsh-client-ui-layout, @deepseek-ai/dsh-client-ui-slots, @deepseek-ai/dsh-client-ui-tool, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools
+  shape: {"sectionCall":true,"registerCall":true,"watchFile":false,"clientBundle":true}
+  sections: ["busabase:workspace"] orders=[160]
+    section@ lib\index.js: .section({ name: "busabase:workspace", order: 160, text: BUSABASE_SYSTEM_PROMPT }); ctx.on("webserver/index-inject", (table) => { table.push({ kind: "glob
+  routes: kind=["prefix"] paths=["/file-trees/preview-config","/file-trees/{nodeId}/preview","/file-trees","/file-trees/{nodeId}/files","/file-trees/{nodeId}/files/{+filePath}","/file-trees/{nodeId}/change-requests","/assets/upload-urls","/assets/confirmations","/assets","/assets/{assetId}","/assets/{assetId}/metadata","/assets/{assetId}/content","/assets/{assetId}/text","/assets/text/upload-urls","/assets/{assetId}/text/lines","/assets/{assetId}/edit-content","/bases","/bases/{baseId}","/bases/{baseId}/fields/deleted","/bases/{baseId}/views"] strings=["/api/v1/search","/api/v1/activity/paged","/api/v1","/api/v1/change-requests/reviews","/api/v1/change-requests/merge","/api/health"]
+  stores: [] homeRefs=0
+
+### @dsh-plugins/dsh-user-mirror@0.8.3  packed=true
+  deps: @deepseek-ai/dsh-storage-domain, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools, @deepseek-ai/schemastery
+  shape: {"sectionCall":true,"registerCall":true,"watchFile":false,"clientBundle":true}
+  sections: ["mirror:duty","mirror:preferences","mirror:guidance"] orders=[20]
+    section@ index.js: .section({ name: 'mirror:duty', order: config.sectionOrder - 1, text: () => { if (!table) return '' const lines = [ '当你察觉到用户表达了可复用的判断依据时，调用 mirror_remembe
+    section@ index.js: .section({ name: 'mirror:preferences', order: config.sectionOrder, text: () => { if (!table) return '' const rendered = renderPreferences(table, config.maxTokens
+    section@ index.js: .section({ name: 'mirror:guidance', order: config.sectionOrder - 10, text: () => { const { entries } = guidanceCache if (!entries || entries.length === 0) return
+  routes: kind=["exact","prefix"] paths=["/dsh-mirror/preferences","/dsh-mirror/guidance"] strings=[]
+  stores: [] homeRefs=1
+
+### @flowingspring/dsh-workspace-memory@0.2.15  packed=true
+  deps: @deepseek-ai/cordis, @deepseek-ai/dsh-agent, @deepseek-ai/dsh-agent-default-model, @deepseek-ai/dsh-client-locale, @deepseek-ai/dsh-client-runtime, @deepseek-ai/dsh-client-ui-settings, @deepseek-ai/dsh-llm, @deepseek-ai/dsh-session, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools, @deepseek-ai/schemastery
+  shape: {"sectionCall":false,"registerCall":true,"watchFile":false,"clientBundle":true}
+  sections: [] orders=[50,2000]
+  routes: kind=["exact"] paths=["/workspace-memory/api/v1/scopes","/workspace-memory/api/v1/archived-scopes","/workspace-memory/api/v1/scope","/workspace-memory/api/v1/archived-scope"] strings=[]
+  stores: ["memory_entries.json","state.json"] homeRefs=1
+
+### @honcho-ai/dsh-honcho@0.1.2  packed=true
+  deps: @deepseek-ai/cordis, @deepseek-ai/dsh-tools, @deepseek-ai/dsh-session, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-llm, @deepseek-ai/schemastery, @deepseek-ai/dsh-agent, @deepseek-ai/dsh-session-query, @deepseek-ai/dsh-commands
+  shape: {"sectionCall":true,"registerCall":false,"watchFile":false,"clientBundle":false}
+  sections: ["honcho:directives"] orders=[]
+    section@ lib\index.js: .section({ name: "honcho:directives", order: DIRECTIVES_ORDER, text: DIRECTIVES }); } // A composition can drop every runtime context — `suppressRuntimeContext()` // sc
+  routes: kind=[] paths=[] strings=["/api"]
+  stores: [] homeRefs=0
+
+### @max-null/dsh-memory@0.15.1  packed=true
+  deps: @deepseek-ai/cordis, @deepseek-ai/dsh-storage, @deepseek-ai/dsh-storage-domain, @deepseek-ai/dsh-storage-json, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools, @deepseek-ai/dsh-typert-protocol
+  shape: {"sectionCall":true,"registerCall":true,"watchFile":false,"clientBundle":true}
+  sections: ["tool:memory"] orders=[60,115,49,50]
+    section@ dist\index.js: .section({ name: 'tool:memory', order: 115, text: GUIDANCE, }); // 0.3.2：记忆机制自述——常驻注入（不落用户存储），随发版更新。 // order 49 < recall(50)：机制说明在具体记忆内容之前。
+  routes: kind=["prefix"] paths=["/memory/api"] strings=["/memory/api","/memory/api/"]
+  stores: ["memory.json"] homeRefs=2
+
+### @memorylake/dsh-plugin@0.1.0  packed=true
+  deps: @deepseek-ai/schemastery, @deepseek-ai/cordis, @deepseek-ai/dsh-skill, @deepseek-ai/dsh-subprocess, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools
+  shape: {"sectionCall":true,"registerCall":false,"watchFile":false,"clientBundle":false}
+  sections: ["memorylake:memory"] orders=[150,100]
+    section@ lib\tools.js: .section({ name: 'memorylake:memory', order: 150, text: MEMORY_SECTION_TEXT, }); const statusCache = new StatusCache(ctx, config.statusTtlSeconds);
+  routes: kind=[] paths=[] strings=["/memorylake-init"]
+  stores: [] homeRefs=0
+
+### @modusensus/dsh-mneme@0.8.15  packed=true
+  deps: @deepseek-ai/cordis, @deepseek-ai/dsh-host-webserver, @deepseek-ai/dsh-llm, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools, @deepseek-ai/schemastery
+  shape: {"sectionCall":true,"registerCall":true,"watchFile":false,"clientBundle":true}
+  sections: ["memory-guide"] orders=[60,150,90,85]
+    section@ lib\inject.js: .section({ name: "memory-guide", order: 150, text: MEMORY_GUIDE_SECTION }) : null; const disposers = [ ...(guideSection ? [guideSection] : []), ctx.systemPrompt.cont
+    section@ src\inject.js: .section({ name: "memory-guide", order: 150, text: MEMORY_GUIDE_SECTION }) : null; const disposers = [ ...(guideSection ? [guideSection] : []), ctx.systemPrompt.cont
+  routes: kind=["prefix","exact"] paths=["/api/dsh-mneme","/api/dsh-mneme/info","/api/dsh-mneme/version-check","/api/dsh-mneme/list","/api/dsh-mneme/recall-stats","/api/dsh-mneme/search","/api/dsh-mneme/profile","/api/dsh-mneme/llm-providers","/api/dsh-mneme/test-model","/api/dsh-mneme/delete","/api/dsh-mneme/update","/api/dsh-mneme/rules","/api/dsh-mneme/vector-config","/api/dsh-mneme/vector-reindex","/api/dsh-mneme/semantic","/api/dsh-mneme/runtime/provision","/api/dsh-mneme/semantic/llm-audit","/api/dsh-mneme/semantic/llm-audit/stats","/api/dsh-mneme/semantic/graph/ego","/api/dsh-mneme/semantic/graph/entity-attrs"] strings=["/memories","/api/dsh-mneme","/api/dsh-mneme/info","/api/dsh-mneme/version-check","/api/dsh-mneme/list","/api/dsh-mneme/recall-stats","/api/dsh-mneme/search","/api/dsh-mneme/profile","/api/dsh-mneme/llm-providers","/api/dsh-mneme/test-model","/api/dsh-mneme/delete","/api/dsh-mneme/update","/api/dsh-mneme/rules","/api/dsh-mneme/vector-config","/api/dsh-mneme/vector-reindex","/api/dsh-mneme/semantic","/api/dsh-mneme/runtime/provision","/api/dsh-mneme/semantic/llm-audit","/api/dsh-mneme/semantic/llm-audit/stats","/api/dsh-mneme/semantic/graph/ego"]
+  stores: ["mneme-runtime.json"] homeRefs=1
+
+### @tr1v3r/dsh-ltm@0.3.1  packed=true
+  deps: @deepseek-ai/schemastery, @deepseek-ai/cordis, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools
+  shape: {"sectionCall":true,"registerCall":false,"watchFile":false,"clientBundle":false}
+  sections: ["ltm:recall"] orders=[]
+    section@ dist\index.js: .section({ name: "ltm:recall", order: config.promptOrder, text: (assembly) => { const scopes = visibleScopes(activeScope(assembly?.scope), config.autoProjectScope); ret
+  routes: kind=[] paths=[] strings=[]
+  stores: [] homeRefs=0
+
+### @vesna-strivozha-2026/dsh-llm-wiki@1.0.6  packed=true
+  deps: @deepseek-ai/dsh-native-command, @deepseek-ai/schemastery, @deepseek-ai/cordis, @deepseek-ai/dsh-agent-default-model, @deepseek-ai/dsh-fs, @deepseek-ai/dsh-host-webserver, @deepseek-ai/dsh-invariants, @deepseek-ai/dsh-llm, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools, @deepseek-ai/dsh-typert-protocol, @deepseek-ai/dsh-workspace
+  shape: {"sectionCall":true,"registerCall":true,"watchFile":false,"clientBundle":false}
+  sections: ["llm-wiki-query"] orders=[150]
+    section@ lib\index.js: .section({ name: "llm-wiki-query", order: 150, text: "存在一个「LLM Wiki」个人知识库。当用户的问题可能涉及知识库内容时，先调用 wiki_query 工具检索知识库，再基于返回内容作答并引用页面路径；若知识库无相关内容则直接基于通用知识作答。" }); cons
+    section@ lib\types\index.js: .section({ name: 'llm-wiki-query', order: 150, text: '存在一个「LLM Wiki」个人知识库。当用户的问题可能涉及知识库内容时，' + '先调用 wiki_query 工
+  routes: kind=["exact"] paths=["/llm-wiki/file"] strings=[]
+  stores: [] homeRefs=0
+
+### @zzerx/dsh-plugin-memory@0.4.3  packed=true
+  deps: @deepseek-ai/cordis, @deepseek-ai/cordis-plugin-loader, @deepseek-ai/dsh-brand, @deepseek-ai/dsh-settings, @deepseek-ai/dsh-storage-domain, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools, @deepseek-ai/dsh-typert-protocol, @deepseek-ai/schemastery
+  shape: {"sectionCall":true,"registerCall":false,"watchFile":false,"clientBundle":true}
+  sections: [] orders=[20,2940,95]
+    section@ lib\index.js: .section({ name: MEMORY_USAGE_SECTION, order: 2940, text: MEMORY_USAGE_TEXT }); ctx.systemPrompt.context({ name: MEMORY_RECALL_CONTEXT, order: 95, text: (renderCtx) =
+  routes: kind=[] paths=[] strings=[]
+  stores: [] homeRefs=0
+
+### dsh-auto-memory@0.7.0  packed=true
+  deps: @deepseek-ai/schemastery, @deepseek-ai/cordis, @deepseek-ai/dsh-agent, @deepseek-ai/dsh-atomic-write, @deepseek-ai/dsh-home-paths, @deepseek-ai/dsh-llm, @deepseek-ai/dsh-session, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools
+  shape: {"sectionCall":true,"registerCall":false,"watchFile":false,"clientBundle":true}
+  sections: [] orders=[50]
+    section@ lib\index.js: .section({ name: MEMORY_SECTION, order: 4e3, text: (context) => renderMemoryIndexText(store, config, context.agent?.session.header.cwd) }); } //#endregion export { Config, a
+  routes: kind=[] paths=[] strings=["/api/auto-memory"]
+  stores: [] homeRefs=0
+
+### dsh-context-zip@0.1.9  packed=true
+  deps: @deepseek-ai/cordis, @deepseek-ai/dsh-agent, @deepseek-ai/dsh-commands, @deepseek-ai/dsh-compaction, @deepseek-ai/dsh-compaction-basic, @deepseek-ai/dsh-home-paths, @deepseek-ai/dsh-llm, @deepseek-ai/dsh-session, @deepseek-ai/dsh-session-query, @deepseek-ai/dsh-settings, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-token-meter, @deepseek-ai/dsh-tools, @deepseek-ai/schemastery
+  shape: {"sectionCall":true,"registerCall":true,"watchFile":true,"clientBundle":true}
+  sections: ["context-zip:compacted-answer","context-zip:notes-guidance"] orders=[40,65]
+    section@ lib\index.js: .section({ name: "context-zip:compacted-answer", order: COMPACTED_ANSWER_ORDER, text: () => COMPACTED_ANSWER_GUIDANCE }); }); const guidanceFibers = /* @_
+    section@ lib\index.js: .section({ name: "context-zip:notes-guidance", order: NOTES_GUIDANCE_ORDER, // An empty string, not an absent section: the scoped section has to
+  routes: kind=["exact"] paths=[] strings=[]
+  stores: [] homeRefs=2
+
+### dsh-file-memory@1.3.2  packed=true
+  deps: @deepseek-ai/cordis, @deepseek-ai/dsh-agent, @deepseek-ai/dsh-atomic-write, @deepseek-ai/dsh-compaction, @deepseek-ai/dsh-home-paths, @deepseek-ai/dsh-llm, @deepseek-ai/dsh-session, @deepseek-ai/dsh-session-query, @deepseek-ai/dsh-settings, @deepseek-ai/dsh-skill, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-timeout, @deepseek-ai/dsh-tools, @deepseek-ai/dsh-workspace, @deepseek-ai/schemastery
+  shape: {"sectionCall":true,"registerCall":true,"watchFile":false,"clientBundle":true}
+  sections: [] orders=[]
+    section@ lib\index.js: .section({ name: PERSONA_FILES_SECTION, order: config.sectionOrder, text: renderPersonaSection(identity, soul, config.identityBudgetChars, config.soulBudgetChars) }); }
+    section@ lib\index.js: .section({ name: MEMORY_SECTION, order: config.sectionOrder, text: renderSection(user, memory, config.memoryBudgetChars, config.userBudgetChars) }); agent.ctx.systemPr
+  routes: kind=["prefix"] paths=["/MEMORY.md","/USER.md"] strings=["/api/plugins/dsh-file-memory"]
+  stores: [] homeRefs=2
+
+### dsh-flomo@0.2.2  packed=true
+  deps: @deepseek-ai/cordis, @deepseek-ai/dsh-client-connection, @deepseek-ai/dsh-client-runtime, @deepseek-ai/dsh-client-ui-settings, @deepseek-ai/dsh-client-ui-slots, @deepseek-ai/dsh-host-webserver, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools
+  shape: {"sectionCall":true,"registerCall":true,"watchFile":false,"clientBundle":true}
+  sections: ["plugin:dsh-flomo"] orders=[300]
+    section@ lib\index.js: .section({ name: "plugin:dsh-flomo", order: SECTION_ORDER, text: FLOMO_GUIDANCE }); }; sync(); } //#endregion export { FLOMO_API, FLOMO_GUIDANCE, FlomoStore, HASH_SAFE
+  routes: kind=[] paths=[] strings=["/api/dsh-flomo/config","/api/dsh-flomo/send","/api/dsh-flomo/test"]
+  stores: [] homeRefs=1
+
+### dsh-flomo-report@0.1.1  packed=true
+  deps: @deepseek-ai/cordis, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools
+  shape: {"sectionCall":true,"registerCall":true,"watchFile":false,"clientBundle":true}
+  sections: ["plugin:dsh-flomo-report"] orders=[36]
+    section@ lib\index.js: .section({ name: 'plugin:dsh-flomo-report', order: SECTION_ORDER, text: FLOMO_REPORT_GUIDANCE, }) } disposeApi = ctx.effect(() => mountApi(ctx
+  routes: kind=["prefix"] paths=["/dsh-flomo-report/api"] strings=[]
+  stores: [] homeRefs=1
+
+### dsh-handoff-compaction@0.2.0-rc.5  packed=true
+  deps: @deepseek-ai/schemastery, @deepseek-ai/cordis, @deepseek-ai/dsh, @deepseek-ai/dsh-agent, @deepseek-ai/dsh-compaction-basic, @deepseek-ai/dsh-llm, @deepseek-ai/dsh-session, @deepseek-ai/dsh-session-query, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-timeout, @deepseek-ai/dsh-tools
+  shape: {"sectionCall":true,"registerCall":false,"watchFile":false,"clientBundle":true}
+  sections: ["tool:session-query"] orders=[]
+    section@ lib\history-tools.js: .section({ name: "tool:session-query", order: ctx.systemPrompt.getSectionOrder?.("TOOL_SESSION_QUERY") ?? 113, text: PROMPT_TEXT }); ctx.tools.regis
+  routes: kind=[] paths=[] strings=[]
+  stores: [] homeRefs=0
+
+### dsh-instruction-memory@1.0.16  packed=true
+  deps: @deepseek-ai/dsh-system-prompt
+  shape: {"sectionCall":true,"registerCall":true,"watchFile":true,"clientBundle":true}
+  sections: [] orders=[1200]
+    section@ lib\index.js: .section({ name: SECTION_NAME, order: SECTION_ORDER, text: assembledSectionText }) state.sectionRegistered = true state.sectionError = null logDebug('prompt
+  routes: kind=["prefix"] paths=[] strings=["/instruction-memory/api"]
+  stores: ["memory.json",".dsh-instruction-memory.json"] homeRefs=1
+
+### dsh-layered-memory@0.11.0  packed=true
+  deps: @deepseek-ai/schemastery, @deepseek-ai/cordis, @deepseek-ai/dsh-agent, @deepseek-ai/dsh-home-paths, @deepseek-ai/dsh-llm, @deepseek-ai/dsh-session, @deepseek-ai/dsh-settings, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools
+  shape: {"sectionCall":false,"registerCall":false,"watchFile":true,"clientBundle":true}
+  sections: [] orders=[200,100,510]
+  routes: kind=[] paths=[] strings=[]
+  stores: ["state.json"] homeRefs=0
+
+### dsh-md-notes@0.13.0  packed=true
+  deps: @deepseek-ai/cordis, @deepseek-ai/dsh-agent, @deepseek-ai/dsh-client-locale, @deepseek-ai/dsh-client-store, @deepseek-ai/dsh-client-ui-chat, @deepseek-ai/dsh-client-ui-conversation, @deepseek-ai/dsh-client-ui-input-trigger, @deepseek-ai/dsh-client-ui-layout, @deepseek-ai/dsh-client-ui-primitives, @deepseek-ai/dsh-client-ui-renderer, @deepseek-ai/dsh-client-ui-settings, @deepseek-ai/dsh-client-ui-settings-general, @deepseek-ai/dsh-client-ui-sidebar, @deepseek-ai/dsh-client-ui-sidebar-right, @deepseek-ai/dsh-client-ui-slots, @deepseek-ai/dsh-util-workspace-path, @deepseek-ai/dsh-api-session-controller, @deepseek-ai/dsh-host-webserver, @deepseek-ai/dsh-llm, @deepseek-ai/dsh-sandbox-policy, @deepseek-ai/dsh-session, @deepseek-ai/dsh-session-query, @deepseek-ai/dsh-settings, @deepseek-ai/dsh-subprocess, @deepseek-ai/dsh-tools, @deepseek-ai/dsh-workspace, @deepseek-ai/schemastery
+  shape: {"sectionCall":false,"registerCall":true,"watchFile":false,"clientBundle":true}
+  sections: [] orders=[30,20,100,10]
+  routes: kind=["md-notes","prefix","exact"] paths=["//${segments.join("] strings=["/plugins/md-notes","/plugins/md-notes/asset"]
+  stores: [] homeRefs=1
+
+### dsh-memory-loom@0.1.8  packed=true
+  deps: @deepseek-ai/cordis, @deepseek-ai/dsh-session, @deepseek-ai/dsh-storage-domain, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools, @deepseek-ai/schemastery
+  shape: {"sectionCall":true,"registerCall":false,"watchFile":false,"clientBundle":true}
+  sections: [] orders=[40]
+    section@ index.js: .section({ name: SECTION, order: SECTION_ORDER, text: '' }) this.ctx.on('system-prompt/assemble', async (assembly, context, next) => { const assembled = await next()
+  routes: kind=[] paths=[] strings=[]
+  stores: [] homeRefs=0
+
+### dsh-memory-vault@0.1.5  packed=true
+  deps: @deepseek-ai/schemastery, @deepseek-ai/dsh-storage-domain, @deepseek-ai/dsh-storage, @deepseek-ai/dsh-tools, @deepseek-ai/dsh-system-prompt, @deepseek-ai/cordis
+  shape: {"sectionCall":true,"registerCall":true,"watchFile":false,"clientBundle":true}
+  sections: ["dsh-memory"] orders=[30,90]
+    section@ lib\index.js: .section({ name: 'dsh-memory', order: 90, text: () => { const entries = allEntries() if (!entries.length) return '' const recent = entries .sl
+  routes: kind=[] paths=["/dsh-memory/entries"] strings=[]
+  stores: [] homeRefs=0
+
+### dsh-notion-connector@0.1.2  packed=true
+  deps: @deepseek-ai/dsh-client-runtime, @deepseek-ai/dsh-host-webserver, @deepseek-ai/dsh-llm, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools
+  shape: {"sectionCall":true,"registerCall":true,"watchFile":false,"clientBundle":true}
+  sections: ["plugin:dsh-notion"] orders=[30]
+    section@ lib\index.js: .section({ name: "plugin:dsh-notion", order: SECTION_ORDER, text: NOTION_GUIDANCE }), "dsh-notion: announcement" ); } export { NOTION_GUIDANCE, apply, inject, name };
+  routes: kind=[] paths=[] strings=["/api/dsh-notion"]
+  stores: [] homeRefs=1
+
+### dsh-opencontext@0.4.0  packed=true
+  deps: @deepseek-ai/cordis, @deepseek-ai/dsh-agent, @deepseek-ai/dsh-llm, @deepseek-ai/dsh-session, @deepseek-ai/dsh-skill, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools, @deepseek-ai/schemastery
+  shape: {"sectionCall":false,"registerCall":false,"watchFile":false,"clientBundle":false}
+  sections: [] orders=[]
+  routes: kind=[] paths=["/${path}"] strings=[]
+  stores: [] homeRefs=1
+
+### dsh-openviking-manager@0.4.2  packed=true
+  deps: @deepseek-ai/cordis, @deepseek-ai/dsh-client-locale, @deepseek-ai/dsh-client-ui-plugin-manager, @deepseek-ai/dsh-client-ui-renderer, @deepseek-ai/dsh-client-ui-slots, @deepseek-ai/dsh-host-webserver
+  shape: {"sectionCall":false,"registerCall":true,"watchFile":false,"clientBundle":true}
+  sections: [] orders=[10]
+  routes: kind=[] paths=[] strings=["/plugins/dsh-openviking-manager/api","/api/v1/admin/accounts","/api/v1/system/status"]
+  stores: [] homeRefs=0
+
+### dsh-plugin-focus@1.1.1  packed=true
+  deps: @deepseek-ai/cordis, @deepseek-ai/dsh-agent, @deepseek-ai/dsh-client-locale, @deepseek-ai/dsh-client-runtime, @deepseek-ai/dsh-client-ui-conversation, @deepseek-ai/dsh-fs, @deepseek-ai/dsh-llm, @deepseek-ai/dsh-session, @deepseek-ai/dsh-session-projection, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools, @deepseek-ai/schemastery
+  shape: {"sectionCall":true,"registerCall":false,"watchFile":false,"clientBundle":true}
+  sections: ["focus:instructions"] orders=[20]
+    section@ lib\index.js: .section({ name: "focus:instructions", order: sectionOrder, text: FOCUS_SECTION_TEXT, }), "focus.section()"); } } export { Config, FOCUS_SECTION_TEXT, appl
+    section@ lib\index.js: .section()"); } } export { Config, FOCUS_SECTION_TEXT, apply, inject, name };
+  routes: kind=[] paths=[] strings=[]
+  stores: [] homeRefs=0
+
+### dsh-plugin-memory@0.9.3  packed=true
+  deps: @deepseek-ai/cordis, @deepseek-ai/dsh-skill, @deepseek-ai/dsh-system-prompt, @deepseek-ai/schemastery
+  shape: {"sectionCall":false,"registerCall":true,"watchFile":true,"clientBundle":true}
+  sections: [] orders=[100]
+  routes: kind=["directory","exact"] paths=[] strings=["/api/memory/config","/api/memory/insights","/api/memory/graph"]
+  stores: ["memory.json","memory-manifest.json"] homeRefs=1
+
+### dsh-plugin-sodamem@0.1.1  packed=true
+  deps: @deepseek-ai/cordis, @deepseek-ai/dsh-agent, @deepseek-ai/dsh-llm, @deepseek-ai/dsh-session, @deepseek-ai/dsh-system-prompt, @deepseek-ai/schemastery
+  shape: {"sectionCall":false,"registerCall":false,"watchFile":false,"clientBundle":false}
+  sections: [] orders=[]
+  routes: kind=[] paths=[] strings=[]
+  stores: [] homeRefs=0
+
+### dsh-prime-memory@0.22.1  packed=true
+  deps: @deepseek-ai/cordis, @deepseek-ai/dsh-agent, @deepseek-ai/dsh-client-connection, @deepseek-ai/dsh-client-ui-primitives, @deepseek-ai/dsh-home-paths, @deepseek-ai/dsh-llm, @deepseek-ai/dsh-session, @deepseek-ai/dsh-settings, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools
+  shape: {"sectionCall":false,"registerCall":true,"watchFile":false,"clientBundle":true}
+  sections: [] orders=[200,100,510]
+  routes: kind=["prefix"] paths=[] strings=[]
+  stores: ["state.json","reconcile-state.json"] homeRefs=0
+
+### dsh-unified-agent-memory@0.5.2  packed=true
+  deps: @deepseek-ai/cordis, @deepseek-ai/dsh-host-webserver, @deepseek-ai/dsh-tools
+  shape: {"sectionCall":false,"registerCall":true,"watchFile":false,"clientBundle":true}
+  sections: [] orders=[]
+  routes: kind=["exact"] paths=["/api/dsh-unified-agent-memory/status"] strings=["/api/dsh-unified-agent-memory/status"]
+  stores: [] homeRefs=0
+
+### dsh-yogacara@0.2.1  packed=true
+  deps: @deepseek-ai/schemastery, @deepseek-ai/cordis, @deepseek-ai/dsh-session, @deepseek-ai/dsh-session-projection, @deepseek-ai/dsh-storage-domain, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools
+  shape: {"sectionCall":true,"registerCall":false,"watchFile":false,"clientBundle":false}
+  sections: ["yogacara:self"] orders=[]
+    section@ lib\index.js: .section({ name: "yogacara:self", order: SECTION_ORDER, text: () => this.renderSection() }); }); if (this.config.observeChat) this.ctx.on("session/event", (sessi
+  routes: kind=[] paths=[] strings=[]
+  stores: [] homeRefs=0
+
+### stratagate-dsh@0.3.7  packed=true
+  deps: @deepseek-ai/cordis, @deepseek-ai/dsh-agent-default-model, @deepseek-ai/dsh-client-ui-conversation, @deepseek-ai/dsh-llm, @deepseek-ai/dsh-native-command, @deepseek-ai/dsh-session, @deepseek-ai/dsh-session-format, @deepseek-ai/dsh-session-format-catalog, @deepseek-ai/dsh-session-format-v0-to-v1, @deepseek-ai/dsh-settings, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools, @deepseek-ai/schemastery
+  shape: {"sectionCall":true,"registerCall":true,"watchFile":false,"clientBundle":true}
+  sections: ["tool:stratagate-memory","tool:stratagate-feedback"] orders=[32,113,114]
+    section@ dist\plugin.js: .section({ name: "tool:stratagate-memory", order: 113, text: MEMORY_PROTOCOL }); ctx.systemPrompt.section({ name: "tool:stratagate-feedback", order: 114, text: FEEDBACK_PROTOCOL
+    section@ dist\plugin.js: .section({ name: "tool:stratagate-feedback", order: 114, text: FEEDBACK_PROTOCOL }); ctx.on("system-prompt/assemble", async (_assembly, context, next) => { const assembled =
+  routes: kind=["prefix"] paths=["/api/stratagate"] strings=["/api/stratagate/","/api/stratagate/dashboard","/api/stratagate/feedback","/api/stratagate/profile","/api/stratagate/settings","/api/stratagate/storage/open-directory","/api/stratagate/blocks/expand","/api/stratagate/blocks/retry-summary","/api/stratagate/jobs/retry","/api/stratagate/topics/retry","/api/stratagate/import","/api/stratagate/overview","/api/stratagate/memories","/api/stratagate/topics","/api/stratagate/topic-events","/api/stratagate/sources","/api/stratagate/audit","/api/stratagate/agent-memories","/api/stratagate"]
+  stores: [] homeRefs=0
+
+  evidence -> D:\Users\34332\AI\dsh-instruction-memory\dsh-memory-verification\out\compat-1016-deepscan-union31.json
+node : (node:12148) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to se
+curity vulnerabilities, as the arguments are not escaped, only concatenated.
+At line:15 char:2983
++ ...  'union31'; node dsh-memory-verification\scripts\compat-1016-deepscan ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ((node:12148) [D...y concatenated.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+(Use `node --trace-deprecation ...` to show where the warning was created)

@@ -1,0 +1,5055 @@
+{
+  "generatedAt": "2026-10-10T04:02:20.941Z",
+  "basis": "awesome-dsh-plugin.com catalog snapshot (category=memory) + npm abbreviated manifests; no third-party code executed",
+  "total": 207,
+  "counts": {
+    "self": 1,
+    "settingsSlot": 0,
+    "systemPrompt": 28,
+    "webServer": 8,
+    "bundlePatch": 0,
+    "unavailable": 0,
+    "githubReleaseOnly": 99,
+    "noHostServiceEvidence": 77
+  },
+  "groups": {
+    "self": [
+      "dsh-instruction-memory"
+    ],
+    "settingsSlot": [],
+    "systemPrompt": [
+      "dsh-plugin-focus",
+      "dsh-context-zip",
+      "dsh-auto-memory",
+      "@busabase/dsh-plugin",
+      "dsh-prime-memory",
+      "dsh-file-memory",
+      "stratagate-dsh",
+      "dsh-memory-vault",
+      "@zzerx/dsh-plugin-memory",
+      "dsh-instruction-memory",
+      "dsh-layered-memory",
+      "dsh-handoff-compaction",
+      "dsh-plugin-memory",
+      "dsh-opencontext",
+      "@memorylake/dsh-plugin",
+      "@max-null/dsh-memory",
+      "@flowingspring/dsh-workspace-memory",
+      "@honcho-ai/dsh-honcho",
+      "dsh-memory-loom",
+      "@modusensus/dsh-mneme",
+      "dsh-yogacara",
+      "@tr1v3r/dsh-ltm",
+      "dsh-plugin-sodamem",
+      "@vesna-strivozha-2026/dsh-llm-wiki",
+      "@dsh-plugins/dsh-user-mirror",
+      "dsh-flomo",
+      "dsh-flomo-report",
+      "dsh-notion-connector"
+    ],
+    "webServer": [
+      "@busabase/dsh-plugin",
+      "dsh-unified-agent-memory",
+      "@modusensus/dsh-mneme",
+      "@vesna-strivozha-2026/dsh-llm-wiki",
+      "dsh-openviking-manager",
+      "dsh-flomo",
+      "dsh-notion-connector",
+      "dsh-md-notes"
+    ],
+    "bundlePatch": [],
+    "unavailable": [],
+    "githubReleaseOnly": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "noHostServiceEvidence": [
+      "dsh-butler-memory",
+      "dsh-memory-triage",
+      "@yolk_vat-y/dsh-project-memory",
+      "@agentscope-ai/reme-dsh-plugin",
+      "dsh-noteboard",
+      "dsh-kb-rag",
+      "dsh-tiddlywiki",
+      "dsh-eli-mode",
+      "dsh-living-memory",
+      "dsh-learn-wiki",
+      "@a9i5k4/dsh-auto-memory",
+      "dsh-client-ui-obsidian-memory",
+      "dsh-observational-memory",
+      "dsh-context-imports",
+      "dsh-memory-eternal",
+      "@dennisrongo/dsh-memory",
+      "dsh-memory-gate",
+      "dsh-claude-memory",
+      "dsh-siyuan-notes",
+      "@co-engram/dsh",
+      "dsh-native-memory",
+      "memory-eternal",
+      "dsh-memory-spaces",
+      "misakanet",
+      "dsh-knowledge-base",
+      "@hr98w/dsh-memory",
+      "dsh-hermes-memory",
+      "sage-mem",
+      "dsh-memories",
+      "dsh-clear-mind",
+      "@lcthe/dsh-hermes-memory",
+      "@luisarg/memory-auto",
+      "@luisarg/memory-mcp",
+      "dsh-memory-palace",
+      "dsh-patchouli",
+      "dsh-cue-bank",
+      "@lemoncat7/dsh-knowledge",
+      "dsh-expmem",
+      "dsh-graphmemory",
+      "dsh-trilium",
+      "dsh-yuque-kb",
+      "dsh-obsidian",
+      "dsh-library",
+      "meow-memory",
+      "dsh-mnemon",
+      "dsh-memoir",
+      "@duke-dsh-plugins/dsh-memory-manager",
+      "dsh-memento",
+      "@lovedolove/dsh-project-memory",
+      "dsh-simple-wiki-memory",
+      "dsh-recall",
+      "dsh-soul-md",
+      "dsh-git-memory",
+      "dsh-engram",
+      "dsh-brainagent",
+      "agent-feedback-loop-dsh",
+      "dsh-memory-porter",
+      "dsh-plugin-recall",
+      "mosaic-memory-compress",
+      "dsh-engramory",
+      "@vectorize-io/hindsight-coding-agents",
+      "dsh-plugin-save-token",
+      "dsh-tdai-memory",
+      "@weibaohui/hermes-loop",
+      "@akslcw/dsh-negative-ledger",
+      "dsh-akn-plugin",
+      "@weibaohui/context-razor",
+      "@xxinchen/dsh-plugin",
+      "dsh-deja",
+      "dsh-knj-obsidian",
+      "qmd-autosearch",
+      "@zhujunpeng12/dsh-memory-system",
+      "@zseven-w/dsh-noema",
+      "@zilliz/memsearch-dsh",
+      "@openviking/dsh-memory-plugin",
+      "@yushenghai/dsh-memory-plugin",
+      "@zoria-lind/dsh-ecolink-adapter"
+    ]
+  },
+  "rows": [
+    {
+      "npm": "@vectorize-io/hindsight-coding-agents",
+      "catalogVersion": "0.8.0",
+      "downloads": 59242,
+      "stars": 47345,
+      "capabilities": [],
+      "owner": "vectorize-io",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.8.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-mnemon",
+      "catalogVersion": "0.5.25",
+      "downloads": 42489,
+      "stars": 475,
+      "capabilities": [
+        "shell",
+        "dynamic-code",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env",
+        "subagent",
+        "host-runtime"
+      ],
+      "owner": "omdsh-dev",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.5.27",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@openviking/dsh-memory-plugin",
+      "catalogVersion": "0.5.19",
+      "downloads": 33642,
+      "stars": 39446,
+      "capabilities": [
+        "env"
+      ],
+      "owner": "volcengine",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.5.20",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-tiddlywiki",
+      "catalogVersion": "0.30.57",
+      "downloads": 17000,
+      "stars": 6,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "bbqisbbq",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.30.65",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@a9i5k4/dsh-auto-memory",
+      "catalogVersion": "3.2.13",
+      "downloads": 13948,
+      "stars": 103,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env",
+        "subagent"
+      ],
+      "owner": "Aik358",
+      "manifest": {
+        "fetched": true,
+        "latest": "3.2.14",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@modusensus/dsh-mneme",
+      "catalogVersion": "0.8.14",
+      "downloads": 12676,
+      "stars": 140,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env",
+        "host-runtime",
+        "llm"
+      ],
+      "owner": "slow-stack",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.8.15",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": true,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service",
+        "webserver-service"
+      ]
+    },
+    {
+      "npm": "dsh-prime-memory",
+      "catalogVersion": "0.22.1",
+      "downloads": 10877,
+      "stars": 1,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env",
+        "llm"
+      ],
+      "owner": "drscrewdriver",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.22.1",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": ">=0.1.0-rc.2",
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "stratagate-dsh",
+      "catalogVersion": "0.3.6",
+      "downloads": 9764,
+      "stars": 127,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "llm"
+      ],
+      "owner": "diqierjia",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.3.7",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "meow-memory",
+      "catalogVersion": "0.31.0",
+      "downloads": 8578,
+      "stars": 164,
+      "capabilities": [
+        "dynamic-code",
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "Phant0Meow",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.31.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "memory-eternal",
+      "catalogVersion": "0.10.13",
+      "downloads": 6479,
+      "stars": 15,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "EternalNight996",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.10.16",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": ">=0.1.5-alpha.2 <0.3.0-0",
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@lemoncat7/dsh-knowledge",
+      "catalogVersion": "2.13.2",
+      "downloads": 6267,
+      "stars": 14,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "llm"
+      ],
+      "owner": "lemoncat7",
+      "manifest": {
+        "fetched": true,
+        "latest": "2.13.3",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-memento",
+      "catalogVersion": "0.5.22",
+      "downloads": 5723,
+      "stars": 140,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "PerryLink",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.5.23",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": ">=0.1.2-rc.1 <0.2.0 || >=0.1.5-alpha.1 <0.2.0 || >=0.1.6-0 <0.2.0 || >=0.1.7-0 <0.2.0 || >=0.2.0-0 <0.3.0 || >=0.2.1-0 <0.3.0",
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@max-null/dsh-memory",
+      "catalogVersion": "0.15.1",
+      "downloads": 5600,
+      "stars": 5,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "Max-Null",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.15.1",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "dsh-soul-md",
+      "catalogVersion": "0.10.0",
+      "downloads": 5071,
+      "stars": 10,
+      "capabilities": [
+        "fs-write",
+        "fs-read"
+      ],
+      "owner": "Scorp1o117",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.10.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@yolk_vat-y/dsh-project-memory",
+      "catalogVersion": "0.5.15",
+      "downloads": 4638,
+      "stars": 17,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "env",
+        "llm"
+      ],
+      "owner": "00080000",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.5.15",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-library",
+      "catalogVersion": "0.2.19",
+      "downloads": 4322,
+      "stars": 19,
+      "capabilities": [
+        "shell",
+        "dynamic-code",
+        "fs-read",
+        "network"
+      ],
+      "owner": "PerryLink",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.2.20",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": ">=0.1.2-rc.1 <0.2.0 || >=0.1.5-alpha.1 <0.2.0 || >=0.1.6-0 <0.2.0 || >=0.1.7-0 <0.2.0 || >=0.2.0-0 <0.3.0 || >=0.2.1-0 <0.3.0",
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "misakanet",
+      "catalogVersion": "2.42.2",
+      "downloads": 4284,
+      "stars": 526,
+      "capabilities": [
+        "fs-read",
+        "network"
+      ],
+      "owner": "Ikalus1988",
+      "manifest": {
+        "fetched": true,
+        "latest": "2.42.2",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-deja",
+      "catalogVersion": "0.21.7",
+      "downloads": 4271,
+      "stars": 1154,
+      "capabilities": [
+        "shell",
+        "fs-read",
+        "env"
+      ],
+      "owner": "vshulcz",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.22.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-memoir",
+      "catalogVersion": "0.9.1",
+      "downloads": 3857,
+      "stars": 33,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "Qinling-Melon-Farmers",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.9.2",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-memory-palace",
+      "catalogVersion": "1.8.0",
+      "downloads": 3781,
+      "stars": 5,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "llm"
+      ],
+      "owner": "lovezi0",
+      "manifest": {
+        "fetched": true,
+        "latest": "1.8.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "sage-mem",
+      "catalogVersion": "0.9.0",
+      "downloads": 3559,
+      "stars": 8,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "gezi-wen",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.9.2",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": ">=0.1.2-rc.1",
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-plugin-memory",
+      "catalogVersion": "0.9.3",
+      "downloads": 3505,
+      "stars": 5,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "LittleBlackTong",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.9.3",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "dsh-plugin-save-token",
+      "catalogVersion": "2.4.1",
+      "downloads": 3415,
+      "stars": 14,
+      "capabilities": [
+        "network"
+      ],
+      "owner": "vibe-any",
+      "manifest": {
+        "fetched": true,
+        "latest": "2.4.1",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-memory-eternal",
+      "catalogVersion": "0.7.0",
+      "downloads": 3351,
+      "stars": 16,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "EternalNight996",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.7.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-instruction-memory",
+      "catalogVersion": "1.0.16",
+      "downloads": 3325,
+      "stars": 0,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "HERO476",
+      "manifest": {
+        "fetched": true,
+        "latest": "1.0.16",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "exact-self",
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "dsh-tdai-memory",
+      "catalogVersion": "0.4.2",
+      "downloads": 3263,
+      "stars": 7,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "env",
+        "llm"
+      ],
+      "owner": "Scorp1o117",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.4.2",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-living-memory",
+      "catalogVersion": "0.2.10",
+      "downloads": 2743,
+      "stars": 2,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "credentials",
+        "env"
+      ],
+      "owner": "dearbld",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.2.10",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-auto-memory",
+      "catalogVersion": "0.7.0",
+      "downloads": 2510,
+      "stars": 104,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network"
+      ],
+      "owner": "AskTheWay",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.7.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "dsh-obsidian",
+      "catalogVersion": "0.2.6",
+      "downloads": 2413,
+      "stars": 20,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "mingzeng21",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.2.6",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-kb-rag",
+      "catalogVersion": "1.6.7",
+      "downloads": 2374,
+      "stars": 14,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "Breeze136",
+      "manifest": {
+        "fetched": true,
+        "latest": "1.6.7",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@busabase/dsh-plugin",
+      "catalogVersion": "0.1.14",
+      "downloads": 2368,
+      "stars": 6,
+      "capabilities": [
+        "shell",
+        "dynamic-code",
+        "fs-write",
+        "fs-read",
+        "network",
+        "credentials",
+        "env",
+        "host-runtime"
+      ],
+      "owner": "busabase",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.15",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": true,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service",
+        "webserver-service"
+      ]
+    },
+    {
+      "npm": "dsh-openviking-manager",
+      "catalogVersion": "0.4.0",
+      "downloads": 2324,
+      "stars": 1,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env",
+        "host-runtime"
+      ],
+      "owner": "xbzbing",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.4.2",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": true,
+        "hasBundlePatch": false,
+        "dshEngines": ">=0.1.6-alpha.2 <0.3.0-0",
+        "keywords": []
+      },
+      "signals": [
+        "webserver-service"
+      ]
+    },
+    {
+      "npm": "@weibaohui/hermes-loop",
+      "catalogVersion": "0.2.1",
+      "downloads": 2280,
+      "stars": 9,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "weibaohui",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.2.1",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": ">=0.1.7-rc.2",
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@zilliz/memsearch-dsh",
+      "catalogVersion": "0.1.5",
+      "downloads": 2218,
+      "stars": 2729,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "zilliztech",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.6",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-context-zip",
+      "catalogVersion": "0.1.9",
+      "downloads": 2135,
+      "stars": 5,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "llm"
+      ],
+      "owner": "brunhildzhou",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.9",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "dsh-context-imports",
+      "catalogVersion": "0.2.2",
+      "downloads": 2128,
+      "stars": 6,
+      "capabilities": [
+        "fs-read"
+      ],
+      "owner": "ciskonc",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.2.3",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-layered-memory",
+      "catalogVersion": "0.11.0",
+      "downloads": 2092,
+      "stars": 20,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env",
+        "llm"
+      ],
+      "owner": "JunNanLYS",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.11.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "@lovedolove/dsh-project-memory",
+      "catalogVersion": "0.4.31",
+      "downloads": 2076,
+      "stars": 5,
+      "capabilities": [],
+      "owner": "LoveDoLove",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.5.4",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@luisarg/memory-mcp",
+      "catalogVersion": "0.1.8",
+      "downloads": 1945,
+      "stars": 0,
+      "capabilities": [],
+      "owner": "Luisarg03",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.8",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@zzerx/dsh-plugin-memory",
+      "catalogVersion": "0.4.3",
+      "downloads": 1923,
+      "stars": 5,
+      "capabilities": [],
+      "owner": "0x7A7A6572",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.4.3",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "@tr1v3r/dsh-ltm",
+      "catalogVersion": "0.3.1",
+      "downloads": 1892,
+      "stars": 1,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "tr1v3r",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.3.1",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "dsh-handoff-compaction",
+      "catalogVersion": "0.2.0-rc.5",
+      "downloads": 1890,
+      "stars": 1,
+      "capabilities": [
+        "llm"
+      ],
+      "owner": "knighthongyu",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.2.0-rc.5",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "@dsh-plugins/dsh-user-mirror",
+      "catalogVersion": "0.8.3",
+      "downloads": 1870,
+      "stars": 17,
+      "capabilities": [
+        "fs-read",
+        "network"
+      ],
+      "owner": "webkubor",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.8.3",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "dsh-unified-agent-memory",
+      "catalogVersion": "0.5.2",
+      "downloads": 1777,
+      "stars": 7,
+      "capabilities": [
+        "shell",
+        "fs-read",
+        "network",
+        "env",
+        "host-runtime"
+      ],
+      "owner": "Noelune",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.5.2",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": true,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "webserver-service"
+      ]
+    },
+    {
+      "npm": "dsh-engram",
+      "catalogVersion": "0.4.0",
+      "downloads": 1722,
+      "stars": 6,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env",
+        "llm"
+      ],
+      "owner": "skepsun",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.4.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": ">=0.1.2-alpha.2 <0.2.0-0",
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@honcho-ai/dsh-honcho",
+      "catalogVersion": "0.1.2",
+      "downloads": 1696,
+      "stars": 3,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "credentials",
+        "env"
+      ],
+      "owner": "plastic-labs",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.2",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "@luisarg/memory-auto",
+      "catalogVersion": "0.1.8",
+      "downloads": 1694,
+      "stars": 0,
+      "capabilities": [],
+      "owner": "Luisarg03",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.8",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@weibaohui/context-razor",
+      "catalogVersion": "0.4.7",
+      "downloads": 1668,
+      "stars": 1,
+      "capabilities": [
+        "network",
+        "env"
+      ],
+      "owner": "weibaohui",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.4.7",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": ">=0.1.7-rc.2",
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-clear-mind",
+      "catalogVersion": "0.1.5",
+      "downloads": 1633,
+      "stars": 1,
+      "capabilities": [
+        "llm"
+      ],
+      "owner": "john-walks-slow",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.5",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-knj-obsidian",
+      "catalogVersion": "2026.9.201",
+      "downloads": 1593,
+      "stars": 1,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "yangdongzhen590",
+      "manifest": {
+        "fetched": true,
+        "latest": "2026.9.201",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@zseven-w/dsh-noema",
+      "catalogVersion": "0.1.0-rc.6",
+      "downloads": 1567,
+      "stars": 130,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "ZSeven-W",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.0-rc.6",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-engramory",
+      "catalogVersion": "0.2.5",
+      "downloads": 1542,
+      "stars": 192,
+      "capabilities": [
+        "fs-write",
+        "fs-read"
+      ],
+      "owner": "tinqiao-oss",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.2.5",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-memory-gate",
+      "catalogVersion": "0.13.1",
+      "downloads": 1532,
+      "stars": 2,
+      "capabilities": [
+        "fs-write",
+        "fs-read"
+      ],
+      "owner": "GIT121995",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.13.1",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@hr98w/dsh-memory",
+      "catalogVersion": "0.1.4",
+      "downloads": 1468,
+      "stars": 28,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "hr98w",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.4",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-observational-memory",
+      "catalogVersion": "0.3.0",
+      "downloads": 1419,
+      "stars": 1,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "env",
+        "llm"
+      ],
+      "owner": "EPCN-fla",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.3.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@agentscope-ai/reme-dsh-plugin",
+      "catalogVersion": "0.1.0",
+      "downloads": 1413,
+      "stars": 3565,
+      "capabilities": [],
+      "owner": "agentscope-ai",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-md-notes",
+      "catalogVersion": "0.13.0",
+      "downloads": 1401,
+      "stars": 16,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env",
+        "host-runtime"
+      ],
+      "owner": "XieZongChen",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.13.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": true,
+        "hasBundlePatch": false,
+        "dshEngines": ">=0.1.5-rc.2 <0.1.6",
+        "keywords": []
+      },
+      "signals": [
+        "webserver-service"
+      ]
+    },
+    {
+      "npm": "dsh-patchouli",
+      "catalogVersion": "0.1.7",
+      "downloads": 1342,
+      "stars": 1,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network"
+      ],
+      "owner": "memorax-ai",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.7",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@duke-dsh-plugins/dsh-memory-manager",
+      "catalogVersion": "1.4.2",
+      "downloads": 1273,
+      "stars": 4,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "MoonlitDropOfBlood",
+      "manifest": {
+        "fetched": true,
+        "latest": "1.4.2",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": "^0.1.0-rc.7 || ^0.2.0-rc.1",
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-hermes-memory",
+      "catalogVersion": "1.1.10",
+      "downloads": 1253,
+      "stars": 9,
+      "capabilities": [
+        "network"
+      ],
+      "owner": "isheng-eqi",
+      "manifest": {
+        "fetched": true,
+        "latest": "1.1.10",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@flowingspring/dsh-workspace-memory",
+      "catalogVersion": "0.2.15",
+      "downloads": 1212,
+      "stars": 0,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "lgquan",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.2.15",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "dsh-memory-vault",
+      "catalogVersion": "0.1.5",
+      "downloads": 1192,
+      "stars": 5,
+      "capabilities": [],
+      "owner": "flymysql",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.5",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "dsh-native-memory",
+      "catalogVersion": "0.2.0",
+      "downloads": 1183,
+      "stars": 2,
+      "capabilities": [],
+      "owner": "highland0971",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.2.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-memory-spaces",
+      "catalogVersion": "0.1.1",
+      "downloads": 1143,
+      "stars": 2,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "llm"
+      ],
+      "owner": "icearia0219",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.1",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-knowledge-base",
+      "catalogVersion": "0.1.5",
+      "downloads": 1140,
+      "stars": 6,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "htcqp802",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.5",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-noteboard",
+      "catalogVersion": "0.3.0",
+      "downloads": 1136,
+      "stars": 2,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network"
+      ],
+      "owner": "boogoo619",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.3.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": ">=0.2.0-rc.2",
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-opencontext",
+      "catalogVersion": "0.4.0",
+      "downloads": 1132,
+      "stars": 76,
+      "capabilities": [],
+      "owner": "melandlabs",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.4.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "@akslcw/dsh-negative-ledger",
+      "catalogVersion": "0.1.2",
+      "downloads": 1104,
+      "stars": 3,
+      "capabilities": [
+        "fs-write",
+        "fs-read"
+      ],
+      "owner": "akslcw",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.2",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@lcthe/dsh-hermes-memory",
+      "catalogVersion": "0.3.0",
+      "downloads": 1090,
+      "stars": 0,
+      "capabilities": [
+        "dynamic-code"
+      ],
+      "owner": "lcthe",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.3.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-plugin-focus",
+      "catalogVersion": "1.1.1",
+      "downloads": 1075,
+      "stars": 1,
+      "capabilities": [
+        "fs-read"
+      ],
+      "owner": "863683348",
+      "manifest": {
+        "fetched": true,
+        "latest": "1.1.1",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "dsh-recall",
+      "catalogVersion": "0.3.0",
+      "downloads": 1073,
+      "stars": 3,
+      "capabilities": [
+        "dynamic-code",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "Relistencode",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.3.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-memory-loom",
+      "catalogVersion": "0.1.8",
+      "downloads": 1067,
+      "stars": 0,
+      "capabilities": [
+        "network"
+      ],
+      "owner": "Ray144165154",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.8",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": ">=0.1.5-rc.2",
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "@zoria-lind/dsh-ecolink-adapter",
+      "catalogVersion": "0.2.2",
+      "downloads": 1044,
+      "stars": 6,
+      "capabilities": [
+        "shell",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "Zoria-Lind",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.2.2",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-client-ui-obsidian-memory",
+      "catalogVersion": "0.3.2",
+      "downloads": 1033,
+      "stars": 15,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "detongz",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.3.2",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-simple-wiki-memory",
+      "catalogVersion": "0.1.3",
+      "downloads": 922,
+      "stars": 5,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "rainow",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.3",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-memory-porter",
+      "catalogVersion": "0.1.0",
+      "downloads": 921,
+      "stars": 1,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network"
+      ],
+      "owner": "Shiye-10Pages",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-notion-connector",
+      "catalogVersion": "0.1.2",
+      "downloads": 873,
+      "stars": 1,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "host-runtime"
+      ],
+      "owner": "zhengjy01",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.2",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": true,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service",
+        "webserver-service"
+      ]
+    },
+    {
+      "npm": "dsh-yogacara",
+      "catalogVersion": "0.2.1",
+      "downloads": 870,
+      "stars": 4,
+      "capabilities": [],
+      "owner": "tancheng33",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.2.1",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "dsh-graphmemory",
+      "catalogVersion": "0.2.0",
+      "downloads": 868,
+      "stars": 0,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "credentials",
+        "llm"
+      ],
+      "owner": "meyaomiao",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.2.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-plugin-sodamem",
+      "catalogVersion": "0.1.1",
+      "downloads": 868,
+      "stars": 2,
+      "capabilities": [],
+      "owner": "SodaMem",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.1",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "dsh-flomo",
+      "catalogVersion": "0.2.2",
+      "downloads": 861,
+      "stars": 0,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "host-runtime"
+      ],
+      "owner": "zhengjy01",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.2.2",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": true,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service",
+        "webserver-service"
+      ]
+    },
+    {
+      "npm": "@co-engram/dsh",
+      "catalogVersion": "0.6.0",
+      "downloads": 846,
+      "stars": 10,
+      "capabilities": [],
+      "owner": "Co-Engram",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.6.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-yuque-kb",
+      "catalogVersion": "0.1.1",
+      "downloads": 840,
+      "stars": 0,
+      "capabilities": [
+        "network"
+      ],
+      "owner": "NyaaCaster",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.1",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-memories",
+      "catalogVersion": "0.2.1",
+      "downloads": 838,
+      "stars": 2,
+      "capabilities": [
+        "fs-write"
+      ],
+      "owner": "jisi71",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.2.1",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "qmd-autosearch",
+      "catalogVersion": "0.1.2",
+      "downloads": 831,
+      "stars": 0,
+      "capabilities": [
+        "fs-read",
+        "network"
+      ],
+      "owner": "zhangzhenwen1",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.2",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-git-memory",
+      "catalogVersion": "0.8.1",
+      "downloads": 829,
+      "stars": 180,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "seriousz158",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.8.1",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-learn-wiki",
+      "catalogVersion": "0.3.1",
+      "downloads": 762,
+      "stars": 1,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env",
+        "llm"
+      ],
+      "owner": "Dayi-Z",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.3.1",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-eli-mode",
+      "catalogVersion": "0.1.11",
+      "downloads": 750,
+      "stars": 6,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "credentials",
+        "env",
+        "llm"
+      ],
+      "owner": "CeilCelia",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.11",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@vesna-strivozha-2026/dsh-llm-wiki",
+      "catalogVersion": "1.0.6",
+      "downloads": 736,
+      "stars": 5,
+      "capabilities": [],
+      "owner": "Vesna-Strivozha",
+      "manifest": {
+        "fetched": true,
+        "latest": "1.0.6",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": true,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service",
+        "webserver-service"
+      ]
+    },
+    {
+      "npm": "mosaic-memory-compress",
+      "catalogVersion": "1.3.4",
+      "downloads": 704,
+      "stars": 3,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env",
+        "llm"
+      ],
+      "owner": "TuringCorp-net",
+      "manifest": {
+        "fetched": true,
+        "latest": "1.3.4",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-claude-memory",
+      "catalogVersion": "0.1.0",
+      "downloads": 692,
+      "stars": 0,
+      "capabilities": [
+        "fs-read"
+      ],
+      "owner": "GodCC6",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-file-memory",
+      "catalogVersion": "1.3.2",
+      "downloads": 677,
+      "stars": 2,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "aqsk-BLG",
+      "manifest": {
+        "fetched": true,
+        "latest": "1.3.2",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "dsh-plugin-recall",
+      "catalogVersion": "0.1.1",
+      "downloads": 676,
+      "stars": 1,
+      "capabilities": [],
+      "owner": "truelove-dreamer",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.1",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@memorylake/dsh-plugin",
+      "catalogVersion": "0.1.0",
+      "downloads": 675,
+      "stars": 5,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "memorylake-ai",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "dsh-brainagent",
+      "catalogVersion": "0.9.28",
+      "downloads": 674,
+      "stars": 6,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "env",
+        "llm"
+      ],
+      "owner": "stas130286-blip",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.9.28",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@zhujunpeng12/dsh-memory-system",
+      "catalogVersion": "0.1.0",
+      "downloads": 654,
+      "stars": 8,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "zhujunpeng12",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-akn-plugin",
+      "catalogVersion": "0.2.0",
+      "downloads": 633,
+      "stars": 5,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "symmetryseeker",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.2.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@dennisrongo/dsh-memory",
+      "catalogVersion": "0.1.3",
+      "downloads": 615,
+      "stars": 0,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "dennisrongo",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.3",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@yushenghai/dsh-memory-plugin",
+      "catalogVersion": "0.1.0",
+      "downloads": 599,
+      "stars": 1,
+      "capabilities": [],
+      "owner": "yushenghai1106",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-trilium",
+      "catalogVersion": "0.1.2",
+      "downloads": 592,
+      "stars": 0,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network"
+      ],
+      "owner": "MineRPi",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.2",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-cue-bank",
+      "catalogVersion": "0.1.0",
+      "downloads": 585,
+      "stars": 1,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "itr-del",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-memory-triage",
+      "catalogVersion": "0.1.0",
+      "downloads": 582,
+      "stars": 0,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "llm"
+      ],
+      "owner": "AtinyFurina",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-butler-memory",
+      "catalogVersion": "0.1.5",
+      "downloads": 576,
+      "stars": 0,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "AndyYang12345",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.5",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "@xxinchen/dsh-plugin",
+      "catalogVersion": "0.2.2",
+      "downloads": 562,
+      "stars": 11,
+      "capabilities": [
+        "network",
+        "env"
+      ],
+      "owner": "xinchen03",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.2.2",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-flomo-report",
+      "catalogVersion": "0.1.1",
+      "downloads": 537,
+      "stars": 0,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network"
+      ],
+      "owner": "zhengjy01",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.1",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": true,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": [
+        "systemprompt-service"
+      ]
+    },
+    {
+      "npm": "dsh-expmem",
+      "catalogVersion": "0.1.0",
+      "downloads": 534,
+      "stars": 0,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "mengxiaoxian",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "dsh-siyuan-notes",
+      "catalogVersion": "0.1.10",
+      "downloads": 508,
+      "stars": 3,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "greyoak111",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.1.10",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": "agent-feedback-loop-dsh",
+      "catalogVersion": "0.9.0",
+      "downloads": 508,
+      "stars": 2,
+      "capabilities": [
+        "shell"
+      ],
+      "owner": "super3ben",
+      "manifest": {
+        "fetched": true,
+        "latest": "0.9.0",
+        "injectSettings": false,
+        "injectRenderer": false,
+        "injectOther": [],
+        "usesSystemPrompt": false,
+        "usesWebServer": false,
+        "hasBundlePatch": false,
+        "dshEngines": null,
+        "keywords": []
+      },
+      "signals": []
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/1014029855/dsh-codevault",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 3,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "1014029855",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/1420079678-ctrl/agent-body/tree/main/workspace/plugins/dsh-cortex",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 16,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "1420079678-ctrl",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/398894496-arch/DSH-KRouter",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 44,
+      "capabilities": [
+        "shell",
+        "fs-read",
+        "env"
+      ],
+      "owner": "398894496-arch",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/863683348/dsh-memory-setup",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "863683348",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/988hj7tczd-oss/harness-desktop/tree/main/plugins/harness-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 2,
+      "capabilities": [],
+      "owner": "988hj7tczd-oss",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/adoresever/graph-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 640,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "credentials",
+        "llm"
+      ],
+      "owner": "adoresever",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/aerince/dsh-active-context-pruning",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [],
+      "owner": "aerince",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/ai-fu-cn/dsh-plugin-memos-code-retrospect",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [
+        "llm"
+      ],
+      "owner": "ai-fu-cn",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/AllenWES365/dsh-local-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "shell",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "AllenWES365",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/Asher-2000/dsh-memory-connect",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 6,
+      "capabilities": [
+        "fs-read",
+        "network",
+        "env",
+        "llm"
+      ],
+      "owner": "Asher-2000",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/baaai123/dsh-memory-protocol",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 2,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "baaai123",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/bonerush/dsh-obsidian-mem",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 6,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "bonerush",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/BOWLUNA/dsh-zcode-scribe",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "BOWLUNA",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/ccch713/deepddw/tree/main/plugins/ddw-teams-panel",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 9,
+      "capabilities": [
+        "network",
+        "env"
+      ],
+      "owner": "ccch713",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/CDeZT/better-basicfun",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "credentials",
+        "env"
+      ],
+      "owner": "CDeZT",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/chenzheshushi-commits/dsh-evolve",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 9,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env",
+        "llm"
+      ],
+      "owner": "chenzheshushi-commits",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/DamonKoy/dsh-plugins/tree/main/packages/dsh-memories",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [
+        "fs-write",
+        "fs-read"
+      ],
+      "owner": "DamonKoy",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/djasdh/interest-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 2,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "djasdh",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/fjzzwxp/dsh-mnemosyne-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "fjzzwxp",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/FleetingEcho/dsh-handoff",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 2,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "env",
+        "llm"
+      ],
+      "owner": "FleetingEcho",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/freehul/sgme",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 12,
+      "capabilities": [
+        "dynamic-code",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "freehul",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/Frog755/dsh-hybrid-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 2,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "Frog755",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/giter00/dsh-headroom",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 16,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "giter00",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/guo6x/dsh-palate",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 3,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "guo6x",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/hellosky983/dsh-qrcode",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 2,
+      "capabilities": [],
+      "owner": "hellosky983",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/hellosky983/dsh-skillradar",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 2,
+      "capabilities": [],
+      "owner": "hellosky983",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/hmlyx/dsh-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network"
+      ],
+      "owner": "hmlyx",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/Hua1Q1nG/dsh-hindsight-local-optimize",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 2,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "credentials",
+        "env"
+      ],
+      "owner": "Hua1Q1nG",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/Hua1Q1nG/dsh-prompt-self",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env",
+        "host-runtime"
+      ],
+      "owner": "Hua1Q1nG",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/ICCuse/dsh-file-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [],
+      "owner": "ICCuse",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/ICCuse/dsh-knowledge",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [],
+      "owner": "ICCuse",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/ICCuse/dsh-premise-guard",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [],
+      "owner": "ICCuse",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/Icstick/dsh-adaptive-context",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 4,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "Icstick",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/Icstick/dsh-inject-scheduler",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [],
+      "owner": "Icstick",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/iwtown/dsh-llm-wiki",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 5,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "iwtown",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/jackyytche/dsh-hindsight-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [
+        "network"
+      ],
+      "owner": "jackyytche",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/Jesse-njx/dsh-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [],
+      "owner": "Jesse-njx",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/jiayan-xu/dsh-memoria",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 3,
+      "capabilities": [],
+      "owner": "jiayan-xu",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/jiayan-xu/dsh-memoria-extra",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "jiayan-xu",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/jinguanghai/deepseek-harness-forge-plugins/tree/main/plugins/forge-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 2,
+      "capabilities": [
+        "fs-read",
+        "env"
+      ],
+      "owner": "jinguanghai",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/JingxuanC/causal-memory/tree/main/dsh-plugin",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 81,
+      "capabilities": [
+        "shell",
+        "fs-read",
+        "env"
+      ],
+      "owner": "JingxuanC",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/JohnXu22786/context-pruner",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [],
+      "owner": "JohnXu22786",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/JohnXu22786/memory-standard",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [],
+      "owner": "JohnXu22786",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/KLRSL/dsh-biomemory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 6,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "KLRSL",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/lanyun077/dsh-project",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network"
+      ],
+      "owner": "lanyun077",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/LAYZR114/dsh-project-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "fs-read",
+        "network",
+        "llm"
+      ],
+      "owner": "LAYZR114",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/leetom314/dsh-tiered-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [
+        "fs-write",
+        "fs-read"
+      ],
+      "owner": "leetom314",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/LFM097384/Context-Prism",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "LFM097384",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/liangxiaobing520/dsh-local-vector-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 3,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "liangxiaobing520",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/ljsysfurryACE/dsh-compaction",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [],
+      "owner": "ljsysfurryACE",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/ljsysfurryACE/dsh-memory-director",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "fs-write",
+        "fs-read"
+      ],
+      "owner": "ljsysfurryACE",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/LoserFox/distill",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 28,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env",
+        "subagent"
+      ],
+      "owner": "LoserFox",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/lpf20200901/dsh-memory-delta",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "lpf20200901",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/luxiwusuobuneng/dsh-plugin-context-manager",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 2,
+      "capabilities": [],
+      "owner": "luxiwusuobuneng",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/madage/dsh-self-improved",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 11,
+      "capabilities": [],
+      "owner": "madage",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/Marquez807/dsh-experience-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "Marquez807",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/menotbobbybrown/dsh-plugin-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [],
+      "owner": "menotbobbybrown",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/MiHjy12138/dsh-memory-lite",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "MiHjy12138",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/Missher12/dsh-missher-brain",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [],
+      "owner": "Missher12",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/Missher12/dsh-missher-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "shell",
+        "dynamic-code",
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "Missher12",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/moononnn/DeepSeek-Harness-Hanako-Memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 2,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "host-runtime",
+        "llm"
+      ],
+      "owner": "moononnn",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/NattoCB/dsh-plugin-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 4,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env",
+        "llm"
+      ],
+      "owner": "NattoCB",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/nowledge-co/nowledge-mem-deepseek-harness",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 7,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "nowledge-co",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/NoxTyrannus/dsh-cipher",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [],
+      "owner": "NoxTyrannus",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/omdsh-dev/dsh-kb-sieve",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 2,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read"
+      ],
+      "owner": "omdsh-dev",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/orangeshinee/dsh-mem0",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 2,
+      "capabilities": [
+        "dynamic-code",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "orangeshinee",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/plur-ai/dsh-plugin",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [],
+      "owner": "plur-ai",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/QuantumKuba/dsh-continuum",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [],
+      "owner": "QuantumKuba",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/qwert702/dsh-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 2,
+      "capabilities": [
+        "fs-read",
+        "network",
+        "llm"
+      ],
+      "owner": "qwert702",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/reatcat/l123-harness",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 3,
+      "capabilities": [
+        "fs-read"
+      ],
+      "owner": "reatcat",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/rebron1900/dsh-mnemosyne",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "rebron1900",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/reshuibuduo/tmcra-plugin-deepseek-harness",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "credentials",
+        "env"
+      ],
+      "owner": "reshuibuduo",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/Rxiain/dsh-openviking",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 16,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "Rxiain",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/scd13150/dsh-cognition",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "scd13150",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/SeanWang114514/dsh-memo-notebook",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network"
+      ],
+      "owner": "SeanWang114514",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/sidleo/llm-wiki/tree/main/packages/dsh",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 9,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network"
+      ],
+      "owner": "sidleo",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/SiriusWJ/dsh-lite-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 2,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "SiriusWJ",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/suomir1995/dsh-notes",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "dynamic-code",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "suomir1995",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/Swd146296/dsh-memos-bridge",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [
+        "env"
+      ],
+      "owner": "Swd146296",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/tabilet/tabilet-skills",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [],
+      "owner": "tabilet",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/text2future/flowix/tree/main/dsh-flowix-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 451,
+      "capabilities": [
+        "shell",
+        "fs-read",
+        "env"
+      ],
+      "owner": "text2future",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/TodayJin/dsh-trilogy",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "TodayJin",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/Tyan66666/billion-context-dsh",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 135,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env",
+        "llm"
+      ],
+      "owner": "Tyan66666",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/tynr426/dsh-relationship",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "tynr426",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/vv5v5/dsh-anima-rag",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "vv5v5",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/vv5v5/dsh-memory-archive",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env",
+        "llm"
+      ],
+      "owner": "vv5v5",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/w4xxx/dsh-xia-plugins/tree/main/packages/gameassist-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "w4xxx",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/woshishadowhunter/dsh-seed-society",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [
+        "fs-read"
+      ],
+      "owner": "woshishadowhunter",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/WsTe47/mylife",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 2,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "WsTe47",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/WYR-233/dsh-memory-lite",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "shell",
+        "fs-write",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "WYR-233",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/xiyunSacire/dsh-skill-manager",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "xiyunSacire",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/Xplore-LAB/dsh-plugin-asmemory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [],
+      "owner": "Xplore-LAB",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/yangyizhu8/dsh-powercontext",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "env"
+      ],
+      "owner": "yangyizhu8",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/yangyongzhen/dsh-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "env"
+      ],
+      "owner": "yangyongzhen",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/yihefeikong-rgb/dsh-cc-haha-dream",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 0,
+      "capabilities": [
+        "fs-write",
+        "fs-read"
+      ],
+      "owner": "yihefeikong-rgb",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/yihefeikong-rgb/dsh-cc-haha-memory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [
+        "fs-write",
+        "fs-read",
+        "network",
+        "llm"
+      ],
+      "owner": "yihefeikong-rgb",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/Yiipu/dsh-agentmemory",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 4,
+      "capabilities": [
+        "shell",
+        "fs-read",
+        "network",
+        "env"
+      ],
+      "owner": "Yiipu",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/yuyolin/dsh-decision-log",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 1,
+      "capabilities": [],
+      "owner": "yuyolin",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    },
+    {
+      "npm": null,
+      "repo": "https://github.com/zhaoyuntao-wl/dsh-plugin-thread",
+      "catalogVersion": null,
+      "downloads": 0,
+      "stars": 2,
+      "capabilities": [],
+      "owner": "zhaoyuntao-wl",
+      "manifest": {
+        "fetched": false,
+        "githubReleaseOnly": true,
+        "error": null
+      },
+      "signals": [
+        "manifest-unavailable"
+      ]
+    }
+  ]
+}

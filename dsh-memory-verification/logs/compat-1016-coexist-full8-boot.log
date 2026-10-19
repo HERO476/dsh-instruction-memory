@@ -1,0 +1,28 @@
+﻿node : (node:53280) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+At line:15 char:3197
++ ... s\coexist"; node $bin web --no-open --host 127.0.0.1 --port 8095 2>&1 ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ((node:53280) Ex...nge at any time:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+(Use `node --trace-warnings ...` to show where the warning was created)
+[dsh-auto-memory] ready: engine + 19 tools + injection + 71 routes (external memory: 13 sources)
+[dsh-tiddlywiki] 拆库 skill：kept（d:\Users\34332\AI\dsh-instruction-memory\dsh-memory-verification\tmp\homes\coexist\skills\dsh-tiddlywiki-wiki-split\SKILL.md）
+[dsh-tiddlywiki] single 模式 · 1 个知识库（来源：default）
+(node:53280) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+dsh web: http://127.0.0.1:8095/?token=gW_Mz0E_MY0JOU7IVmvv0-vI1zB3pWxT5FEY180u9Lw
+dsh: warning: 1 entry did not activate
+dsh-mneme (@modusensus/dsh-mneme): Error: EPERM: operation not permitted, mkdir 'C:\Users\34332\.dsh\memory'
+    at mkdirSync (node:fs:1370:26)
+    at Object.apply [as callback] (file:///d:/Users/34332/AI/dsh-instruction-memory/dsh-memory-verification/tmp/homes/c
+oexist/profiles/web/node_modules/@modusensus/dsh-mneme/lib/index.js:163:3)
+    at Fiber.execute (file:///d:/Users/34332/AI/dsh-instruction-memory/dsh-memory-verification/tmp/hosts/rc2/node_modul
+es/@deepseek-ai/cordis/lib/index.js:1071:28)
+    at file:///d:/Users/34332/AI/dsh-instruction-memory/dsh-memory-verification/tmp/hosts/rc2/node_modules/@deepseek-ai
+/cordis/lib/index.js:1142:34
+    at file:///d:/Users/34332/AI/dsh-instruction-memory/dsh-memory-verification/tmp/homes/coexist/profiles/web/#dsh-mne
+me
+    at file:///d:/Users/34332/AI/dsh-instruction-memory/dsh-memory-verification/tmp/homes/coexist/profiles/web/#include
+[dsh-tiddlywiki] 已启动：main
+[dsh-tiddlywiki] clip bridge listening on 127.0.0.1:8618 (enabled=false)

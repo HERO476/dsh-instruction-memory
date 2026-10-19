@@ -16,12 +16,19 @@
  * reported separately and never counted as a behavioural difference.
  */
 import { createHash } from 'node:crypto'
-import { closeSync, openSync, readdirSync, readFileSync, readSync, statSync } from 'node:fs'
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
-const ARCHIVE =
-  process.env.DSH_ASAR ??
-  'D:\\Users\\34332\\AppData\\Local\\Programs\\DeepSeek Harness\\resources\\app.asar'
+const ARCHIVE = (() => {
+  if (process.env.DSH_ASAR) return process.env.DSH_ASAR
+  const candidates = [
+    join(process.env.LOCALAPPDATA ?? '', 'Programs', 'DeepSeek Harness', 'resources', 'app.asar'),
+    join(process.env.PROGRAMFILES ?? '', 'DeepSeek Harness', 'resources', 'app.asar'),
+    join(process.env['PROGRAMFILES(X86)'] ?? '', 'DeepSeek Harness', 'resources', 'app.asar'),
+  ]
+  return candidates.find((p) => existsSync(p)) ?? ''
+})()
+if (!ARCHIVE) { console.error('set DSH_ASAR=<path to app.asar>; not found under common install locations'); process.exit(2) }
 
 const [version, extractedDir, ...pkgs] = process.argv.slice(2)
 

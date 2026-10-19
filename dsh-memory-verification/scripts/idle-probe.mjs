@@ -20,9 +20,10 @@
  */
 import { mkdirSync, writeFileSync, rmSync, watch, statSync } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = join(HERE, '..', '..')
 const ROOT = join(HERE, '..')
 const HOME = join(ROOT, 'tmp', 'idle-home')
 const IDLE_MS = 4000
@@ -84,7 +85,7 @@ const mtimeBefore = statSync(STORE).mtimeMs
 const CONTROL = process.argv.includes('--control')
 console.log('>>> 模式：' + (CONTROL ? 'CONTROL（不挂载插件）' : 'PLUGIN（挂载插件）'))
 
-const plugin = await import('file:///D:/Users/34332/AI/dsh-instruction-memory/lib/index.js?v=' + Math.random())
+const plugin = await import(pathToFileURL(join(REPO_ROOT, 'lib', 'index.js')).href + '?v=' + Math.random())
 if (!CONTROL) plugin.apply(ctx)
 
 const deadline = Date.now() + 5000

@@ -1,0 +1,22 @@
+﻿memory-category plugins in snapshot: 207
+  ...25/207
+  ...50/207
+  ...100/207
+  ...125/207
+  ...150/207
+  ...200/207
+
+=== Tier-1 manifest conflict-surface scan (207 memory plugins) ===
+  manifests fetched: 114/207
+  github-release-only (no npm): 99
+  real fetch failures:          0
+  exact self name:     1  dsh-instruction-memory
+  settings UI slot:    0
+  systemPrompt service:28
+  webServer service:   8
+  bundle patch layer:  0
+  no host-service evidence in package.json: 77
+
+  -- candidates sharing BOTH settings slot and systemPrompt (closest shape) --
+
+  evidence -> D:\Users\34332\AI\dsh-instruction-memory\dsh-memory-verification\out\compat-1016-memory-manifest-scan.json

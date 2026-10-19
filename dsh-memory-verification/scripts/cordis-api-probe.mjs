@@ -3,7 +3,10 @@
  * `inject`, and does `ctx.inject(['webServer'], cb)` actually run the callback
  * once the service is provided — without blocking the caller?
  */
-const CORDIS = 'file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js'
+import { pathToFileURL } from 'node:url'
+const CORDIS_RAW = process.env.CORDIS_LIB
+if (!CORDIS_RAW) { console.error('set CORDIS_LIB=<path or file URL of cordis/lib/index.js>'); process.exit(2) }
+const CORDIS = CORDIS_RAW.startsWith('file://') ? CORDIS_RAW : pathToFileURL(CORDIS_RAW).href
 const mod = await import(CORDIS)
 console.log('cordis exports: ' + Object.keys(mod).join(', '))
 

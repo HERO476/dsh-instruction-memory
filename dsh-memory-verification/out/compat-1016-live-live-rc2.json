@@ -1,0 +1,138 @@
+{
+  "generatedAt": "2026-10-10T03:51:37.473Z",
+  "startedAt": "2026-10-10T03:51:37.202Z",
+  "label": "live-rc2",
+  "baseUrl": "http://127.0.0.1:8092",
+  "dshHome": "d:\\Users\\34332\\AI\\dsh-instruction-memory\\dsh-memory-verification\\tmp\\homes\\live-rc2",
+  "storePath": "d:\\Users\\34332\\AI\\dsh-instruction-memory\\dsh-memory-verification\\tmp\\homes\\live-rc2\\instruction-memory\\memory.json",
+  "checks": [
+    {
+      "id": "state-200",
+      "label": "state envelope answers 200 ok",
+      "pass": true,
+      "detail": "status=200"
+    },
+    {
+      "id": "store-inside-home",
+      "label": "materialised store is inside the isolated DSH_HOME",
+      "pass": true,
+      "detail": "storePath=d:\\Users\\34332\\AI\\dsh-instruction-memory\\dsh-memory-verification\\tmp\\homes\\live-rc2\\instruction-memory\\memory.json dshHome=d:\\Users\\34332\\AI\\dsh-instruction-memory\\dsh-memory-verification\\tmp\\homes\\live-rc2"
+    },
+    {
+      "id": "store-on-disk",
+      "label": "memory.json exists on disk after state",
+      "pass": true,
+      "detail": "d:\\Users\\34332\\AI\\dsh-instruction-memory\\dsh-memory-verification\\tmp\\homes\\live-rc2\\instruction-memory\\memory.json"
+    },
+    {
+      "id": "save-entry",
+      "label": "save-entry creates the probe instruction",
+      "pass": true,
+      "detail": "{\"ok\":true,\"saved\":true,\"message\":null,\"snapshot\":{\"data\":{\"version\":1,\"rev\":2,\"enabled\":true,\"budgetChars\":4000,\"entries\":[{\"id\":\"im-mv1uxv6k-7ldcnu\",\"title\":\"LIVE-mv1uxv5e\",\"content\":\"compat live pr"
+    },
+    {
+      "id": "section-armed",
+      "label": "non-empty memory arms the prompt section (registered=true)",
+      "pass": true,
+      "detail": "{\"registered\":true,\"available\":true,\"error\":null,\"chars\":267,\"pulls\":0}"
+    },
+    {
+      "id": "persisted-disk",
+      "label": "HTTP write is really persisted to memory.json",
+      "pass": true,
+      "detail": "entries=1"
+    },
+    {
+      "id": "sse-frame",
+      "label": "SSE delivers a snapshot frame on connect",
+      "pass": true,
+      "detail": "status=200 ctype=text/event-stream; charset=utf-8 frameKeys=data,storage,injection,preview,limits"
+    },
+    {
+      "id": "set-options",
+      "label": "set-options accepted and reflected",
+      "pass": true,
+      "detail": "{\"ok\":true,\"saved\":true,\"message\":null,\"snapshot\":{\"data\":{\"version\":1,\"rev\":3,\"enabled\":false,\"budgetChars\":1500,\"entries\":[{\"id\":\"im-mv1uxv6k-7ldcnu\",\"title\":\"LIVE-mv1uxv5e\",\"content\":\"compat live p"
+    },
+    {
+      "id": "options-persist",
+      "label": "changed options survive a fresh state read",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "id": "guard-origin",
+      "label": "cross-origin POST rejected with 403",
+      "pass": true,
+      "detail": "status=403"
+    },
+    {
+      "id": "guard-ctype",
+      "label": "non-JSON content-type rejected with 415",
+      "pass": true,
+      "detail": "status=415"
+    },
+    {
+      "id": "guard-get405",
+      "label": "plain GET rejected with 405",
+      "pass": true,
+      "detail": "status=405"
+    },
+    {
+      "id": "bogus-method",
+      "label": "unknown method returns ok:false envelope without crash",
+      "pass": true,
+      "detail": "status=200"
+    },
+    {
+      "id": "ipv6-loopback-equivalent",
+      "label": "Host+Origin [::1] accepted as loopback pair (1.0.16 fix)",
+      "pass": true,
+      "detail": "status=200 body={\"ok\":true,\"saved\":false,\"message\":null,\"snapshot\":{\"data\":{\"version\":1,\"rev\":3,\"enabled\":false,\"bud"
+    },
+    {
+      "id": "ipv6-mixed-origin-denied",
+      "label": "v6 Host with v4 Origin still rejected as cross-origin",
+      "pass": true,
+      "detail": "status=403"
+    },
+    {
+      "id": "delete-entry",
+      "label": "delete-entry removes the probe instruction",
+      "pass": true,
+      "detail": "{\"ok\":true,\"saved\":true,\"message\":null,\"snapshot\":{\"data\":{\"version\":1,\"rev\":4,\"enabled\":false,\"budgetChars\":1500,\"entries\":[]},\"storage\":{\"path\":\"d:\\"
+    },
+    {
+      "id": "delete-missing-noop",
+      "label": "deleting an absent id is ok without a phantom rewrite",
+      "pass": true,
+      "detail": "saved=false"
+    },
+    {
+      "id": "stability-burst",
+      "label": "30 consecutive state calls all succeed",
+      "pass": true,
+      "detail": "30/30 in 16ms"
+    },
+    {
+      "id": "cleanup",
+      "label": "probe entry gone and entry count back to baseline",
+      "pass": true,
+      "detail": "now=0 baseline=0"
+    },
+    {
+      "id": "section-disarmed",
+      "label": "back to empty memory: prompt section disposed (registered=false)",
+      "pass": true,
+      "detail": "{\"registered\":false,\"available\":true,\"error\":null,\"chars\":0,\"pulls\":0}"
+    },
+    {
+      "id": "options-restored",
+      "label": "options restored to pre-run values",
+      "pass": true,
+      "detail": null
+    }
+  ],
+  "passCount": 21,
+  "failCount": 0
+}

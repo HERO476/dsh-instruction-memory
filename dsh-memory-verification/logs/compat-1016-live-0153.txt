@@ -1,0 +1,24 @@
+﻿PASS  state-200              state envelope answers 200 ok
+PASS  store-inside-home      materialised store is inside the isolated DSH_HOME
+PASS  store-on-disk          memory.json exists on disk after state
+PASS  save-entry             save-entry creates the probe instruction
+PASS  section-armed          non-empty memory arms the prompt section (registered=true)
+PASS  persisted-disk         HTTP write is really persisted to memory.json
+PASS  sse-frame              SSE delivers a snapshot frame on connect
+PASS  set-options            set-options accepted and reflected
+PASS  options-persist        changed options survive a fresh state read
+PASS  guard-origin           cross-origin POST rejected with 403
+PASS  guard-ctype            non-JSON content-type rejected with 415
+PASS  guard-get405           plain GET rejected with 405
+PASS  bogus-method           unknown method returns ok:false envelope without crash
+PASS  ipv6-loopback-equivalent Host+Origin [::1] accepted as loopback pair (1.0.16 fix)
+PASS  ipv6-mixed-origin-denied v6 Host with v4 Origin still rejected as cross-origin
+PASS  delete-entry           delete-entry removes the probe instruction
+PASS  delete-missing-noop    deleting an absent id is ok without a phantom rewrite
+PASS  stability-burst        30 consecutive state calls all succeed
+PASS  cleanup                probe entry gone and entry count back to baseline
+PASS  section-disarmed       back to empty memory: prompt section disposed (registered=false)
+PASS  options-restored       options restored to pre-run values
+
+  checks 21, fail 0
+  evidence -> D:\Users\34332\AI\dsh-instruction-memory\dsh-memory-verification\out\compat-1016-live-live-0153.json

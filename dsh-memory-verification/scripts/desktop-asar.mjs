@@ -12,12 +12,19 @@
  * concatenated file bodies; file offsets are relative to the end of the header.
  */
 import { createHash } from 'node:crypto'
-import { closeSync, mkdirSync, openSync, readSync, statSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { closeSync, existsSync, mkdirSync, openSync, readSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 
-const ARCHIVE =
-  process.env.DSH_ASAR ??
-  'D:\\Users\\34332\\AppData\\Local\\Programs\\DeepSeek Harness\\resources\\app.asar'
+const ARCHIVE = (() => {
+  if (process.env.DSH_ASAR) return process.env.DSH_ASAR
+  const candidates = [
+    join(process.env.LOCALAPPDATA ?? '', 'Programs', 'DeepSeek Harness', 'resources', 'app.asar'),
+    join(process.env.PROGRAMFILES ?? '', 'DeepSeek Harness', 'resources', 'app.asar'),
+    join(process.env['PROGRAMFILES(X86)'] ?? '', 'DeepSeek Harness', 'resources', 'app.asar'),
+  ]
+  return candidates.find((p) => existsSync(p)) ?? ''
+})()
+if (!ARCHIVE) { console.error('set DSH_ASAR=<path to app.asar>; not found under common install locations'); process.exit(2) }
 
 function openArchive(archive) {
   const fd = openSync(archive, 'r')

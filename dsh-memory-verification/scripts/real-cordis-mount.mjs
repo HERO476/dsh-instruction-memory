@@ -12,23 +12,23 @@
  */
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = join(HERE, '..', '..')
 const ROOT = join(HERE, '..')
 const HOME = join(ROOT, 'tmp', 'mount-home')
 
-// Which cordis to mount against. Defaults to the one the installed DSH ships;
-// override with CORDIS_LIB to run the SAME test against another DSH release's
-// cordis (e.g. 4.0.2, the oldest any of the ten recent versions uses). This is
-// what turns "the symbol is present in the source" into "it actually works".
-const CORDIS_DEFAULT = 'file:///C:/Users/34332/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/vm/tools/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js'
-const CORDIS = process.env.CORDIS_LIB !== undefined && process.env.CORDIS_LIB !== ''
-  ? 'file:///' + process.env.CORDIS_LIB.replace(/\\/g, '/').replace(/^\/+/, '')
-  : CORDIS_DEFAULT
+// Which cordis to mount against. Point CORDIS_LIB at the installed DSH's
+// cordis (path or file URL); the same env var runs the SAME test against another
+// DSH release's cordis (e.g. 4.0.2, the oldest any of the ten recent versions
+// uses). This turns "the symbol is present in the source" into "it actually works".
+const CORDIS_RAW = process.env.CORDIS_LIB
+if (!CORDIS_RAW) { console.error('set CORDIS_LIB=<path or file URL of cordis/lib/index.js>'); process.exit(2) }
+const CORDIS = CORDIS_RAW.startsWith('file://') ? CORDIS_RAW : pathToFileURL(CORDIS_RAW).href
 console.log('cordis under test: ' + CORDIS)
 const { Context } = await import(CORDIS)
-const plugin = await import('file:///D:/Users/34332/AI/dsh-instruction-memory/lib/index.js')
+const plugin = await import(pathToFileURL(join(REPO_ROOT, 'lib', 'index.js')).href)
 
 rmSync(HOME, { recursive: true, force: true })
 mkdirSync(join(HOME, 'instruction-memory'), { recursive: true })

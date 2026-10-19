@@ -1,0 +1,49 @@
+﻿ADD-OK  dsh-instruction-memory@1.0.16 (3779ms code=0)
+ADD-OK  @vectorize-io/hindsight-coding-agents (17784ms code=0)
+ADD-OK  dsh-mnemon (9980ms code=0)
+ADD-OK  @openviking/dsh-memory-plugin (6857ms code=0)
+ADD-OK  dsh-tiddlywiki (28804ms code=0)
+ADD-OK  @a9i5k4/dsh-auto-memory (119333ms code=1)
+ADD-OK  @modusensus/dsh-mneme (15859ms code=1)
+ADD-OK  dsh-prime-memory (25928ms code=1)
+
+booting combined stack on port 8095 ...
+[dsh-tiddlywiki] 拆库 skill：written（d:\Users\34332\AI\dsh-instruction-memory\dsh-memory-verification\tmp\homes\coexist\skills\dsh-tiddlywiki-wiki-split\SKILL.md）
+[dsh-tiddlywiki] single 模式 · 1 个知识库（来源：default）
+dsh web: http://127.0.0.1:8095/?token=emEUwyqB_aIqG2wKppCD9Trf6wN7EtW59cjaFVsPxCM
+node : [dsh-tiddlywiki] enabled tiddlywiki/markdown for this wiki
+At line:15 char:3156
++ ... npm-store"; node dsh-memory-verification\scripts\compat-1016-coexist. ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([dsh-tiddlywiki...n for this wiki:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+boot=true token=captured errorLines=0
+PASS  state-200              state envelope answers 200 ok
+PASS  store-inside-home      materialised store is inside the isolated DSH_HOME
+PASS  store-on-disk          memory.json exists on disk after state
+PASS  save-entry             save-entry creates the probe instruction
+PASS  section-armed          non-empty memory arms the prompt section (registered=true)
+PASS  persisted-disk         HTTP write is really persisted to memory.json
+PASS  sse-frame              SSE delivers a snapshot frame on connect
+PASS  set-options            set-options accepted and reflected
+PASS  options-persist        changed options survive a fresh state read
+PASS  guard-origin           cross-origin POST rejected with 403
+PASS  guard-ctype            non-JSON content-type rejected with 415
+PASS  guard-get405           plain GET rejected with 405
+PASS  bogus-method           unknown method returns ok:false envelope without crash
+PASS  ipv6-loopback-equivalent Host+Origin [::1] accepted as loopback pair (1.0.16 fix)
+PASS  ipv6-mixed-origin-denied v6 Host with v4 Origin still rejected as cross-origin
+PASS  delete-entry           delete-entry removes the probe instruction
+PASS  delete-missing-noop    deleting an absent id is ok without a phantom rewrite
+PASS  stability-burst        30 consecutive state calls all succeed
+PASS  cleanup                probe entry gone and entry count back to baseline
+PASS  section-disarmed       back to empty memory: prompt section disposed (registered=false)
+PASS  options-restored       options restored to pre-run values
+
+  checks 21, fail 0
+  evidence -> D:\Users\34332\AI\dsh-instruction-memory\dsh-memory-verification\out\compat-1016-live-coexist.json
+
+
+  evidence -> D:\Users\34332\AI\dsh-instruction-memory\dsh-memory-verification\out\compat-1016-coexist-top7.json

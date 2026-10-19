@@ -13,13 +13,14 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { zstdDecompressSync } from 'node:zlib'
 import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = join(HERE, '..', '..')
 const ROOT = join(HERE, '..')
 const DSH_HOME = process.env.DSH_HOME ?? join(process.env.USERPROFILE ?? '', '.dsh')
-const SESSION_DIR = join(DSH_HOME, 'sessions', '--D-Users-34332-AI-dsh-instruction-memory--')
+const SESSION_DIR = process.env.IM_PROBE_SESSION_DIR ?? join(DSH_HOME, 'sessions')
 const sha = (s) => createHash('sha256').update(s, 'utf8').digest('hex').toUpperCase()
 
 /* ---------- 1. 多帧 zstd 解压（一次 zstdDecompressSync 只出第一帧） ---------- */
@@ -40,7 +41,7 @@ function decompressAll(buf) {
 }
 
 /* ---------- 2. 记忆块（用插件自己的实现渲染，避免手抄） ---------- */
-const plugin = await import('file:///D:/Users/34332/AI/dsh-instruction-memory/lib/index.js')
+const plugin = await import(pathToFileURL(join(REPO_ROOT, 'lib', 'index.js')).href)
 const storeRaw = JSON.parse(readFileSync(join(DSH_HOME, 'instruction-memory', 'memory.json'), 'utf8'))
 const storeData = {
   version: 1,

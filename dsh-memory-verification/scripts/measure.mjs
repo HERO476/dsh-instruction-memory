@@ -5,12 +5,21 @@
  *  - determinism of the rendered block
  */
 import { readFileSync, writeFileSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { homedir } from 'node:os'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
 
-const HOST_URL = 'file:///D:/Users/34332/AI/dsh-instruction-memory/lib/index.js'
+const HERE = dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = join(HERE, '..', '..')
+const ROOT = join(HERE, '..')
+const HOST_URL = pathToFileURL(join(REPO_ROOT, 'lib', 'index.js')).href
 const { buildBlock, sanitizeEntry } = await import(HOST_URL)
 
-const raw = JSON.parse(readFileSync('C:/Users/34332/.dsh/instruction-memory/memory.json', 'utf8'))
+const STORE = process.env.DSH_HOME
+  ? join(process.env.DSH_HOME, 'instruction-memory', 'memory.json')
+  : join(homedir(), '.dsh', 'instruction-memory', 'memory.json')
+const raw = JSON.parse(readFileSync(STORE, 'utf8'))
 const data = {
   version: 1,
   enabled: raw.enabled === true,
@@ -39,7 +48,7 @@ console.log('render of a JSON round-tripped state is identical: ' + (roundTrip =
 
 // 3. prompt-prefix stability in the real transcript
 console.log('\n=== prompt prefix stability across live steps ===')
-const lines = readFileSync('D:/Users/34332/AI/dsh-instruction-memory/dsh-memory-verification/transcript/session.v4.jsonl', 'utf8').split('\n').filter((l) => l.trim() !== '')
+const lines = readFileSync(process.env.IM_PROBE_TRANSCRIPT ?? join(ROOT, 'transcript', 'session.v4.jsonl'), 'utf8').split('\n').filter((l) => l.trim() !== '')
 const recs = []
 for (const l of lines) {
   const o = JSON.parse(l)
@@ -65,6 +74,6 @@ const sameBlock = rows.length > 1 && rows.every((r) => r.blockSha256 === rows[0]
 console.log('prefix before the memory block is byte-identical across steps: ' + samePrefix)
 console.log('the memory block itself is byte-identical across steps: ' + sameBlock)
 
-writeFileSync('D:/Users/34332/AI/dsh-instruction-memory/dsh-memory-verification/out/measurements.json', JSON.stringify({
+writeFileSync(join(ROOT, 'out', 'measurements.json'), JSON.stringify({
   assemblyCostUs: totalMs / N * 1000, renders: N, distinctRenders: renders.size, prefixRows: rows, samePrefix, sameBlock,
 }, null, 2), 'utf8')

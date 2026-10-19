@@ -8,13 +8,14 @@
  */
 import { mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = join(HERE, '..', '..')
 const ROOT = join(HERE, '..')
 const TMP = join(ROOT, 'tmp')
-const HOST_URL = 'file:///D:/Users/34332/AI/dsh-instruction-memory/lib/index.js'
+const HOST_URL = pathToFileURL(join(REPO_ROOT, 'lib', 'index.js')).href
 const sha = (s) => createHash('sha256').update(s, 'utf8').digest('hex').toUpperCase()
 
 function makeCtx({ withWebServer = true } = {}) {

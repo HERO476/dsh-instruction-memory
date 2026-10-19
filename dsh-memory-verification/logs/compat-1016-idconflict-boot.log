@@ -1,0 +1,28 @@
+﻿node : (node:5696) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+At line:15 char:3201
++ ... nflict-id"; node $bin web --no-open --host 127.0.0.1 --port 8096 2>&1 ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ((node:5696) Exp...nge at any time:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+(Use `node --trace-warnings ...` to show where the warning was created)
+dsh: fatal load failure: Error: cannot get property "webServer" without inject
+    at Fiber.<anonymous> (file:///D:/Users/34332/AI/dsh-instruction-memory/dsh-memory-verification/tmp/hosts/rc2/node_m
+odules/@deepseek-ai/dsh-client-connection/lib/index.js:656:35)
+    at file:///d:/Users/34332/AI/dsh-instruction-memory/dsh-memory-verification/tmp/hosts/rc2/node_modules/@deepseek-ai
+/cordis/lib/index.js:1142:34
+    at Proxy.register (file:///D:/Users/34332/AI/dsh-instruction-memory/dsh-memory-verification/tmp/hosts/rc2/node_modu
+les/@deepseek-ai/dsh-client-connection/lib/index.js:656:16)
+    at Object.apply (file:///d:/Users/34332/AI/dsh-instruction-memory/dsh-memory-verification/tmp/hosts/rc2/node_module
+s/@deepseek-ai/cordis/lib/index.js:120:36)
+    at Object.handle (file:///D:/Users/34332/AI/dsh-instruction-memory/dsh-memory-verification/tmp/hosts/rc2/node_modul
+es/@deepseek-ai/dsh-client-connection/lib/index.js:576:39)
+    at tryRegister (file:///d:/Users/34332/AI/dsh-instruction-memory/dsh-memory-verification/tmp/homes/conflict-id/prof
+iles/web/node_modules/dsh-layered-memory/dist/stats.js:37:40)
+    at Object.<anonymous> (file:///d:/Users/34332/AI/dsh-instruction-memory/dsh-memory-verification/tmp/homes/conflict-
+id/profiles/web/node_modules/dsh-layered-memory/dist/stats.js:97:13)
+    at Object.apply (file:///d:/Users/34332/AI/dsh-instruction-memory/dsh-memory-verification/tmp/hosts/rc2/node_module
+s/@deepseek-ai/cordis/lib/index.js:921:20)
+    at file:///d:/Users/34332/AI/dsh-instruction-memory/dsh-memory-verification/tmp/hosts/rc2/node_modules/@deepseek-ai
+/cordis/lib/index.js:281:43
+    at Array.map (<anonymous>)

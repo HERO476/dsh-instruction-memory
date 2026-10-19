@@ -1,0 +1,54 @@
+﻿=== 前提：dsh@V 的同期子包就是 @V 吗 ===
+  （npm 官方 registry；子包各自发布的版本列表）
+  dsh-system-prompt          版本数= 32  含全部 10 个受检版本=true
+  dsh-host-webserver         版本数= 32  含全部 10 个受检版本=true
+  dsh-client-ui-renderer     版本数= 24  含全部 10 个受检版本=true
+  dsh-client-ui-settings     版本数= 32  含全部 10 个受检版本=true
+  dsh-agent-loop             版本数= 32  含全部 10 个受检版本=true
+  本机安装树: dsh@0.2.1-alpha.2 -> system-prompt@0.2.1-alpha.2, host-webserver@0.2.1-alpha.2, client-ui-renderer@0.2.1-alpha.2, client-ui-settings@0.2.1-alpha.2, agent-loop@0.2.1-alpha.2
+
+=== 适配矩阵（最近 10 个 DSH 版本 × 1.0.11 依赖的每一项）===
+  版本             semver   section  thunk  order950  register  host   cordis  inject  clientUi
+  0.2.1-alpha.2   ✔/✔   ✔       ✔      ✔         ✔         ✔      4.0.5-alpha.1✔       ✔
+  0.2.1-alpha.1   ✔/✔   ✔       ✔      ✔         ✔         ✔      4.0.5-alpha.1✔       ✔
+  0.2.0-rc.2      ✔/✔   ✔       ✔      ✔         ✔         ✔      4.0.5-alpha.1✔       ✔
+  0.2.0-rc.1      ✔/✔   ✔       ✔      ✔         ✔         ✔      4.0.5-alpha.1✔       ✔
+  0.1.7-rc.2      ✔/✔   ✔       ✔      ✔         ✔         ✔      4.0.5-alpha.1✔       ✔
+  0.1.7-rc.1      ✔/✔   ✔       ✔      ✔         ✔         ✔      4.0.5-alpha.1✔       ✔
+  0.1.7-alpha.2   ✔/✔   ✔       ✔      ✔         ✔         ✔      4.0.5-alpha.1✔       ✔
+  0.1.7-alpha.1   ✔/✔   ✔       ✔      ✔         ✔         ✔      4.0.5-alpha.1✔       ✔
+  0.1.5-rc.3      ✔/✔   ✔       ✔      ✔         ✔         ✔      4.0.2   ✔       ✔
+  0.1.6-alpha.2   ✔/✔   ✔       ✔      ✔         ✔         ✔      4.0.5-alpha.1✔       ✔
+
+=== 附带观测：今天安装旧版 dsh 时，同族 caret 范围会解析到哪 ===
+  版本             代表依赖 / range                    今天默认    今天 includePrerelease
+  0.2.1-alpha.2   （同族依赖全部精确锁定，不可能漂移）                  -           -
+  0.2.1-alpha.1   （同族依赖全部精确锁定，不可能漂移）                  -           -
+  0.2.0-rc.2      （同族依赖全部精确锁定，不可能漂移）                  -           -
+  0.2.0-rc.1      （同族依赖全部精确锁定，不可能漂移）                  -           -
+  0.1.7-rc.2      （同族依赖全部精确锁定，不可能漂移）                  -           -
+  0.1.7-rc.1      （同族依赖全部精确锁定，不可能漂移）                  -           -
+  0.1.7-alpha.2   （同族依赖全部精确锁定，不可能漂移）                  -           -
+  0.1.7-alpha.1   dsh-hmr / ^0.1.7-alpha.1            0.1.7-rc.2  0.1.7-rc.2
+  0.1.5-rc.3      dsh-base / ^0.1.5-rc.3              0.1.5-rc.3  0.1.7-rc.2
+  0.1.6-alpha.2   dsh-hmr / ^0.1.6-alpha.2            0.1.6-alpha.20.1.7-rc.2
+  精确锁定的版本: 7 / 10（这些版本今天装也拿到同期子包）
+  范围声明且会漂移的: 3 / 3 个采样  -> 0.1.7-alpha.1→0.1.7-rc.2, 0.1.5-rc.3→0.1.7-rc.2, 0.1.6-alpha.2→0.1.7-rc.2
+  （漂移不改变本插件结论：这些相邻版本的同族子包 API 经上表逐版本核验均为 ✔。）
+
+=== 判定 ===
+  PASS  前提：5 个子包在全部 10 个 dsh 版本都有同版本发布
+  PASS  semver 声明范围覆盖（默认模式）
+  PASS  semver 声明范围覆盖（includePrerelease）
+  PASS  system-prompt.section() 存在
+  PASS  system-prompt 的 assemble() 求值函数型 text（注入机制成立）
+  PASS  order 950 落在 FILE_REFERENCE(900) 与 TOOL_BASH(1000) 之间的空档
+  PASS  重名注册抛错（结构性排除重复注入）
+  PASS  host-webserver.register() 存在
+  PASS  host-webserver 有 get host()
+  PASS  cordis 有 ctx.inject()（1.0.10 起硬依赖）
+  PASS  cordis 有 ctx.effect()
+  PASS  client 两个包在各版本存在且声明 dsh.client
+
+  判定项 12，未通过 0
+  证据 -> dsh-memory-verification/out/compat-1016-version-matrix.json

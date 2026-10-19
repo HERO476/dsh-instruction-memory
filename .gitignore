@@ -16,6 +16,8 @@ Thumbs.db
 .claude/
 .trae/
 .graphflow/
+.graphflow-cache/
+graphflow-out/
 .demo-server.mjs
 
 # Local scratch log written by the DSH host process (Electron/gin). Root only,

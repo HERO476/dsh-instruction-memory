@@ -1,0 +1,215 @@
+{
+  "generatedAt": "2026-10-10T04:07:29.045Z",
+  "selfBaseline": {
+    "section": {
+      "name": "instruction-memory",
+      "order": 950
+    },
+    "route": {
+      "kind": "prefix",
+      "path": "/instruction-memory/api"
+    },
+    "store": "$DSH_HOME/instruction-memory/memory.json",
+    "clientInject": [
+      "@deepseek-ai/dsh-client-ui-renderer",
+      "@deepseek-ai/dsh-client-ui-settings"
+    ]
+  },
+  "findings": [
+    {
+      "spec": "dsh-mnemon",
+      "packed": true,
+      "tarball": "dsh-mnemon-0.5.27.tgz",
+      "version": "0.5.27",
+      "dshField": {
+        "bundle": {
+          "patch": "./cordis.patch.yml"
+        },
+        "client": {
+          "inject": [
+            "@deepseek-ai/dsh-client-connection",
+            "@deepseek-ai/dsh-client-ui-conversation",
+            "@deepseek-ai/dsh-client-ui-layout",
+            "@deepseek-ai/dsh-client-ui-sidebar",
+            "@deepseek-ai/dsh-client-ui-renderer",
+            "@deepseek-ai/dsh-client-ui-settings",
+            "@deepseek-ai/dsh-client-ui-session",
+            "@deepseek-ai/dsh-client-locale"
+          ],
+          "platform": "web"
+        }
+      },
+      "deps": [
+        "@deepseek-ai/cosmokit",
+        "@deepseek-ai/schemastery",
+        "@deepseek-ai/cordis",
+        "@deepseek-ai/dsh-app-boot",
+        "@deepseek-ai/dsh-client-ui-primitives",
+        "@deepseek-ai/dsh-typert-protocol"
+      ],
+      "codeFiles": 13,
+      "codeBytes": 1626286,
+      "sections": [],
+      "sectionOrders": [
+        30,
+        55,
+        90,
+        150
+      ],
+      "sectionContext": [
+        "lib\\index.js: .section({ name: GUIDANCE_SECTION_NAME, order: 150, text: () => config?.routingGuidance === false ? \"\" : ROUTING_GUIDANCE }); }); } //#endregion //#region src/host/rece"
+      ],
+      "routeKinds": [
+        "list",
+        "keyed"
+      ],
+      "routePaths": [],
+      "injectServices": [
+        "loader",
+        "slots",
+        "sessions",
+        "workspaces",
+        "uiSession",
+        "connection",
+        "locale",
+        "layout",
+        "tools",
+        "settings",
+        "commands",
+        "agents",
+        "subagents"
+      ],
+      "storeHints": [
+        "memories.json",
+        ".dsh-memory-bodies.json",
+        "memory-providers.json"
+      ],
+      "homeRefs": [
+        "\""
+      ],
+      "stringApis": [
+        "/api"
+      ],
+      "shape": {
+        "sectionCall": true,
+        "registerCall": true,
+        "watchFile": false,
+        "clientBundle": true
+      }
+    },
+    {
+      "spec": "dsh-tiddlywiki",
+      "packed": true,
+      "tarball": "dsh-tiddlywiki-0.30.65.tgz",
+      "version": "0.30.65",
+      "dshField": {
+        "bundle": {
+          "patch": "./cordis.patch.yml"
+        },
+        "client": {
+          "inject": [
+            "slots"
+          ],
+          "platform": "web"
+        }
+      },
+      "deps": [],
+      "codeFiles": 9,
+      "codeBytes": 1546018,
+      "sections": [],
+      "sectionOrders": [
+        20,
+        10,
+        50,
+        100
+      ],
+      "sectionContext": [
+        "lib\\index.js: .section({ name: PROMPT_SECTION_NAME, order: 100, text: (context) => { const agent = context?.scope; return promptTextFor(typeof agent?.id === \"string\" ? agent.id"
+      ],
+      "routeKinds": [
+        "exact",
+        "prefix"
+      ],
+      "routePaths": [],
+      "injectServices": [
+        "tools",
+        "systemPrompt"
+      ],
+      "storeHints": [],
+      "homeRefs": [
+        "\""
+      ],
+      "stringApis": [
+        "/api"
+      ],
+      "shape": {
+        "sectionCall": true,
+        "registerCall": true,
+        "watchFile": true,
+        "clientBundle": true
+      }
+    },
+    {
+      "spec": "dsh-prime-memory",
+      "packed": true,
+      "tarball": "dsh-prime-memory-0.22.1.tgz",
+      "version": "0.22.1",
+      "dshField": {
+        "bundle": {
+          "patch": "./cordis.patch.yml"
+        },
+        "client": {
+          "inject": [
+            "@deepseek-ai/dsh-client-ui-primitives"
+          ],
+          "platform": "web"
+        }
+      },
+      "deps": [
+        "@deepseek-ai/cordis",
+        "@deepseek-ai/dsh-agent",
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-ui-primitives",
+        "@deepseek-ai/dsh-home-paths",
+        "@deepseek-ai/dsh-llm",
+        "@deepseek-ai/dsh-session",
+        "@deepseek-ai/dsh-settings",
+        "@deepseek-ai/dsh-system-prompt",
+        "@deepseek-ai/dsh-tools"
+      ],
+      "codeFiles": 99,
+      "codeBytes": 1300993,
+      "sections": [],
+      "sectionOrders": [
+        200,
+        100,
+        510
+      ],
+      "sectionContext": [],
+      "routeKinds": [
+        "prefix"
+      ],
+      "routePaths": [],
+      "injectServices": [
+        "slots",
+        "llm",
+        "tools",
+        "systemPrompt",
+        "connection",
+        "webServer"
+      ],
+      "storeHints": [
+        "state.json",
+        "reconcile-state.json"
+      ],
+      "homeRefs": [],
+      "stringApis": [],
+      "shape": {
+        "sectionCall": false,
+        "registerCall": true,
+        "watchFile": false,
+        "clientBundle": true
+      }
+    }
+  ]
+}

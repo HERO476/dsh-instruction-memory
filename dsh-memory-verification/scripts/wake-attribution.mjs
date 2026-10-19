@@ -12,7 +12,8 @@ import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const DSH_HOME = process.env.DSH_HOME ?? join(process.env.USERPROFILE ?? '', '.dsh')
-const SESSION = join(DSH_HOME, 'sessions', '--D-Users-34332-AI-dsh-instruction-memory--', 'session-ce78e7c0-552b-435c-8e71-3d4b3662d21a', 'session.v4.jsonl.zstd')
+const SESSION = process.env.IM_PROBE_SESSION
+if (!SESSION) { console.error('set IM_PROBE_SESSION=<captured session.v4.jsonl.zstd path>'); process.exit(2) }
 
 function decompressAll(buf) {
   const MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd])

@@ -7,13 +7,15 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { zstdDecompressSync } from 'node:zlib'
 import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = join(HERE, '..', '..')
 const ROOT = join(HERE, '..')
 const DSH_HOME = process.env.DSH_HOME ?? join(process.env.USERPROFILE ?? '', '.dsh')
-const SESSION = join(DSH_HOME, 'sessions', '--D-Users-34332-AI-dsh-instruction-memory--', 'session-ce78e7c0-552b-435c-8e71-3d4b3662d21a', 'session.v4.jsonl.zstd')
+const SESSION = process.env.IM_PROBE_SESSION
+if (!SESSION) { console.error('set IM_PROBE_SESSION=<captured session.v4.jsonl.zstd path>'); process.exit(2) }
 
 function decompressAll(buf) {
   const MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd])
@@ -29,7 +31,7 @@ function decompressAll(buf) {
 const local = (ms) => new Date(ms).toLocaleString('sv-SE').replace('T', ' ')
 const recs = decompressAll(readFileSync(SESSION)).split('\n').filter((l) => l.trim() !== '').map((l) => JSON.parse(l))
 
-const plugin = await import('file:///D:/Users/34332/AI/dsh-instruction-memory/lib/index.js')
+const plugin = await import(pathToFileURL(join(REPO_ROOT, 'lib', 'index.js')).href)
 const storeRaw = JSON.parse(readFileSync(join(DSH_HOME, 'instruction-memory', 'memory.json'), 'utf8'))
 const BLOCK = plugin.buildBlock({
   version: 1, enabled: storeRaw.enabled === true, budgetChars: storeRaw.budgetChars,

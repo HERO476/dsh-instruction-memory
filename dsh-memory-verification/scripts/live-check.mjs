@@ -6,11 +6,19 @@
  * Read-only: it never writes the store or the transcript.
  */
 import { readFileSync, writeFileSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { homedir } from 'node:os'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
 
-const PLUGIN = 'file:///D:/Users/34332/AI/dsh-instruction-memory/lib/index.js'
-const STORE = 'C:/Users/34332/.dsh/instruction-memory/memory.json'
-const TRANSCRIPT = 'D:/Users/34332/AI/dsh-instruction-memory/dsh-memory-verification/transcript/session.v4.jsonl'
+const HERE = dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = join(HERE, '..', '..')
+const ROOT = join(HERE, '..')
+const PLUGIN = pathToFileURL(join(REPO_ROOT, 'lib', 'index.js')).href
+const STORE = process.env.DSH_HOME
+  ? join(process.env.DSH_HOME, 'instruction-memory', 'memory.json')
+  : join(homedir(), '.dsh', 'instruction-memory', 'memory.json')
+const TRANSCRIPT = process.env.IM_PROBE_TRANSCRIPT ?? join(ROOT, 'transcript', 'session.v4.jsonl')
 
 const { buildBlock, sanitizeEntry } = await import(PLUGIN)
 
@@ -78,7 +86,7 @@ console.log('\n=== C. verdict ===')
 console.log('every recorded system prompt contains the block exactly once: ' + allPass)
 
 writeFileSync(
-  'D:/Users/34332/AI/dsh-instruction-memory/dsh-memory-verification/out/live-check.json',
+  join(ROOT, 'out', 'live-check.json'),
   JSON.stringify({ store: raw, shaOn: sha(ON), shaOff: sha(OFF), onChars: ON.length, block: ON, systems: report, allPass }, null, 2),
   'utf8',
 )

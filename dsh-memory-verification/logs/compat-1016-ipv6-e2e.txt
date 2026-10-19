@@ -1,0 +1,9 @@
+﻿IPv6 end-to-end on a REAL ::1-bound host (dsh 0.2.1-alpha.2, pid 44548, port 8094, store shared with live-alpha2)
+Date: 2026-10-10T11:57:45.6088779+08:00
+
+case 1  real TCP6 connection, Host [::1]:8094 + Origin http://[::1]:8094
+        expect 200 -> HTTP:200 ok=true (state envelope returned; regression target of the 1.0.16 fix)
+case 2  TCP6 transport, Host [::1] with mismatched v4 Origin http://127.0.0.1:8094
+        expect 403 -> HTTP:403 "Origin 与 Host 不同源：http://127.0.0.1:8094"
+case 3  malformed Host header '[::1:8094' (missing close bracket, the old hostnameOf slice case)
+        expect 403 -> HTTP:403 "Host 头不是回环地址（可能是 DNS 重绑定攻击）：[::1:8094"

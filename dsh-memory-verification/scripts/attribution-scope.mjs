@@ -10,10 +10,11 @@
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
 import { zstdDecompressSync } from 'node:zlib'
 import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = join(HERE, '..', '..')
 const ROOT = join(HERE, '..')
 const DSH_HOME = process.env.DSH_HOME ?? join(process.env.USERPROFILE ?? '', '.dsh')
 const sha = (s) => createHash('sha256').update(s, 'utf8').digest('hex').toUpperCase()
@@ -33,7 +34,7 @@ function decompressAll(buf) {
 const recordsOf = (file) => decompressAll(readFileSync(file)).split('\n').filter((l) => l.trim() !== '').map((l) => JSON.parse(l))
 
 /* 插件自己的渲染，避免手抄 */
-const plugin = await import('file:///D:/Users/34332/AI/dsh-instruction-memory/lib/index.js')
+const plugin = await import(pathToFileURL(join(REPO_ROOT, 'lib', 'index.js')).href)
 const storeRaw = JSON.parse(readFileSync(join(DSH_HOME, 'instruction-memory', 'memory.json'), 'utf8'))
 const data = {
   version: 1, enabled: storeRaw.enabled === true, budgetChars: storeRaw.budgetChars,
@@ -54,7 +55,8 @@ for (const f of ['b1-set-options-disabled.json', 'c1-set-options-enabled.json', 
   console.log('  ' + local(t) + '  ' + f)
 }
 
-const SESSION = join(DSH_HOME, 'sessions', '--D-Users-34332-AI-dsh-instruction-memory--', 'session-ce78e7c0-552b-435c-8e71-3d4b3662d21a', 'session.v4.jsonl.zstd')
+const SESSION = process.env.IM_PROBE_SESSION
+if (!SESSION) { console.error('set IM_PROBE_SESSION=<captured session.v4.jsonl.zstd path>'); process.exit(2) }
 const records = recordsOf(SESSION)
 console.log('\n每条 system prompt 的本地时间 / 块状态 / 是否含 A/B 标记 IM-7F3A-OK:')
 for (const r of records) {
