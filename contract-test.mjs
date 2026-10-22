@@ -529,6 +529,21 @@ for (const scenario of scenarios) {
   check('body ceiling: limits.maxBodyChars is published and equals the enforced ceiling',
     stateNow.snapshot.limits.maxBodyChars === host.MAX_BODY_CHARS,
     JSON.stringify(stateNow.snapshot.limits))
+
+  // Every ceiling the entry editor enforces must be published. The editor used
+  // to hard-code 120/6000/200 and 8/24, so a Host-side limit change left the
+  // panel accepting text the loader silently truncated.
+  const limitPairs = [
+    ['maxTitle', host.LIMITS.maxTitle],
+    ['maxContent', host.LIMITS.maxContent],
+    ['maxWhen', host.LIMITS.maxWhen],
+    ['maxTagsPerEntry', host.LIMITS.maxTagsPerEntry],
+    ['maxTagLength', host.LIMITS.maxTagLength],
+  ]
+  const missing = limitPairs.filter(([key, want]) => stateNow.snapshot.limits[key] !== want)
+  check('editor ceilings: every per-field limit is published and matches the Host',
+    missing.length === 0,
+    missing.map(([key, want]) => key + ' snapshot=' + JSON.stringify(stateNow.snapshot.limits[key]) + ' code=' + want).join('; '))
 }
 
 // The route only speaks application/json: a cross-site form post (or any
@@ -943,11 +958,12 @@ async function statusFor(headers, body) {
   // Minimal EventSource stand-in: a GET carrying `Accept: text/event-stream`
   // (exactly what a browser EventSource sends) against a response double that
   // records every chunk written.
-  const openStream = (headers, routeHandler = handler) => {
+  const openStream = (headers, routeHandler = handler, url = '') => {
     const listeners = {}
     const out = { status: 0, chunks: [], ended: false }
     const req = {
       method: 'GET',
+      url,
       headers: headers || { accept: 'text/event-stream', host: '127.0.0.1:8080' },
       on(event, cb) { (listeners[event] = listeners[event] || []).push(cb); return this },
       fire(name) { for (const cb of listeners[name] || []) cb() },
@@ -999,6 +1015,43 @@ async function statusFor(headers, body) {
     'pushed=' + (pushed === null ? 'null' : 'no SSE-PUSH entry'))
   check('sse: the pushed frame matches the response snapshot (so the initiating window drops it as an echo)',
     pushed !== null && JSON.stringify(pushed) === JSON.stringify(savedRes.snapshot))
+
+  // Lite subscribers (`?lite=1`): the frame is a rev marker, not a whole
+  // snapshot. This is what keeps a maximal store (up to ~3.4 MB of JSON) off
+  // the wire on every save; the client refetches through POST `state` when the
+  // rev it sees differs from the one on screen. The plain URL above still
+  // receives full frames, so an older client is unaffected.
+  {
+    const liteStream = openStream(
+      { accept: 'text/event-stream', host: '127.0.0.1:8080' },
+      handler,
+      '/instruction-memory/api?lite=1',
+    )
+    const first = framesOf(liteStream.out)[0]
+    check('sse lite: the connect frame is a rev marker, not a snapshot',
+      first !== null && first.lite === true && typeof first.rev === 'number' && first.data === undefined,
+      JSON.stringify(first))
+    const before = first === null ? -1 : first.rev
+    await callRoute(handler, {
+      method: 'save-entry',
+      args: { entry: { id: '', title: 'SSE-LITE', content: 'lite frame', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 } },
+    })
+    let liteFrame = null
+    for (let i = 0; i < 200 && liteFrame === null; i += 1) {
+      const frames = framesOf(liteStream.out)
+      liteFrame = frames.length > 1 ? frames[frames.length - 1] : null
+      if (liteFrame === null) await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    check('sse lite: a mutation pushes a compact rev marker with a newer rev',
+      liteFrame !== null && liteFrame.lite === true && liteFrame.rev > before
+        && liteFrame.data === undefined
+        && JSON.stringify(liteFrame).length < 120,
+      JSON.stringify(liteFrame))
+    check('sse lite: the full stream still receives the complete snapshot',
+      framesOf(stream.out).some((frame) => frame !== null && typeof frame === 'object'
+        && frame.data !== undefined && Array.isArray(frame.data.entries)
+        && frame.data.entries.some((entry) => entry.title === 'SSE-LITE')))
+  }
 
   // A writer whose socket has died: res.write throws on the next broadcast.
   // pushSnapshot must run that stream's full cleanup (end the response and

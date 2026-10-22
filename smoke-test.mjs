@@ -2,8 +2,8 @@
  * Smoke test for the pure Host logic. Runs with plain node, no deps:
  *   node smoke-test.mjs
  */
-import { isAbsolute, join } from 'node:path'
-import { MAX_BODY_CHARS, LIMITS, HISTORY_FILE_PATTERN, activeScope, buildBlock, canonicalIp, deviceTag, exportFileName, historyDeviceOf, historyEpochOf, historyFileName, historyRevOf, historyStamp, hostnameOf, inScope, isMuted, muteExpired, planInjection, requestOriginVerdict, resolveStorePath, sanitizeEntry, sanitizeProfile, sanitizeSet, sanitizeTags, truncatedProfileFields, truncatedSetFields } from './lib/index.js'
+import { isAbsolute, join, resolve } from 'node:path'
+import { MAX_BODY_CHARS, LIMITS, HISTORY_FILE_PATTERN, activeScope, buildBlock, canonicalIp, deviceTag, exportFileName, historyDeviceOf, historyEpochOf, historyFileName, historyRevOf, historyStamp, hostnameOf, inScope, isMuted, muteExpired, planHistoryPrune, planInjection, requestOriginVerdict, resolveStorePath, sanitizeEntry, sanitizeProfile, sanitizeSet, sanitizeTags, truncatedProfileFields, truncatedSetFields } from './lib/index.js'
 
 let failures = 0
 /**
@@ -304,6 +304,46 @@ check('unset $DSH_HOME falls back to ~/.dsh',
 check('store path is always absolute',
   resolveStorePath({}, FAKE_HOME),
   (v) => isAbsolute(v))
+
+// A RELATIVE override used to be returned verbatim, so the panel displayed a
+// relative path (README promises an absolute one), dirname() became '.', and
+// the store's identity depended on how the path was spelled. It is resolved
+// once against the process cwd instead.
+check('relative $DSH_HOME is resolved to an absolute path',
+  resolveStorePath({ DSH_HOME: join('.', 'rel-home') }, FAKE_HOME),
+  (v) => isAbsolute(v) && v === join(resolve('rel-home'), EXPECTED))
+
+check('relative $DSH_HOME resolves against cwd, not against ~/.dsh',
+  resolveStorePath({ DSH_HOME: 'rel-home' }, FAKE_HOME),
+  (v) => v === join(resolve('rel-home'), EXPECTED) && !v.startsWith(FAKE_HOME))
+
+// ---- history retention: count AND byte ceilings ----
+//
+// The count cap alone bounded nothing at the top end: one maximal snapshot is
+// ~3.6 MB, so twenty of them were ~72 MB per device. planHistoryPrune is the
+// pure policy both ceilings share.
+const histItems = (sizes) => sizes.map((size, index) => ({ name: String(index).padStart(4, '0'), size }))
+
+{
+  const overCount = planHistoryPrune(histItems(Array.from({ length: 25 }, () => 1)))
+  check('history prune: keeps the newest MAX_HISTORY snapshots by count',
+    overCount.keep.length === 20
+      && overCount.keep[0] === '0024'
+      && overCount.remove.length === 5
+      && overCount.remove[0] === '0000')
+  const overBytes = planHistoryPrune(histItems([10, 10, 10, 10, 10]), 20, 25)
+  check('history prune: enforces the byte budget, newest first',
+    JSON.stringify(overBytes.keep) === JSON.stringify(['0004', '0003'])
+      && JSON.stringify(overBytes.remove) === JSON.stringify(['0000', '0001', '0002']),
+    JSON.stringify(overBytes))
+  const huge = planHistoryPrune(histItems([5, 100]), 20, 10)
+  check('history prune: always keeps the newest even when it alone exceeds the budget',
+    JSON.stringify(huge.keep) === JSON.stringify(['0001']) && JSON.stringify(huge.remove) === JSON.stringify(['0000']),
+    JSON.stringify(huge))
+  check('history prune: an empty or malformed list is a no-op',
+    planHistoryPrune([]).keep.length === 0
+      && planHistoryPrune([null, {}, { name: '' }]).remove.length === 0)
+}
 
 // ---- titles and applicability hints are always single-line ----
 //

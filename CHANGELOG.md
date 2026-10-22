@@ -7,6 +7,123 @@
 > 1.0.13 起由 CI 经 OIDC Trusted Publishing 发布（首个带 provenance 的版本）。
 > 这些历史 tag **不应回填**——npm 上的版本号已被占用。
 
+## [1.4.1] — 2026-10-22
+
+运行期缺陷（桌面端 / 网页版审计）与安全审查（对 1.4.0 源码）发现的问题修复，
+加上双宿主（网页端 :8080 / 桌面端 :19387，宿主均为 0.2.1-rc.2）适配性审计后的加固。
+
+### 修复
+
+桌面端 / 网页版审计（宿主 `0.2.1-rc.2`、Electron 44.7.0）发现的三条运行期缺陷：
+
+- **指令里出现 `{{…}}` 会让整个 Agent 回合崩溃**：`systemPrompt.section()` 注册时没有关掉宿主的
+  模板插值。宿主 `renderPrompt()` 默认对每个 section 做 `{{变量}}` 替换，遇到无法解析的引用直接抛
+  `unknown prompt variable "{{x}}" in section "instruction-memory"`；而 agent-loop 在 `step()` 里
+  裸调 `renderPrompt()`（无 try/catch），于是一条写着 `proxy_pass {{upstream}};` 的指令
+  （Nginx 片段、Vue/Jinja/Handlebars 模板都算）就会终止当前回合。现在注册时显式传
+  `interpolate: false`，该 section 按字面量渲染。
+- **桌面端「批量加标签」点击即抛异常**：Electron 44 把 `window.prompt` 替换成
+  `function () { throw new Error("prompt() is not supported.") }`，并经 contextBridge 推进主世界，
+  `typeof` 仍返回 `'function'`，原来的类型守卫形同虚设。现在调用点用 try/catch 判定
+  （`batchTagOutcome()`）：prompt 缺失或抛错时改用面板内的行内输入框；用户主动取消（返回 `null`）
+  仍按「取消」处理，不会被误判成"环境不支持"。
+- **桌面 profile 缺依赖声明**：`profiles/desktop/package.json` 的 `dsh.profile.bundles` 列了
+  `dsh-instruction-memory`，`dependencies` 却没有它、`pnpm-lock.yaml` 也无记录，运行期靠手工
+  junction 维持。该 profile 下次 `pnpm install`（插件增删/更新都会触发）会清掉链接，随后 `dsh`
+  只在 stderr 打一行 `skipping profile bundle` 就静默跳过，插件在桌面端凭空消失。现在补齐
+  `dependencies` 里的 `link:` 声明。
+
+安全审查（对 1.4.0 源码）发现的问题：
+
+- **并发提交可绕过 30 秒冷却、重复投递**：冷却时间戳原本在 SMTP 会话结束后才写入，
+  两个同时到达的请求都能通过检查、各发一封。现在冷却在发送开始前就占位，失败时立即释放。
+- **面板 15 秒超时短于宿主的投递上限**：SMTP 慢时页面报"超时"，而邮件仍在路上，
+  用户重试就会收到重复邮件。面板改为最多等待 90 秒，宿主新增整封投递上限 `SMTP_TOTAL_TIMEOUT_MS`（60 秒）；
+  `verify.mjs` 固定两者的大小关系。
+- **配置文件里 `smtp.pass` 写成数字时被静默丢弃**：端口/`secure` 早已按 JSON 标量处理，密码却只接受字符串，
+  导致"密码明明填了却认证失败"。现在数字会被字符串化，对象/数组则明确报 `smtp.pass 类型无效`。
+- **`to` 与 `toEncrypted` 同时存在时明文静默优先**：会让"我已加密"变成假象，损坏的密文也不会被发现。
+  现在直接拒绝并说明原因；环境变量 `..._FEEDBACK_TO` 仍可临时覆盖。
+- **地址校验过于宽松**：`EMAIL_RE` 原本放行 NUL 等控制字节与非 ASCII 地址，
+  而 `buildRawMail` / `sendSmtpMail` 依赖调用方先校验。现在校验排除控制字节，
+  非 ASCII 地址明确报错（未实现 SMTPUTF8），且组信与发信入口各自再做一次换行/控制字符断言。
+- **`\bLOGIN\b` 误判 AUTH 机制**：EHLO 中任何含独立单词 `LOGIN` 的扩展都会让客户端错误选择 `AUTH LOGIN`。
+  现在只解析 `AUTH` 能力行（RFC 4954）。
+- **响应行缓冲无上限**：行为异常或恶意的服务器可持续发送无 CRLF 数据撑大内存，
+  现在上限 64 KiB，超出即断开并报 `SMTP 响应过长`。
+- **超长主题只生成一个 RFC 2047 编码词**：最长约 240 字符，部分客户端无法解码。
+  现在按 45 字节切分为多个、每个不超过 75 字符的编码词。
+- **日志脱敏漏掉 SMTP 用户名**：服务器拒绝文本可能回显登录账号，现在用户名也一并隐藏。
+
+### 优化（源码审查第二轮）
+
+- **相对 `$DSH_HOME` 会让存储路径保持相对**：`resolveStorePath()` 原样返回
+  `rel-home\instruction-memory\memory.json`，与 README「设置页显示完整绝对路径」矛盾，
+  `dirname()` 还会退化成 `.`，同一份存储在进程内的身份取决于路径写法。现在相对的
+  `$DSH_HOME` 在启动时按 cwd 解析为绝对路径（空白仍视为未设置）；`install.mjs` 同步修正。
+- **陈旧锁删不掉时保存会永久挂起**：`acquireStoreLock()` 的 `unlink` 失败被吞掉后直接
+  `continue`，绕过了下面的 deadline 判断；只要锁文件持续不可删（Windows 句柄未共享删除、
+  只读卷），这次保存就永远不返回，后续所有磁盘操作都堵在同一队列里。deadline 现在在每次
+  尝试的**顶部**判断，且每次失败都先等待 50 ms 再重试。
+- **面板把每字段上限硬编码**：编辑器写死 120/6000/200 与标签 8/24，而 `snapshot.limits`
+  只发布了部分上限——宿主改上限后面板会接受加载器随后截断的文本。现在
+  `maxTitle`/`maxContent`/`maxWhen`/`maxTagsPerEntry`/`maxTagLength` 全部随快照发布，
+  编辑器按快照取值（对旧宿主仍保留原默认值）。
+- **历史快照只按份数保留，磁盘占用无上限**：满配存储一份快照约 3.6 MB，20 份约 72 MB，
+  自定义备份目录指向云盘时等于同量上传。新增按设备的 **32 MB 字节预算**，超出时从最旧
+  逐出、最新一份永远保留；策略抽成纯函数 `planHistoryPrune()` 便于单测。
+- **SSE 每帧都推全量快照**：满配时约 1.24 M 字符（中文约 3.4 MB）/帧，且每次保存推给
+  每个打开的设置页。设置页现在以 `?lite=1` 订阅，宿主只推 `{ rev, lite: true }`（约 40
+  字节），客户端发现 rev 落后再拉 `state`；不带该参数的旧客户端仍收到完整快照，双向兼容。
+- **可访问性**：表单 `<label>` 全部补 `htmlFor`/`id`（此前 0 个关联，点标签不聚焦、读屏
+  不关联）；「展开全部/收起」从可点击 `div` 改为 `<button aria-expanded>`；错误与提示分别
+  补 `role="alert"` / `role="status"`；标签删除按钮补可访问名「移除标签 X」。
+- **编辑器错误提示不可见**：条目编辑器是提前返回的分支，不渲染面板级错误行——空标题保存、
+  冲突或写盘失败时 `setError()` 设了消息却什么都不显示。现在编辑器内自带错误行（并带
+  `role="alert"`）。
+- **发布包体积**：`docs/screenshot.png` 由 262 KB 压到 97 KB（同尺寸调色板量化），
+  整个 tarball 从 435 KB 降到约 270 KB。
+- **发布前跑测试**：`prepublishOnly` 现在执行 `check-metadata.mjs && npm test`，本地
+  `npm publish` 不再能绕过测试套件（CI 的 publish.yml 原本就会跑）。
+
+### 优化（双宿主审计跟进，宿主 0.2.1-rc.2 / Electron 44）
+
+- **破坏性确认的降级策略前后矛盾**：批量删除、集合删除、形象删除、单条删除写的是
+  `typeof window.confirm === 'function' && !window.confirm(…)`——没有对话框时条件整体为
+  `false`，删除**照常执行**；而版本回滚与整体恢复是「没有对话框就拒绝」。同一类不可恢复
+  操作在缺 `window.confirm` 的宿主里行为相反。现在统一走 `askConfirm(message, unavailable)`：
+  持久数据类默认 `deny`（无对话框即拒绝，并在面板显示 `confirm.unavailable`，不再静默吞掉
+  点击），只有「丢弃未保存草稿」类（退出编辑器、重载源码视图）用 `allow`——那里拒绝会把
+  人困在死按钮上，且不涉及已落盘数据，`verify.mjs` 对此有既有守护。
+  返回值改为三态 `yes`/`no`/`unavailable`，用户主动取消不会被误报成「环境不支持」；
+  `confirm` **存在但调用即抛**（Electron 44 给 `prompt()` 用的正是这种桩）按缺失处理，
+  而原先的 `typeof` 判断对这种桩完全失效。
+- **窄窗口双列表单挤成竖排断字**：`.im-grid2` 固定 `1fr 1fr` 且没有任何断点，桌面端把窗口
+  拉窄后每列不足 250px，标签与占位文本逐词换行。新增 560px 断点：表单转单列，批量标签
+  输入去掉 160px 下限并独占一行（此前会横向溢出）。
+- **双端冒烟没有一条可复现的命令**：新增 `live-host-smoke.mjs`（`npm run smoke:hosts`），
+  一次测完 `state` 的 p50/p95、SSE 首事件、注入注册与字符数、以及两端快照的逐字段一致性；
+  任一项超阈值（p50 > 50 ms）或快照出现 `injection.pulls` 之外的差异即以退出码 1 失败。
+  脚本内全部请求走 Node `http` 直连，**不继承 `http_proxy`**——本机代理指向 `127.0.0.1:9708`，
+  连回环请求也转发，审计期间正是它让 SSE 读数从 0.7 ms 虚高到 6 ms。
+  `--require-pulls` 把「该宿主从未经历真实 Agent 回合」判为失败，用于桌面端注入链路的验收。
+  该脚本**刻意不接入 `npm test`**：CI 没有桌面端，接进去必然常红。
+
+### 测试
+
+- `verify.mjs` 新增运行期缺陷的回归用例：注册的 section 必须带 `interpolate: false`
+  （宿主渲染期崩溃的守卫）、`__batchTagOutcome()` 的四种输入（正常作答 / `null` 取消 /
+  抛错 / 非字符串答案）。并在宿主 `0.2.1-rc.2` 的**真实** `renderPrompt()` 上端到端确认：
+  带该标志时含 `{{upstream}}` 的指令按字面量渲染，去掉标志则复现原报错。
+- `feedback-test.mjs` 新增上述每一条的回归用例：并发路由（只投递一封、且不额外建连）、
+  数字/非法类型 `pass`、`to`+`toEncrypted` 冲突、控制字节与非 ASCII 地址、
+  组信头部注入断言、长主题切分与还原、AUTH 机制解析、60 秒总上限、无 CRLF 洪泛的有界缓冲。
+  假 SMTP 服务器支持自定义 EHLO 能力行与洪泛选项。
+- 本轮新增：`smoke-test.mjs` 覆盖相对 `$DSH_HOME` 的绝对化与 `planHistoryPrune()` 的
+  份数/字节/保底规则；`contract-test.mjs` 断言五个逐字段上限随快照发布且与代码一致，
+  并验证 `?lite=1` 的连接帧与变更帧都是紧凑 rev 标记、普通流仍收完整快照；
+  `ui-test.mjs` 断言每个字段标签都指向真实控件、校验错误带 `role="alert"`。
+
 ## [1.4.0] — 2026-10-18
 
 ### 新增

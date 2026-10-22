@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dsh-instruction-memory — 桌面端 / 网页端 双宿主适配性与流畅性审计</title>
+<style>
+  :root{
+    --bg:#ffffff; --panel:#f7f8fa; --line:#e3e6ea; --ink:#1a1d21; --muted:#5b6470;
+    --ok:#0f7b3f; --okbg:#e9f7ef; --warn:#9a5b00; --warnbg:#fff6e5; --bad:#b3261e; --badbg:#fdecea;
+    --accent:#1a5fb4; --accentbg:#eaf1fb;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",system-ui,sans-serif;}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 28px 72px}
+  h1{font-size:26px;line-height:1.35;margin:0 0 6px;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:13.5px;margin-bottom:26px}
+  h2{font-size:19px;margin:38px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  h3{font-size:15.5px;margin:22px 0 8px}
+  p{margin:9px 0}
+  code{background:var(--panel);border:1px solid var(--line);border-radius:4px;
+    padding:1px 5px;font:12.5px/1.5 ui-monospace,"Cascadia Mono",Consolas,monospace}
+  table{width:100%;border-collapse:collapse;margin:12px 0 6px;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:var(--panel);font-weight:600}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .verdict{display:flex;gap:14px;flex-wrap:wrap;margin:18px 0 6px}
+  .card{flex:1 1 210px;border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:var(--panel)}
+  .card .k{font-size:12px;color:var(--muted);letter-spacing:.02em}
+  .card .v{font-size:20px;font-weight:650;margin-top:4px;font-variant-numeric:tabular-nums}
+  .tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:20px;border:1px solid transparent;white-space:nowrap}
+  .t-ok{background:var(--okbg);color:var(--ok);border-color:#bfe3cd}
+  .t-warn{background:var(--warnbg);color:var(--warn);border-color:#f2ddb5}
+  .t-bad{background:var(--badbg);color:var(--bad);border-color:#f5c9c5}
+  .t-info{background:var(--accentbg);color:var(--accent);border-color:#c6d9f2}
+  .note{border-left:3px solid var(--accent);background:var(--accentbg);padding:10px 14px;border-radius:0 8px 8px 0;margin:14px 0;font-size:13.5px}
+  .note.warn{border-color:#e0a23a;background:var(--warnbg)}
+  .note.bad{border-color:#d9534f;background:var(--badbg)}
+  ul,ol{margin:8px 0 8px;padding-left:22px}
+  li{margin:5px 0}
+  .small{font-size:12.5px;color:var(--muted)}
+  .file{font:12.5px ui-monospace,Consolas,monospace;color:var(--muted)}
+  .bar{height:8px;border-radius:4px;background:var(--accent);display:inline-block;vertical-align:middle}
+  footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>dsh-instruction-memory 双宿主适配性与运行流畅性审计</h1>
+<div class="sub">
+  插件 <strong>1.4.0</strong>（工作区含未提交修复）· 网页端 DSH <strong>0.2.1-rc.2</strong>（TRAE SOLO CN，:8080）· 桌面端 DSH <strong>0.2.1-rc.2</strong>（DeepSeek Harness 0.2.0-rc.2 / Electron，:19387）<br>
+  实测时间 2026-10-22 08:40–08:57 GMT+8 · 所有数字均为本机实测，非估算
+</div>
+
+<h2>一、结论摘要</h2>
+<div class="verdict">
+  <div class="card"><div class="k">接口一致性</div><div class="v"><span class="tag t-ok">逐字段一致</span></div>
+    <div class="small">两端 state 返回同为 4529 字节，递归比对仅 1 个字段不同</div></div>
+  <div class="card"><div class="k">读路径 p50</div><div class="v">0.71 / 0.56 <span class="small">ms</span></div>
+    <div class="small">web / 桌面，N=30</div></div>
+  <div class="card"><div class="k">插件加载</div><div class="v">≈11 <span class="small">ms</span></div>
+    <div class="small">服务端模块 import，两端同一份代码</div></div>
+  <div class="card"><div class="k">界面结构</div><div class="v"><span class="tag t-ok">字节级相同</span></div>
+    <div class="small">双能力集渲染树 SHA 一致</div></div>
+</div>
+
+<div class="note">
+<strong>同日 09:10 跟进（S1–S6 全部处置完毕）：</strong>
+<strong>S2</strong>（统一确认门）、<strong>S4</strong>（窄宽断点）、<strong>S6</strong>（双端冒烟脚本）已实施，<code>npm test</code> 整链 ALL PASS，<code>verify.mjs</code> 新增 6 条断言守护；
+<strong>S1</strong> 量化后<em>放弃</em>——宿主对响应启用 gzip，真实代价是约 53KB 本地回环流量而非 193KB，减重收益不成立；
+<strong>S3</strong> 工具已就位（<code>--require-pulls</code>），那一条真人消息仍需你发。
+P1 转为「已修复」、P4 消除。<br>
+另更正两处初版误判：<strong>P5「不跟随宿主主题」不成立</strong>（面板通篇 <code>var(--dsw-alias-*, 回退值)</code>），S5 作废；
+<strong>SSE 与冷启动数字含本地代理开销</strong>（<code>http_proxy</code> 指向 127.0.0.1:9708，curl 连回环也走代理），已改为 Node 直连重测并撤下不可比项。
+</div>
+
+<p><strong>总体判断：插件在两端功能等价、延迟均在毫秒级，未发现阻断性缺陷。</strong>
+真实存在的差异集中在<em>宿主外壳</em>层面（Electron 自定义协议 vs 浏览器 HTTP、Node 24 vs 22、插件集合 32 vs 38），
+以及三类可控风险：桌面端 bundle 不走缓存、<code>confirm</code> 缺失时破坏性操作的降级策略自相矛盾、桌面端注入拉取次数尚为 0（未经真实对话回合）。</p>
+
+<div class="note warn">
+<strong>本次未能覆盖的环节（不做推断）：</strong>两端设置页均返回 <code>401</code>（需要宿主签发的会话凭据），因此<strong>没有做像素级截图对比</strong>。
+「布局一致」的结论来自两项旁证：① 同一 <code>client.js</code> 在「浏览器能力集」与「Electron 44 能力集」下渲染出的组件树逐字节相同；
+② 面板样式是插件自有的一份 <code>&lt;style data-dsh-plugin="instruction-memory"&gt;</code>，不依赖宿主 CSS。
+若需要像素级结论，请在两端设置页各截一张图对照。
+</div>
+
+<h2>二、环境与方法</h2>
+<table>
+  <tr><th style="width:130px">项目</th><th>网页端（web）</th><th>桌面端（desktop）</th></tr>
+  <tr><td>外壳</td><td>TRAE SOLO CN 内置 DSH</td><td>DeepSeek Harness 0.2.0-rc.2（Electron，Chromium 内核）</td></tr>
+  <tr><td>启动命令</td><td><code>dsh/lib/bin.js web --host 127.0.0.1 --port 8080</code></td><td><code>dsh-desktop-host</code> → 监听 19387</td></tr>
+  <tr><td>Node 运行时</td><td>v22.23.2</td><td>24.21.0（runtime.json 声明）</td></tr>
+  <tr><td>宿主 DSH 包</td><td colspan="2"><code>@deepseek-ai/dsh 0.2.1-rc.2</code>（两端共用 <code>~/.dsh/profiles/node_modules</code> 的同一棵 hoisted 树）</td></tr>
+  <tr><td>页面 origin</td><td><code>http://127.0.0.1:8080</code></td><td><code>dsh-app://app</code>（自定义协议，转发到 19387）</td></tr>
+  <tr><td>插件装载</td><td colspan="2">均为 symlink → <code>D:\Users\34332\AI\dsh-instruction-memory</code>（同一份源码，无副本漂移）</td></tr>
+  <tr><td>profile 插件数</td><td>38</td><td>32</td></tr>
+</table>
+
+<p class="small">测量手段：<code>POST /instruction-memory/api</code> 用 Node <code>http</code> <strong>直连</strong>（不经 <code>http_proxy</code>，含 Origin/Host 头）取 p50/p95；<code>GET</code> + <code>Accept: text/event-stream</code> 测 SSE 首事件；
+<code>import()</code> 计时测模块加载；以真实 React 垫片渲染真实 <code>client.js</code> 做双能力集对照。
+这套测量已固化为 <span class="file">live-host-smoke.mjs</span>（<code>npm run smoke:hosts</code>），可一条命令复现。</p>
+
+<h2>三、功能兼容性</h2>
+
+<h3>3.1 接口返回：逐字段一致</h3>
+<p>对两端各发一次 <code>{"method":"state"}</code>，返回体均为 <strong>4529 字节</strong>；递归比对全部叶子节点，<strong>仅 1 处不同</strong>：</p>
+<table>
+  <tr><th>路径</th><th>web</th><th>desktop</th><th>判读</th></tr>
+  <tr><td><code>snapshot.injection.pulls</code></td><td class="num">5</td><td class="num">0</td><td>运行期计数器：web 端已被 Agent 回合拉取 5 次；桌面端进程启动后<strong>尚未经历任何对话回合</strong></td></tr>
+</table>
+<p>其余关键字段两端完全相同：<code>injection.registered=true</code>、<code>available=true</code>、<code>chars=531</code>、<code>activeCount=3</code>、
+<code>storage.path</code> 同为 <code>C:\Users\34332\.dsh\instruction-memory\memory.json</code>、<code>security.boundHost=127.0.0.1</code>、
+<code>rev=2</code>、<code>limits</code> 全表一致。</p>
+
+<div class="note">
+<strong>含义：</strong>两端读写的是<strong>同一个存储文件</strong>，配置、集合、条目、预算在两端天然同步——这是 symlink 装载 + <code>$DSH_HOME</code> 解析共同决定的，不是巧合。
+</div>
+
+<h3>3.2 桌面端 origin 链路：被宿主的转发器“兜住”了</h3>
+<p>桌面端页面 origin 是 <code>dsh-app://app</code>，而插件的路由守卫要求 <code>Origin</code> 与 <code>Host</code> 同源。若浏览器发出真实的跨源请求，
+这两个值不可能相同，理论上应当 403。实测确认了这个理论：直接构造该组合会得到
+<code>403 请求来源被拒绝：Origin 与 Host 不同源：dsh-app://app</code>。</p>
+<p>但真实链路不经过这一判断。桌面端的协议处理器在转发前把四个头<strong>显式删除</strong>：</p>
+<table>
+  <tr><th>被删除的请求头</th><th>后果</th></tr>
+  <tr><td><code>host</code></td><td>由 Node <code>fetch</code> 重新填入 <code>127.0.0.1:19387</code>，通过回环 Host 守卫</td></tr>
+  <tr><td><code>origin</code></td><td>插件看到空 Origin → 跳过同源比较</td></tr>
+  <tr><td><code>sec-fetch-site</code></td><td>避免被判为 <code>cross-site</code></td></tr>
+  <tr><td><code>cookie</code></td><td>换成宿主签发的认证 cookie</td></tr>
+</table>
+<p class="file">依据：DeepSeek Harness <code>app.asar</code> → <code>forwardWebRequest()</code>，<code>for (const name of ["host","origin","cookie","sec-fetch-site"]) headers.delete(name)</code></p>
+<p>同一函数还自带反向白名单：<code>origin !== null &amp;&amp; origin !== "dsh-app://app"</code> 直接 403。因此桌面端实际的安全边界由<strong>宿主代理</strong>把守，插件的 Origin 守卫在这条路径上不再起作用——不是漏洞，但两端的防护层次不同（见第五节 D2）。</p>
+
+<h3>3.3 安全上下文能力</h3>
+<p><code>dsh-app</code> 协议注册为 <code>standard: true, secure: true, supportFetchAPI: true, corsEnabled: true</code>。
+因此桌面端页面<strong>属于 secure context</strong>，<code>navigator.clipboard</code> 可用，
+面板的「复制诊断信息」「复制」等功能不需要走无剪贴板降级分支。</p>
+
+<h3>3.4 自动化回归</h3>
+<p><code>npm test</code> 在工作区代码上整链通过（<strong>ALL PASS</strong>），包含 147 断言纯函数/隔离、283 断言真实路由端到端、
+129 断言双半隔离加载 + i18n 键集一致性、62 断言面板真实渲染与点击。</p>
+
+<h2>四、界面布局一致性</h2>
+
+<h3>4.1 双能力集渲染对照（本次核心实验）</h3>
+<p>用真实的 <code>lib/index.js</code> + 真实路由 + 真实 <code>client.js</code>，在同一份 store（3 条指令、2 个集合）下渲染两次面板：</p>
+<table>
+  <tr><th style="width:150px">能力集</th><th>模拟内容</th><th class="num">渲染树字节</th><th>SHA-256 前 16 位</th></tr>
+  <tr><td>web</td><td><code>prompt</code> 正常返回、<code>confirm</code> 存在</td><td class="num">10038</td><td class="file">9d8ef0f752ca97a1</td></tr>
+  <tr><td>desktop</td><td><code>prompt</code> 存在但调用即抛 <em>“prompt() is not supported.”</em>、<code>confirm</code> 存在</td><td class="num">10038</td><td class="file">9d8ef0f752ca97a1</td></tr>
+</table>
+<p><strong>结果：逐字节相同，30 个可点元素完全对应。</strong>说明面板的常规布局不因“桌面端 prompt 不可用”而产生任何结构分叉——
+降级只发生在<em>真正点击批量加标签的那一刻</em>（改走行内输入框），不影响首屏。</p>
+
+<h3>4.2 样式来源：插件自有，不继承宿主主题</h3>
+<p>面板挂载时创建一份 <code>&lt;style data-dsh-plugin="instruction-memory"&gt;</code> 并插入 <code>document.head</code>，卸载时移除。
+布局规则全部集中在 <code>.im-*</code> 类名下：根容器 <code>max-width: 860px</code>，横向容器统一 <code>flex-wrap: wrap</code>，表单区 <code>grid-template-columns: 1fr 1fr</code>。</p>
+<table>
+  <tr><th>属性</th><th>取值</th><th>跨端影响</th></tr>
+  <tr><td>根宽</td><td><code>max-width: 860px</code></td><td>两端都不会撑满宽屏，视觉一致</td></tr>
+  <tr><td>折行</td><td><code>flex-wrap: wrap</code></td><td>窄窗口自动换行，不溢出</td></tr>
+  <tr><td>双列表单</td><td><code>1fr 1fr</code>，<strong>无 @media 断点</strong></td><td>窗口 &lt; 约 520px 时两列被压窄，文字换行变多（两端同样表现）</td></tr>
+  <tr><td>主题变量</td><td>未使用宿主 CSS 变量</td><td>深/浅色主题切换时面板不跟随（两端一致地不跟随）</td></tr>
+</table>
+
+<h3>4.3 唯一确认的交互态差异</h3>
+<p>Electron 44 把 <code>window.prompt</code> 换成“存在但调用即抛”的函数，<code>typeof</code> 仍为 <code>'function'</code>。
+现行代码在调用点用 <code>try/catch</code> 判定（而非 <code>typeof</code>），失败时切换到面板内行内输入框。
+这是<strong>布局上的局部差异</strong>（多出一个输入行），但属于正确降级，不构成一致性问题。</p>
+
+<h2>五、加载速度</h2>
+<table>
+  <tr><th style="width:210px">指标</th><th class="num">web</th><th class="num">desktop</th><th>说明</th></tr>
+  <tr><td>服务端模块 import</td><td class="num">11.0–11.6 ms</td><td class="num">同源同代码</td><td>含 197KB 源码解析与求值，31 个导出</td></tr>
+  <tr><td>注入计划构建 <code>planInjection</code></td><td class="num" colspan="2">0.49–0.54 ms</td><td>3 条指令 / 531 字符场景</td></tr>
+  <tr><td>注入文本长度</td><td class="num" colspan="2">531 字符</td><td>预算 4000，占用 13%</td></tr>
+  <tr><td>客户端脚本体积</td><td class="num" colspan="2">201,482 B</td><td>未压缩源码；<strong>gzip 后 52,961 B（26.3%）</strong></td></tr>
+  <tr><td>是否压缩传输</td><td><span class="tag t-ok">是</span></td><td><span class="tag t-info">经宿主转发</span></td><td>宿主对响应启用 gzip（<code>Content-Encoding: gzip</code>，已用插件路由实证）</td></tr>
+  <tr><td>bundle 缓存策略</td><td><span class="tag t-ok">immutable</span></td><td><span class="tag t-warn">强制 no-store</span></td><td>桌面端每次启动都要重新拉取全部插件脚本</td></tr>
+</table>
+
+<div class="note warn">
+<strong>桌面端为什么强制 no-store：</strong>宿主给插件 bundle 的 URL 带一个「每次启动都变」的 revision，本意是长期缓存；
+但桌面端认为「下次启动就换 revision，磁盘缓存只会白占空间」，于是在转发时把 <code>cache-control</code> 覆盖为 <code>no-store</code>。
+代价是：<strong>同一台机器上，桌面端每次冷启动都要重传一遍所有插件的客户端脚本</strong>——但这是 <strong>gzip 后的约 53KB</strong>，不是 193KB，而且是本地回环。
+<p class="file">依据：<code>app.asar</code> 中 <code>PLUGIN_BUNDLE_PATH = /^\/plugins\//u</code> 与 <code>outgoing.set("cache-control","no-store")</code>；
+gzip 比例为本地 <code>zlib -9</code> 实测，宿主实际级别略低，量级相同。</p>
+</div>
+
+<p><strong>结论：插件本身不是加载瓶颈。</strong>11 ms 的模块加载与 0.5 ms 的注入构建，相对宿主启动（数十个插件、数百个包）可以忽略。
+客户端脚本原始 201KB，但经 gzip 后仅 53KB；桌面端「不缓存」的放大效应因此从「每次重传 193KB」修正为「每次重传约 53KB 的回环流量」。</p>
+
+<p class="small">体积构成：注释 641 行、空行 116 行、代码 2,983 行；<code>zh</code>+<code>en</code> 两套词典合计约 18.6KB（9%）。
+这意味着「剥离注释」最多省下一部分原始字节，gzip 后收益更小（注释压缩率极高），代价却是毁掉本仓库最核心的可读性资产——见第十节对 S1 的判断。</p>
+
+<h2>六、交互响应</h2>
+<p>每端暖机后连续采样 30 次（写入类 10 次），单位毫秒：</p>
+<table>
+  <tr><th>调用</th><th class="num">web p50</th><th class="num">web p95</th><th class="num">desktop p50</th><th class="num">desktop p95</th><th>状态码 / 一致性</th></tr>
+  <tr><td><code>state</code>（读快照）</td><td class="num">0.71</td><td class="num">1.00</td><td class="num">0.56</td><td class="num">0.90</td><td>30/30 = 200，字节数恒定 4529</td></tr>
+  <tr><td><code>history-list</code>（扫目录）</td><td class="num">1.26</td><td class="num">1.48</td><td class="num">1.33</td><td class="num">1.97</td><td>30/30 = 200，字节数恒定 4764</td></tr>
+  <tr><td><code>save</code>（无变化写入）</td><td class="num">0.54</td><td class="num">1.03</td><td class="num">0.42</td><td class="num">0.75</td><td>10/10 = 200，均返回 <code>saved:false</code>（未落盘）</td></tr>
+  <tr><td>SSE 首事件</td><td class="num">0.71</td><td class="num">—</td><td class="num">0.78</td><td class="num">—</td><td>直连测量；此前经本地代理得到 6.09 / 2.20 ms，已更正</td></tr>
+</table>
+
+<p>两点值得注意：</p>
+<ul>
+  <li><strong>桌面端暖态略快</strong>（0.64 vs 0.77 ms，重复采样区间 0.56–0.77）。它没有浏览器到本地的网络栈开销，请求经协议处理器直连。
+      差距不到 0.2 ms，<strong>没有使用体感上的意义</strong>。</li>
+  <li><strong>实时通道两端持平</strong>（0.71 / 0.78 ms）。这是面板"另一处改动多久能看到"的上限，都在 1 ms 内。</li>
+</ul>
+<p><code>save</code> 的 <code>saved:false</code> 是正确行为：无变化的写入不产生 rev 递增，也不写盘。两端语义一致。</p>
+
+<div class="note warn">
+<strong>测量更正：</strong>本节初版给出「冷启动首请求 17.6 ms / 109.4 ms」与「SSE 首字节 6.08 / 2.18 ms」。
+后者是 <code>curl</code> 读数，而本机 <code>http_proxy</code> 指向 <code>127.0.0.1:9708</code>，
+<strong>curl 会把回环请求也交给代理</strong>，因此那些数字含一次代理往返。改用 Node 直连后 SSE 首事件降到 0.71 / 0.78 ms。
+冷启动那一项已撤下：web 端宿主无法重启复测，单端数据不构成对比，保留会误导。
+</div>
+
+<h2>七、两端差异清单</h2>
+<table>
+  <tr><th style="width:44px">#</th><th style="width:150px">维度</th><th>web</th><th>desktop</th><th style="width:78px">性质</th></tr>
+  <tr><td>D1</td><td>外壳 / 内核</td><td>TRAE 内嵌浏览器，Node 22.23.2</td><td>Electron 44，Node 24.21.0</td><td><span class="tag t-info">环境</span></td></tr>
+  <tr><td>D2</td><td>请求链路</td><td>浏览器直连 :8080，Origin/Host 双守卫生效</td><td><code>dsh-app://app</code> → 协议处理器剥离 origin/host/sec-fetch-site 后转发；守卫由宿主白名单替代</td><td><span class="tag t-info">环境</span></td></tr>
+  <tr><td>D3</td><td>脚本缓存</td><td>immutable，可跨导航复用</td><td><code>no-store</code>，每次启动重取（gzip 后约 53KB）</td><td><span class="tag t-info">环境</span></td></tr>
+  <tr><td>D4</td><td>插件生态</td><td>38 个 bundle</td><td>32 个 bundle</td><td><span class="tag t-info">环境</span></td></tr>
+  <tr><td>D5</td><td><code>window.prompt</code></td><td>可用</td><td>存在但抛错 → 走行内输入框</td><td><span class="tag t-ok">已处理</span></td></tr>
+  <tr><td>D6</td><td>注入拉取</td><td><code>pulls=5</code>（已实测生效）</td><td><code>pulls=0</code>（尚无对话回合）</td><td><span class="tag t-warn">待验证</span></td></tr>
+  <tr><td>D7</td><td>实时通道（SSE）</td><td class="num">0.71 ms</td><td class="num">0.78 ms</td><td><span class="tag t-ok">持平</span></td></tr>
+</table>
+<p class="small">D4 明细：仅 web 端装的是 <code>dsh-agent-teams</code>、<code>dsh-pet</code>、<code>dsh-client-ui-task-board</code>、<code>browser-skill-dsh-plugin</code>、<code>dsh-automation</code>、<code>dsh-experimental-inspector-profile</code>、<code>dsh-our-free-model</code>、<code>dsh-workbuddy-connect</code> 共 8 个；仅桌面端装的是 <code>@roarpeng/graphflow</code>、<code>dsh-context</code> 共 2 个。</p>
+
+<h2>八、潜在问题（按严重度排序）</h2>
+
+<table>
+  <tr><th style="width:44px">#</th><th style="width:120px">严重度</th><th>问题</th></tr>
+  <tr>
+    <td>P1</td>
+    <td><span class="tag t-ok">已修复</span></td>
+    <td><strong><code>confirm</code> 缺失时，破坏性操作的降级策略自相矛盾。</strong>
+      修复前：批量删除与集合删除写的是 <code>typeof window.confirm === 'function' &amp;&amp; !window.confirm(...)</code>，
+      <em>没有 confirm 时条件整体为 false，直接往下执行删除</em>；版本回滚写的是
+      <code>typeof window.confirm !== 'function' &amp;&amp; return</code>，<em>没有 confirm 时拒绝执行</em>。
+      同一类不可恢复操作，一个静默放行、一个静默拒绝。<br>
+      <strong>现状：8 个调用点已统一到 <code>askConfirm(message, unavailable)</code></strong>——
+      持久数据类默认 <code>deny</code> 并提示 <code>confirm.unavailable</code>，丢弃草稿类用 <code>allow</code>；
+      返回值三态化，用户主动取消不再被误报成「环境不支持」；对话框<strong>存在但抛错</strong>按缺失处理。
+      <span class="file">lib/client.js</span>；<span class="file">verify.mjs</span> 新增 6 条断言守护。</td>
+  </tr>
+  <tr>
+    <td>P2</td>
+    <td><span class="tag t-info">低</span></td>
+    <td><strong>桌面端每次启动重传全部插件脚本。</strong>原始 201KB 源码，但<strong>传输时 gzip 到约 53KB</strong>，
+      且是本地回环，32 个插件合计并非关键路径。插件侧无低风险减重空间（见 S1 结论）。</td>
+  </tr>
+  <tr>
+    <td>P3</td>
+    <td><span class="tag t-warn">中</span></td>
+    <td><strong>桌面端注入链路尚未经真实回合验证。</strong><code>injection.registered=true / available=true</code> 只证明 section 注册成功，
+      <code>pulls=0</code> 说明还没有任何 Agent 回合调用过它。web 端 <code>pulls=5</code> 是已生效的实证。
+      <strong>建议在桌面端发一条普通消息后复查 <code>pulls</code> 是否 &gt; 0</strong>，这是唯一能证明“桌面端真的把指令送进提示词”的方式。</td>
+  </tr>
+  <tr>
+    <td>P4</td>
+    <td><span class="tag t-warn">低</span></td>
+    <td><strong>窄窗口下双列表单变挤。</strong><code>.im-grid2 { grid-template-columns: 1fr 1fr }</code> 无 <code>@media</code> 断点。
+      桌面端窗口常被拉窄，两列输入框会被压窄、标签与占位文本折行更频繁（具体阈值未实测，属版面推算）。两端表现相同，不是跨端差异，但影响观感。</td>
+  </tr>
+  <tr>
+    <td>P5</td>
+    <td><span class="tag t-ok">已核查</span></td>
+    <td><strong>主题跟随：不存在此问题，属本报告的初版误判。</strong>
+      面板 CSS 通篇使用 <code>var(--dsw-alias-bg-base, 回退值)</code>、<code>var(--dsw-alias-label-secondary, 回退值)</code>、
+      <code>var(--dsw-alias-brand-primary, …)</code> 等宿主变量（<code>--dsw-alias-*</code>，共 9 类、数十处引用），
+      深浅色会随宿主切换。<br>
+      <span class="small">更正原因：初版只检索了 <code>@media</code>/<code>max-width</code>/<code>grid-template-columns</code>，
+      漏检 <code>var(--…)</code>，因而误得出「样式硬编码、未使用宿主变量」。同时把变量前缀误记成 <code>--dsh-</code>，
+      实际是 <code>--dsw-alias-</code>。</span></td>
+  </tr>
+  <tr>
+    <td>P6</td>
+    <td><span class="tag t-info">低</span></td>
+    <td><strong>两端插件生态不对等（38 vs 32），会干扰“谁更流畅”的直观感受。</strong>
+      宿主启动时间与内存占用主要由插件总量决定，而非本插件。做性能对比时应先对齐两侧插件集合，否则测到的是环境差异。</td>
+  </tr>
+</table>
+
+<h2>九、可优化建议</h2>
+<table>
+  <tr><th style="width:44px">#</th><th style="width:150px">建议</th><th>做法</th><th style="width:110px">预期收益</th></tr>
+  <tr><td>S1</td><td>收缩客户端体积 <span class="tag t-warn">已评估·不做</span></td><td><strong>量化后收益不成立。</strong>源码 201,482 B，gzip 后 52,961 B（26.3%）；其中注释 641 行、空行 116 行、词典仅占 9%。
+    剥注释/空行在 gzip 后省的字节有限（注释压缩率极高），却要牺牲本仓库最核心的可读性；拆包或引入压缩产物会破坏「无需构建」的设计（文件头明示）。
+    桌面端 <code>no-store</code> 的真实代价是<strong>约 53KB 本地回环流量</strong>，不是 193KB。</td><td>不改，理由留档</td></tr>
+  <tr><td>S2</td><td>统一破坏性操作的降级 <span class="tag t-ok">已实施</span></td><td>抽出 <code>askConfirm(message, unavailable)</code>，返回三态 <code>yes</code>/<code>no</code>/<code>unavailable</code>：持久数据类默认 <code>deny</code>（无对话框即拒绝，并提示 <code>confirm.unavailable</code>），丢弃草稿类用 <code>allow</code>。<strong>存在但抛错的对话框按缺失处理</strong>。8 个调用点全部改走该入口。</td><td>已消除 P1 的不一致；<code>verify.mjs</code> 新增 6 条断言守护</td></tr>
+  <tr><td>S3</td><td>桌面端真实回合 <span class="tag t-ok">已提供工具</span></td><td>新增 <code>live-host-smoke.mjs --require-pulls</code>：<code>injection.pulls === 0</code> 时直接退出码 1 并说明「该宿主尚未经历真实回合」。发一条消息后重跑即可闭合。</td><td>验证可一键复核（仍需你发那条消息）</td></tr>
+  <tr><td>S4</td><td>加窄宽断点 <span class="tag t-ok">已实施</span></td><td><code>@media (max-width:560px)</code>：<code>.im-grid2</code> 转单列，批量标签输入去掉 160px 下限并独占一行（原先在窄宽会横向溢出）。</td><td>已消除 P4</td></tr>
+  <tr><td>S5</td><td>与宿主主题对齐 <span class="tag t-ok">无需改动</span></td><td><strong>初版建议作废</strong>：面板已在用 <code>var(--dsw-alias-*, 回退值)</code>，主题跟随本就成立（见 P5 更正）。</td><td>—</td></tr>
+  <tr><td>S6</td><td>双端冒烟基线 <span class="tag t-ok">已实施</span></td><td>新增 <code>live-host-smoke.mjs</code>（<code>npm run smoke:hosts</code>）：一次测完 state p50/p95、SSE 首事件、注入注册与字符数、两端快照逐字段一致性，超阈值或快照不一致即退出码 1；<strong>不进 <code>npm test</code></strong>，避免 CI 因无桌面端而常红。</td><td>可重复、不污染 CI</td></tr>
+</table>
+
+<h2>十、实施边界与取舍</h2>
+
+<h3>S2 / S4：已实施</h3>
+<p>S2 是本轮唯一带行为变更的改动，也是唯一一个「不安全默认」：修复前，缺对话框的宿主里删除会不经确认落盘。
+改动把 8 个调用点收口到一个三态门（<code>yes</code>/<code>no</code>/<code>unavailable</code>），
+按「持久数据 / 未保存草稿」区分兜底方向，并把「存在但抛错的对话框」按缺失处理——
+Electron 44 给 <code>prompt()</code> 用的正是这种桩，原先的 <code>typeof</code> 判断对它完全失效。
+<code>confirmDiscard()</code> 的既有契约（无对话框时允许取消编辑）保持不变，因为
+<code>verify.mjs</code> 明确守护「不能把用户困在编辑器里」，且那条路径不涉及已落盘数据。</p>
+<p>S4 是纯 CSS 新增，零逻辑风险：560px 以下表单转单列，批量标签输入独占一行。</p>
+
+<h3>实测对照：同一个「删除」按钮，三种环境</h3>
+<p>用真实 <code>client.js</code> + 真实路由 + 真实 store（2 条指令）渲染面板，点击<strong>同一条目行</strong>的「删除」，
+分别在有对话框 / 无对话框 / 对话框抛错三种环境下观察落盘结果：</p>
+<table>
+  <tr><th style="width:200px">运行环境</th><th class="num">删除前条目</th><th class="num">删除后条目</th><th class="num">路由调用</th><th>面板是否提示</th></tr>
+  <tr><td><code>confirm</code> 存在并返回 true</td><td class="num">2</td><td class="num">1</td><td class="num">1</td><td>—（正常执行）</td></tr>
+  <tr><td><code>confirm</code> 缺失</td><td class="num">2</td><td class="num">2</td><td class="num">0</td><td><span class="tag t-ok">是</span>「无法弹出确认对话框，操作已取消」</td></tr>
+  <tr><td><code>confirm</code> 存在但调用即抛</td><td class="num">2</td><td class="num">2</td><td class="num">0</td><td><span class="tag t-ok">是</span>同上</td></tr>
+</table>
+<p>三行结果同时证明：<strong>正常路径未被破坏</strong>（同意时确实删除并只调用一次路由）、
+<strong>缺失时不再删任何东西</strong>（修复前这一行会是 2 → 1）、<strong>抛错桩按缺失处理</strong>，
+且提示文案真的渲染到了面板上（说明 <code>setError</code> 在全部调用点作用域内可达，不是只在单元测试里成立）。</p>
+
+<h3>S1（客户端体积）：量化后放弃，理由如下</h3>
+<p>先把数字摆出来：<code>client.js</code> <strong>201,482 B</strong>（本轮新增确认门后略增），
+zlib -9 压缩后 <strong>52,961 B（26.3%）</strong>；构成是注释 641 行、空行 116 行、代码 2,983 行，
+其中 <code>zh</code>+<code>en</code> 两套词典合计约 18.6KB（9%）。</p>
+<p>三条可能路径都被否决：</p>
+<ul>
+  <li><strong>剥注释/空行</strong>：注释的 gzip 压缩率极高，省下的传输字节很小，代价却是拆掉本仓库最核心的可读性资产
+      （每个非显然决定都附「为什么」的注释，是这个项目交付质量的一部分）。</li>
+  <li><strong>拆包/压缩产物</strong>：会引入「源码 + 产物」双轨，破坏<strong>手工书写、无需构建</strong>的设计
+      （文件头注释即声明 “so the package needs no build step”），调试路径也随之改变。</li>
+  <li><strong>词典懒加载</strong>：只占 9%，gzip 后约 4KB，收益不抵新增的复杂度。</li>
+</ul>
+<p>更关键的是<strong>前提被推翻了</strong>：初版把代价估成「每次冷启动重传 193KB」，但宿主对响应启用 gzip
+（已用插件路由的 <code>Content-Encoding: gzip</code> 实证），真实代价是<strong>约 53KB 的本地回环流量</strong>。
+在本地回环上，53KB 的传输耗时在本报告的分辨率内不可测。
+<strong>若仍要减重，正确的顺序是推动宿主按 revision 做 immutable 缓存</strong>，而不是让插件为宿主的缓存策略买单。</p>
+
+<h3>S6（双端冒烟基线）：已实施，但不进 CI</h3>
+<p>新增 <span class="file">live-host-smoke.mjs</span>（<code>npm run smoke:hosts</code>）。它故意<strong>不</strong>接进 <code>npm test</code>：
+CI 没有桌面端，放进去必然常红，也就等于没有门禁。</p>
+<p>一次运行测四项：<code>state</code> 的 p50/p95、SSE 首事件、注入注册与字符数、两端快照逐字段一致性；
+另加两个立即失败条件——<code>p50 &gt; 50ms</code>、以及「除 <code>injection.pulls</code> 外有任何字段不同」。
+退出码：0 全绿 / 1 有问题 / 2 两端都连不上。支持 <code>--web &lt;port&gt;</code>、<code>--desktop &lt;port&gt;</code>、
+<code>--rounds N</code>、<code>--json</code>、<code>--require-pulls</code>。</p>
+<p>脚本内所有请求走 Node <code>http</code> <strong>直连</strong>，不继承 <code>http_proxy</code> —— 这正是本轮发现 SSE 初版读数偏高的原因，
+已写进文件头注释，避免下一个人用 curl 复核时再踩一次。</p>
+
+<h3>S3（桌面端真实回合）：工具已就位，那一条消息仍需你发</h3>
+<p><code>live-host-smoke.mjs --require-pulls</code> 会在 <code>injection.pulls === 0</code> 时以退出码 1 失败，
+并打印「该宿主尚未经历真实的 Agent 回合，注入链路未被证实」。在桌面端随便发一条消息后重跑，
+从 0 变 ≥1 即闭合这个缺口——脚本无法代替你和模型说话。</p>
+
+<h2>十一、复核方法（可复现）</h2>
+<ol>
+  <li><strong>一行命令</strong>（推荐）：<code>npm run smoke:hosts</code>。两端在线时输出各自的 p50/p95、SSE 首事件、
+      注入注册与字符数、两端快照一致性，并以退出码 0/1/2 表示 全绿 / 有问题 / 两端都连不上。
+      加 <code>--require-pulls</code> 可把「桌面端从未经历真实回合」判为失败。</li>
+  <li>确认两端在线：<code>netstat -ano | grep -E "127.0.0.1:(8080|19387)"</code>，应各有一条 <code>LISTENING</code>。</li>
+  <li>手动取快照时<strong>必须绕开代理</strong>：
+      <code>curl --noproxy '*' -X POST http://127.0.0.1:&lt;port&gt;/instruction-memory/api -H "content-type: application/json" -H "origin: http://127.0.0.1:&lt;port&gt;" -d '{"method":"state"}'</code>。
+      本机 <code>http_proxy</code> 指向 <code>127.0.0.1:9708</code>，<strong>不加 <code>--noproxy</code> 时连回环请求也会被代理转发</strong>，
+      读数会多出一次代理往返（本报告的 SSE 初版数据就是这样偏高的）。</li>
+  <li>比对两端返回体的 <code>snapshot</code>：预期仅 <code>injection.pulls</code> 可能不同。</li>
+  <li>SSE：同一 URL 用 <code>GET</code> + <code>Accept: text/event-stream</code>，预期首事件为一行 <code>retry: 5000</code> 加一条 <code>data:</code> 快照。</li>
+  <li>回归：<code>CODEBUDDY_SAFE_DELETE_ENABLED=0 npm test</code>，预期末行 <code>ALL PASS</code>。</li>
+</ol>
+
+<div class="note">
+<strong>关于本次审计的边界：</strong>报告中的“一致”均指<em>接口返回、组件树结构、样式来源、延迟量级</em>这四个可测层面；
+<strong>未包含</strong>像素级视觉回归、长时间运行的内存曲线、并发多标签页场景、以及桌面端真实回合的注入内容取证。这三项如需结论，应单独设计实验。
+</div>
+
+<footer>
+  dsh-instruction-memory 1.4.0 · 双宿主审计 · 2026-10-22 · 数据来源：本机两端进程实时接口 + 源码（<span class="file">lib/index.js</span>、<span class="file">lib/client.js</span>、DeepSeek Harness <span class="file">app.asar</span>）
+</footer>
+</div>
+</body>
+</html>

@@ -460,6 +460,21 @@ check('ISOLATION through the UI: personas follow the set too', !injected().inclu
 
 // ---- F13: an entry saved while the new set is active lands in it ----
 tree = await click(tree, '＋ 新增指令')
+// Accessibility: a <label> that is only a visual sibling is announced by
+// nothing and does not focus its control on click. Every label that names a
+// field must carry htmlFor, and the target id must exist in the same tree.
+{
+  const labels = walk(tree).filter((node) => node.type === 'label' && typeof node.props.htmlFor === 'string')
+  const ids = new Set(walk(tree).filter((node) => typeof node.props.id === 'string').map((node) => node.props.id))
+  check('a11y: every field label is associated with an existing control',
+    labels.length >= 5 && labels.every((node) => ids.has(node.props.htmlFor)),
+    JSON.stringify(labels.map((node) => node.props.htmlFor)))
+}
+// Saving a blank entry is refused in the panel; that refusal must be an alert,
+// not a silent red line only sighted users can notice.
+tree = await click(tree, '保存')
+check('a11y: the validation error is exposed as an alert',
+  anyElement(tree, (el) => el.props && el.props.role === 'alert') !== undefined)
 tree = await type(tree, (el) => el.type === 'input' && el.props.maxLength === 120, '只在工作集')
 tree = await type(tree, (el) => el.type === 'textarea' && el.props.maxLength === 6000, '工作集专用指令')
 // Switch the editor to 按需 and give it a scenario, so the F17 preview below

@@ -20,6 +20,7 @@ const PACKAGE_VERSION = JSON.parse(await readFile(new URL('./package.json', impo
 const {
   FEEDBACK_ENV,
   FEEDBACK_LIMITS,
+  SMTP_TOTAL_TIMEOUT_MS,
   buildFeedbackMessage,
   buildRawMail,
   decryptRecipient,
@@ -29,6 +30,7 @@ const {
   normalizeFeedback,
   parseSmtpUrl,
   sendSmtpMail,
+  smtpAuthMechanisms,
 } = await import(new URL('./lib/mailer.js', import.meta.url).href)
 const host = await import(new URL('./lib/index.js', import.meta.url).href)
 
@@ -52,10 +54,14 @@ process.on('unhandledRejection', (err) => {
 
 function startFakeSmtp(options = {}) {
   const state = { commands: [], data: '', mailFrom: '', rcptTo: '', auth: null, connections: 0 }
+  const caps = Array.isArray(options.caps) ? options.caps : ['AUTH LOGIN PLAIN', 'SIZE 10485760']
   const server = createServer((socket) => {
     state.connections += 1
     socket.setEncoding('utf8')
+    socket.on('error', () => {})
     socket.write('220 fake.local ESMTP ready\r\n')
+    // A misbehaving peer: a long line with no CRLF at all.
+    if (options.floodBytes) socket.write('A'.repeat(options.floodBytes))
     let buffer = ''
     let inData = false
     let authStep = 0
@@ -92,7 +98,7 @@ function startFakeSmtp(options = {}) {
         if (upper.startsWith('EHLO') || upper.startsWith('HELO')) {
           // Without STARTTLS on purpose: the client must refuse to send
           // credentials here (covered by the auth test below).
-          socket.write('250-fake.local\r\n250-AUTH LOGIN PLAIN\r\n250-SIZE 10485760\r\n250 OK\r\n')
+          socket.write(['250-fake.local', ...caps.map((cap) => '250-' + cap), '250 OK'].join('\r\n') + '\r\n')
           continue
         }
         if (upper === 'AUTH LOGIN') {
@@ -146,13 +152,14 @@ const decodeBody = (raw) => {
 
 /* ---------------- the real Host, behind the real route ---------------- */
 
-let handler = null
-{
+/** Mount the real Host once per call: a fresh mount also has a fresh cool-down. */
+function mountHost() {
+  let mounted = null
   const ctx = {
     systemPrompt: { section: () => () => {} },
     inject: (deps, callback) => {
       callback({
-        webServer: { register: (route) => { handler = route.handler; return () => {} } },
+        webServer: { register: (route) => { mounted = route.handler; return () => {} } },
         effect: (fn) => { fn(); return () => {} },
       })
       return null
@@ -161,7 +168,10 @@ let handler = null
     effect: (fn) => { fn(); return () => {} },
   }
   host.apply(ctx)
+  return mounted
 }
+
+let handler = mountHost()
 
 async function rawRoute(body) {
   const listeners = {}
@@ -295,6 +305,43 @@ check('config: an invalid port is reported',
   feedbackConfigFrom({ env: { [FEEDBACK_ENV.to]: 'a@b.c', [FEEDBACK_ENV.host]: 'h', [FEEDBACK_ENV.port]: '70000' } }).ok === false)
 check('config: a password without a username is refused',
   feedbackConfigFrom({ env: { [FEEDBACK_ENV.to]: 'a@b.c', [FEEDBACK_ENV.host]: 'h', [FEEDBACK_ENV.pass]: 'p' } }).ok === false)
+
+// Regression: port/secure were fixed to accept JSON scalars, but `pass` kept
+// going through the string-only path, so a numeric app password was dropped and
+// surfaced as an unexplainable wrong-password failure.
+const numericPassConfig = feedbackConfigFrom({
+  env: {},
+  file: {
+    to: 'maintainer@example.com',
+    smtp: { host: 'smtp.example.com', port: 587, secure: false, user: 'bot@example.com', pass: 1234567890123456 },
+  },
+})
+check('config: a numeric smtp.pass in the JSON file is stringified, not dropped',
+  numericPassConfig.ok === true && numericPassConfig.config.smtp.pass === '1234567890123456'
+  && numericPassConfig.config.smtp.user === 'bot@example.com',
+  JSON.stringify(numericPassConfig.ok ? numericPassConfig.config.smtp : numericPassConfig))
+
+const objectPassConfig = feedbackConfigFrom({
+  env: {},
+  file: { to: 'maintainer@example.com', smtp: { host: 'smtp.example.com', user: 'bot@example.com', pass: { secret: 'x' } } },
+})
+check('config: a non-scalar smtp.pass is refused with the field name',
+  objectPassConfig.ok === false && objectPassConfig.message.includes('smtp.pass'), objectPassConfig.message)
+
+// Regression: EMAIL_RE used to accept control bytes and non-ASCII, which would
+// leave as raw SMTP commands / 8-bit headers.
+const controlByteTo = feedbackConfigFrom({ env: { [FEEDBACK_ENV.to]: 'a\u0000b@example.com', [FEEDBACK_ENV.host]: 'h' } })
+check('config: a control byte in the recipient is refused',
+  controlByteTo.ok === false && controlByteTo.message.includes('反馈收件邮箱'), controlByteTo.message)
+const nonAsciiTo = feedbackConfigFrom({ env: { [FEEDBACK_ENV.to]: '收件人@example.com', [FEEDBACK_ENV.host]: 'h' } })
+check('config: a non-ASCII recipient is refused with a readable reason',
+  nonAsciiTo.ok === false && nonAsciiTo.message.includes('非 ASCII'), nonAsciiTo.message)
+const nonAsciiFrom = feedbackConfigFrom({
+  env: { [FEEDBACK_ENV.to]: 'a@b.c', [FEEDBACK_ENV.host]: 'h', [FEEDBACK_ENV.from]: '发件人@example.com' },
+})
+check('config: a non-ASCII sender is refused with a readable reason',
+  nonAsciiFrom.ok === false && nonAsciiFrom.message.includes('反馈发件邮箱'), nonAsciiFrom.message)
+
 check('config: cooldown defaults to 30s and accepts 0',
   feedbackCooldownMs({}) === 30000 && feedbackCooldownMs({ [FEEDBACK_ENV.cooldown]: '0' }) === 0)
 check('config: an unparsable cooldown falls back to the default',
@@ -339,6 +386,22 @@ const wrongSecretConfig = feedbackConfigFrom({
 })
 check('config: a wrong secret is reported instead of a generic failure',
   wrongSecretConfig.ok === false && wrongSecretConfig.message.includes('无法解密'), wrongSecretConfig.message)
+
+// Regression: a leftover plaintext `to` silently beat `toEncrypted`, so the
+// operator believed the address was encrypted while it sat in the file in clear.
+const bothRecipients = feedbackConfigFrom({
+  env: { [FEEDBACK_ENV.secret]: testSecret, [FEEDBACK_ENV.host]: 'smtp.example.com' },
+  file: { to: 'maintainer@example.com', toEncrypted: cipherText },
+})
+check('config: to together with toEncrypted is refused instead of preferring the plaintext',
+  bothRecipients.ok === false && bothRecipients.message.includes('toEncrypted'), bothRecipients.message)
+const brokenCipherWithPlaintext = feedbackConfigFrom({
+  env: { [FEEDBACK_ENV.secret]: testSecret, [FEEDBACK_ENV.host]: 'smtp.example.com' },
+  file: { to: 'maintainer@example.com', toEncrypted: 'im1:not-a-ciphertext' },
+})
+check('config: a broken ciphertext is not hidden behind a plaintext to',
+  brokenCipherWithPlaintext.ok === false && brokenCipherWithPlaintext.message.includes('toEncrypted'),
+  brokenCipherWithPlaintext.message)
 
 /* ---------------- unit: message composition ---------------- */
 
@@ -388,6 +451,58 @@ check('mail: headers are RFC 5322 encoded and the body is base64',
 check('mail: a From domain without an @ still yields a usable Message-ID',
   /^[0-9a-f-]+@dsh\.local$/.test(buildRawMail({ from: 'nobody', to: 'a@b.c', subject: 's', text: 't' }).messageId))
 
+/* ---------------- unit: header safety and protocol details ---------------- */
+
+const headerError = (options) => {
+  try {
+    buildRawMail(options)
+    return ''
+  } catch (err) {
+    return String(err && err.message ? err.message : err)
+  }
+}
+check('mail: a From carrying CRLF is refused by the formatter itself',
+  headerError({ from: 'bot@example.com\r\nBcc: evil@example.com', to: 'a@b.c', subject: 's', text: 't' }).includes('换行符'),
+  headerError({ from: 'bot@example.com\r\nBcc: evil@example.com', to: 'a@b.c', subject: 's', text: 't' }))
+check('mail: a control byte in the envelope is refused by the formatter itself',
+  headerError({ from: 'bot@example.com', to: 'a\u0000b@example.com', subject: 's', text: 't' }).includes('控制字符'),
+  headerError({ from: 'bot@example.com', to: 'a\u0000b@example.com', subject: 's', text: 't' }))
+
+const longSubject = '反馈'.repeat(40)
+const longRaw = buildRawMail({ from: 'bot@example.com', to: 'maintainer@example.com', subject: longSubject, text: 'x' })
+const subjectLine = longRaw.raw.split('\r\n').find((line) => line.startsWith('Subject: ')) || ''
+const subjectWords = subjectLine.slice('Subject: '.length).split(' ')
+check('mail: a long subject is split into RFC 2047 words of at most 75 characters',
+  subjectWords.length > 1 && subjectWords.every((word) => word.length <= 75),
+  subjectWords.length + ' words, longest ' + Math.max(...subjectWords.map((word) => word.length)))
+check('mail: the split subject decodes back to the original text',
+  subjectWords.map((word) => Buffer.from(word.replace('=?UTF-8?B?', '').replace(/\?=$/, ''), 'base64').toString('utf8')).join('') === longSubject)
+
+check('smtp: AUTH mechanisms come from the AUTH capability line only',
+  smtpAuthMechanisms(['fake.local', 'AUTH PLAIN', 'X-LOGIN-POLICY']).join(',') === 'PLAIN'
+  && smtpAuthMechanisms(['fake.local', 'AUTH=LOGIN PLAIN']).join(',') === 'LOGIN,PLAIN'
+  && smtpAuthMechanisms(['fake.local', 'AUTH LOGIN']).join(',') === 'LOGIN'
+  && smtpAuthMechanisms(['fake.local']).length === 0
+  && smtpAuthMechanisms(null).length === 0,
+  JSON.stringify(smtpAuthMechanisms(['fake.local', 'AUTH PLAIN', 'X-LOGIN-POLICY'])))
+check('smtp: the overall delivery ceiling is 60s, so the panel never waits forever',
+  SMTP_TOTAL_TIMEOUT_MS === 60000, String(SMTP_TOTAL_TIMEOUT_MS))
+
+let preConnectError = ''
+try {
+  await sendSmtpMail({
+    smtp: { host: '127.0.0.1', port: 1, secure: false, user: '', pass: '' },
+    from: 'bot@example.com',
+    to: 'not-an-address',
+    subject: 's',
+    text: 't',
+  })
+} catch (err) {
+  preConnectError = String(err && err.message ? err.message : err)
+}
+check('smtp: an invalid recipient is refused before any connection is opened',
+  preConnectError.includes('收件邮箱格式不正确'), preConnectError)
+
 /* ---------------- e2e: plain SMTP delivery (no auth) ---------------- */
 
 const smtp = await startFakeSmtp()
@@ -436,6 +551,28 @@ try {
     message)
 } finally {
   await plainAuth.close()
+}
+
+/* ---------------- e2e: an endless response line is bounded ---------------- */
+
+const flooding = await startFakeSmtp({ floodBytes: 200000 })
+try {
+  let message = ''
+  try {
+    await sendSmtpMail({
+      smtp: { host: '127.0.0.1', port: flooding.port, secure: false, user: '', pass: '' },
+      from: 'bot@example.com',
+      to: 'maintainer@example.com',
+      subject: 's',
+      text: 't',
+    })
+  } catch (err) {
+    message = String(err && err.message ? err.message : err)
+  }
+  check('smtp: an endless response line is cut off instead of growing without limit',
+    message.includes('响应过长'), message)
+} finally {
+  await flooding.close()
 }
 
 /* ---------------- e2e: the Host route ---------------- */
@@ -524,6 +661,34 @@ try {
   check('route: a second send inside the cool-down is refused without touching SMTP',
     throttled.body.ok === false && throttled.body.message.includes('过于频繁') && routeSmtp.state.connections === 2,
     JSON.stringify(throttled.body))
+
+  // Regression: the cool-down used to be stamped only *after* the await, so two
+  // requests arriving together both passed the check and both delivered. A fresh
+  // mount starts with an empty window, which is exactly that situation.
+  const previousHandler = handler
+  handler = mountHost()
+  try {
+    const connectionsBefore = routeSmtp.state.connections
+    const dataBefore = routeSmtp.state.data.length
+    const [first, second] = await Promise.all([
+      send({ type: 'bug', title: '并发提交甲', body: '两个请求同时到达时只应发送一封。' }),
+      send({ type: 'bug', title: '并发提交乙', body: '第二封不应该被投递出去。' }),
+    ])
+    const answers = [first.body, second.body]
+    const accepted = answers.filter((answer) => answer.ok === true).length
+    const refused = answers.filter((answer) => answer.ok === false && answer.message.includes('过于频繁')).length
+    check('route: two concurrent sends deliver exactly one mail',
+      accepted === 1 && refused === 1, JSON.stringify(answers))
+    check('route: the refused concurrent request never opened an SMTP connection',
+      routeSmtp.state.connections === connectionsBefore + 1,
+      String(routeSmtp.state.connections - connectionsBefore))
+    const arrived = decodeBody(routeSmtp.state.data.slice(dataBefore))
+    check('route: only one of the concurrent reports reached the wire',
+      arrived.includes('并发提交') && (arrived.includes('并发提交甲') !== arrived.includes('并发提交乙')),
+      arrived.slice(0, 120))
+  } finally {
+    handler = previousHandler
+  }
 } finally {
   await routeSmtp.close()
   for (const [name, value] of Object.entries(saved)) {

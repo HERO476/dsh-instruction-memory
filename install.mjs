@@ -19,13 +19,15 @@
  */
 import { existsSync, readFileSync, writeFileSync, symlinkSync, rmSync, unlinkSync, copyFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 // Profile location follows the same precedence as @deepseek-ai/dsh-home-paths
 // (and this plugin's own store resolution): explicit $DSH_HOME, else ~/.dsh.
+// A relative override is resolved ONCE, for the same reason the plugin does it:
+// every path this script prints and writes must be absolute.
 const DSH_HOME = typeof process.env.DSH_HOME === 'string' && process.env.DSH_HOME.trim() !== ''
-  ? process.env.DSH_HOME.trim()
+  ? resolve(process.env.DSH_HOME.trim())
   : join(homedir(), '.dsh')
 const PROF = join(DSH_HOME, 'profiles', 'web')
 // This script lives in the package root, so the source is wherever it runs from.

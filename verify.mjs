@@ -263,6 +263,18 @@ function fakeInject(services) {
   await waitFor(() => sections.length === 1)
   check('host: prompt section registers with NO web server at all', threw === null && sections.length === 1,
     'threw=' + (threw && threw.message) + ' sections=' + sections.length)
+  // Regression guard for a turn-killing bug: the host runs every section
+  // through `{{variable}}` interpolation by DEFAULT and THROWS on a reference
+  // it cannot resolve ("unknown prompt variable … in section
+  // instruction-memory"). renderPrompt() is called outside any try/catch in the
+  // agent loop, so one `{{…}}` pair in user prose — an nginx snippet
+  // (`proxy_pass {{upstream}};`), a Vue/Jinja/Handlebars template — aborted the
+  // whole turn. Instruction memory is literal text and never references a host
+  // variable, so it must opt out explicitly.
+  const registeredSpec = sections[0]
+  check('host: prompt section opts out of {{variable}} interpolation',
+    registeredSpec !== undefined && registeredSpec.interpolate === false,
+    'interpolate=' + String(registeredSpec && registeredSpec.interpolate))
 }
 
 // Diagnostics must be LOG-ONLY. The plugin used to be silent on success, which
@@ -547,6 +559,38 @@ if (captured && typeof captured.factory === 'function') {
     check('client: exposes __confirmDiscard for this test', false, 'missing export')
   }
 
+  // Unified confirmation gate. Durable-data deletes used to PROCEED when the
+  // shell had no dialog (the `typeof confirm === 'function' && !confirm()`
+  // short-circuit), while version rollback refused — same class of
+  // irreversible action, opposite outcomes. The gate now makes the fallback
+  // explicit, and a dialog that EXISTS BUT THROWS counts as absent: Electron
+  // 44 ships exactly that shape for prompt(), so `typeof` alone proves nothing.
+  if (plugin && typeof plugin.__askConfirm === 'function') {
+    const ask = plugin.__askConfirm
+    const originalAskConfirm = globalThis.window.confirm
+    try {
+      globalThis.window.confirm = () => false
+      check('client: askConfirm reports a refusal as "no"', ask('x') === 'no')
+      globalThis.window.confirm = () => true
+      check('client: askConfirm reports an approval as "yes"', ask('x') === 'yes')
+      delete globalThis.window.confirm
+      check('client: askConfirm refuses a durable-data action when no dialog exists',
+        ask('x') === 'unavailable')
+      check('client: askConfirm lets a draft-only flow through when no dialog exists',
+        ask('x', 'allow') === 'yes')
+      globalThis.window.confirm = () => { throw new Error('prompt() is not supported.') }
+      check('client: a throwing dialog counts as absent (the Electron 44 shape)',
+        ask('x') === 'unavailable')
+      check('client: a throwing dialog still lets a draft-only flow through',
+        ask('x', 'allow') === 'yes')
+    } finally {
+      if (originalAskConfirm === undefined) delete globalThis.window.confirm
+      else globalThis.window.confirm = originalAskConfirm
+    }
+  } else {
+    check('client: exposes __askConfirm for this test', false, 'missing export')
+  }
+
   // Import size gate: refuse an obviously wrong file BEFORE reading it, but
   // never reject anything the plugin itself could have exported (a maximal
   // store exports to ≈4 MB of pretty-printed UTF-8; the gate sits at ×4 of
@@ -694,6 +738,35 @@ if (captured && typeof captured.factory === 'function') {
       eq(parse(null), []) && eq(parse(undefined), []))
   } else {
     check('client: exposes __parseTagInput for this test', false, 'missing export')
+  }
+
+  // F3 bulk "add tags" entry point. The old guard was `typeof window.prompt
+  // !== 'function'`, which is a no-op on desktop: Electron 44 installs
+  // `window.prompt = function () { throw new Error("prompt() is not
+  // supported.") }` and propagates it through contextBridge, so typeof still
+  // reports 'function' and the click threw. The decision is pinned as a pure
+  // export so BOTH runtimes are covered here — and a Cancel from a working
+  // prompt must stay a deliberate no, never be confused with the throw.
+  if (plugin && typeof plugin.__batchTagOutcome === 'function') {
+    const outcome = plugin.__batchTagOutcome
+    const kind = (got) => (got && got.kind) || String(got)
+    const answered = outcome(() => 'a,b', 'msg')
+    check('client: bulk tag uses window.prompt when it really works',
+      kind(answered) === 'answer', JSON.stringify(answered))
+    check('client: bulk tag carries the typed text back',
+      answered.kind === 'answer' && answered.text === 'a,b', JSON.stringify(answered))
+    check('client: bulk tag treats Cancel (null) as a deliberate no',
+      kind(outcome(() => null, 'msg')) === 'cancel', JSON.stringify(outcome(() => null, 'msg')))
+    check('client: bulk tag falls back when prompt() THROWS (Electron 44)',
+      kind(outcome(() => { throw new Error('prompt() is not supported.') }, 'msg')) === 'unavailable',
+      JSON.stringify(outcome(() => { throw new Error('prompt() is not supported.') }, 'msg')))
+    check('client: bulk tag falls back when window.prompt is absent',
+      kind(outcome(null, 'msg')) === 'unavailable' && kind(outcome(undefined, 'msg')) === 'unavailable')
+    check('client: bulk tag falls back on an unusable non-string answer',
+      kind(outcome(() => 42, 'msg')) === 'unavailable'
+      && kind(outcome(() => undefined, 'msg')) === 'unavailable')
+  } else {
+    check('client: exposes __batchTagOutcome for this test', false, 'missing export')
   }
 
   // F17 local preview: the heuristic is pure, so its behaviour is pinnable —
@@ -993,6 +1066,28 @@ if (captured && typeof captured.factory === 'function') {
   } else {
     check('client: exposes __undoTtlMs for this test', false, 'missing export')
   }
+}
+
+/* ------- Feedback mail: the panel must outwait the Host ------- */
+
+// The Host bounds a whole delivery (SMTP_TOTAL_TIMEOUT_MS); the panel aborts its
+// own request (FEEDBACK_SEND_TIMEOUT_MS). If the panel gave up first, a slow peer
+// would show "timed out" for a mail that is still on its way, and the retry would
+// deliver a second copy. Pinned as a relation so either constant can move.
+{
+  const mailerSource = readFileSync(new URL('./lib/mailer.js', import.meta.url), 'utf8')
+  const panelSource = readFileSync(fileURLToPath(CLIENT_URL), 'utf8')
+  const readMs = (source, name) => {
+    const raw = new RegExp(name + ' = ([0-9_]+)').exec(source)
+    return raw === null ? NaN : Number(raw[1].replace(/_/g, ''))
+  }
+  const hostCeiling = readMs(mailerSource, 'SMTP_TOTAL_TIMEOUT_MS')
+  const panelTimeout = readMs(panelSource, 'FEEDBACK_SEND_TIMEOUT_MS')
+  check('feedback: the panel waits longer than the Host\'s own delivery ceiling',
+    Number.isInteger(hostCeiling) && Number.isInteger(panelTimeout) && panelTimeout > hostCeiling,
+    'panel=' + panelTimeout + ' host=' + hostCeiling)
+  check('feedback: the panel ceiling is finite, so a parked request still ends',
+    Number.isInteger(panelTimeout) && panelTimeout <= 300000, String(panelTimeout))
 }
 
 /* ------- Client half, second instance: an English browser ------- */
