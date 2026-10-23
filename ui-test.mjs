@@ -123,8 +123,14 @@ async function rawRoute(body) {
 // until the response BODY has been consumed, because the client parses it and
 // then updates state in the same microtask chain.
 let inFlight = 0
+// Every request the panel makes, so the SSE tests can assert that a lite frame
+// actually triggers a `state` refetch (and that a full frame is absorbed without
+// one). Kept alongside inFlight rather than inside it: a call is recorded even
+// when its response is never parsed.
+const fetchCalls = []
 globalThis.fetch = async (url, options) => {
   inFlight += 1
+  fetchCalls.push({ url: String(url), body: options === undefined ? '' : String(options.body) })
   try {
     const out = await rawRoute(options.body)
     return {
@@ -218,6 +224,22 @@ globalThis.document = {
   createElement: () => ({ setAttribute() {}, textContent: '', parentNode: null }),
   head: { appendChild() {} },
 }
+/**
+ * EventSource double. The panel subscribes with `?lite=1`; the Host then sends
+ * `{ rev, lite: true }` markers instead of whole snapshots, and the client
+ * refetches `state` only when the rev it sees differs from the one on screen.
+ * Without this stub the effect returns early and that branch never runs here.
+ */
+class FakeEventSource {
+  static instances = []
+  constructor(url) {
+    this.url = String(url)
+    this.closed = false
+    FakeEventSource.instances.push(this)
+  }
+  close() { this.closed = true }
+}
+globalThis.EventSource = FakeEventSource
 /**
  * Pin the panel's language. Node >= 21 ships a global `navigator` reporting the
  * MACHINE's language, so the same assertions passed on a zh dev box and failed
@@ -404,6 +426,22 @@ await writeFile(STORE_FILE, JSON.stringify({
 
 let tree = await settle()
 check('panel: renders with the loaded store', hasText(tree, '指令记忆') || hasTextContaining(tree, '指令记忆'), JSON.stringify(texts(tree).slice(0, 6)))
+check('sse client: subscribes to the lite stream',
+  FakeEventSource.instances.length === 1 && /\?lite=1$/.test(FakeEventSource.instances[0].url),
+  JSON.stringify(FakeEventSource.instances.map((source) => source.url)))
+// A lite frame only carries a rev. When it is ahead of the snapshot on screen,
+// the panel must pull the snapshot itself — this is the whole point of the
+// optimization (the Host no longer pushes ~3.4 MB per save).
+{
+  const before = fetchCalls.length
+  FakeEventSource.instances[0].onmessage({ data: JSON.stringify({ rev: 999999, lite: true }) })
+  await settle()
+  const refetched = fetchCalls.slice(before).filter((call) => {
+    try { return JSON.parse(call.body).method === 'state' } catch { return false }
+  })
+  check('sse client: a lite frame with a newer rev refetches the snapshot',
+    refetched.length >= 1, JSON.stringify(fetchCalls.slice(before).map((call) => call.body).slice(0, 3)))
+}
 check('panel: F13 set switcher shows the migrated 默认 set',
   hasTextContaining(tree, '默认') && hasTextContaining(tree, '使用中'), JSON.stringify(texts(tree).slice(0, 30)))
 check('panel: v1 migration warning is on screen',

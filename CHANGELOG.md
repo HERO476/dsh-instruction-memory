@@ -122,7 +122,8 @@
 - 本轮新增：`smoke-test.mjs` 覆盖相对 `$DSH_HOME` 的绝对化与 `planHistoryPrune()` 的
   份数/字节/保底规则；`contract-test.mjs` 断言五个逐字段上限随快照发布且与代码一致，
   并验证 `?lite=1` 的连接帧与变更帧都是紧凑 rev 标记、普通流仍收完整快照；
-  `ui-test.mjs` 断言每个字段标签都指向真实控件、校验错误带 `role="alert"`。
+  `ui-test.mjs` 断言每个字段标签都指向真实控件、校验错误带 `role="alert"`，并以
+  EventSource 桩确认客户端确实以 `?lite=1` 订阅、收到更新的 rev 时会回拉 `state`。
 
 ## [1.4.0] — 2026-10-18
 
