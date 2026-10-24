@@ -7,6 +7,46 @@
 > 1.0.13 起由 CI 经 OIDC Trusted Publishing 发布（首个带 provenance 的版本）。
 > 这些历史 tag **不应回填**——npm 上的版本号已被占用。
 
+## [1.4.2] — 2026-10-24
+
+适配性复核（宿主 `0.2.1-rc.3`，桌面端 + 网页端）。**没有任何运行时代码改动**——这一版把复核证据
+固化进仓库，并补上了一条此前一直缺的**直接**证据。
+
+### 新增证据
+
+- **网页端 rc.3 隔离实测**：独立 `DSH_HOME` + 真实 `dsh web` 宿主（`0.2.1-rc.3`）驱动 21 项 HTTP
+  断言——**21/21 PASS**（CRUD、落盘持久化、SSE 连接帧、`section` 注册/注销、4 项请求门禁、
+  IPv6 同源等价与混源拒绝、30 连发稳定性、清理回基线）。冒烟 `state` p50 0.45 ms（空库）/
+  0.77 ms（1 条生效）、p95 ≤ 0.93 ms、SSE 首事件 0.54–0.61 ms。
+  证据：`dsh-memory-verification/out/compat-1016-live-latest-rc3.json`、`…-rc3b.json`。
+- **桌面端 rc.3 活体实测**：`live-host-smoke.mjs --desktop 14582` → `registered=true`、
+  `chars=546`、`activeCount=3`、**`pulls=5052`**（真实 Agent 回合真的拉取过 5052 次）、
+  p50 0.72 ms / p95 1.11 ms、SSE 首事件 1.2232 ms、`problems=[]`。
+- **首次拿到「客户端模块确实被下发」的直接证据**：`0.2.1-rc.3` 网页宿主的 boot HTML 预加载清单里
+  出现 `dsh-instruction-memory/client.js`，抓取该合并 bundle 返回 `200 text/javascript`
+  （2,204,270 字节），正文含本插件 Client 半的源码头注释与「指令记忆」文案。此前 `0.2.0-rc.1`
+  只能用"合成器硬校验 + 契约包逐字节未变"间接推断（见 README ⁽*⁾），现在这一项对 rc.3
+  是直接观测。
+
+### 兼容面判定
+
+- **`0.2.1-rc.2` → `0.2.1-rc.3` 只是重新构建**：与 npm 上 `rc.2` 发布物逐文件 SHA-256 比对——
+  `dsh-system-prompt` / `dsh-client-ui-renderer` / `dsh-client-ui-settings` / `dsh-host-webserver` /
+  `dsh-app-boot` **仅 `package.json` 变**（版本号与 peer 指向自身 rc.3）；`dsh-client-modules` 的
+  1001 行里只有 `const commit` 一行变；`dsh-agent-loop` 自身代码未变（仅把 `zod` 打进包内）。
+  ⇒ 对插件可见的契约面是重建，不是行为变化。
+
+### 仍未验证
+
+- 设置页的**人工视觉确认**：桌面端与网页端都还没有"用眼睛看过一次"（打开 设置 → 指令记忆）。
+- 隔离网页宿主的 `pulls` 为 0（没跑过真实 Agent 回合）；真实回合的拉取计数只在桌面端有 5052 次观测。
+
+### 已知环境坑（不是缺陷）
+
+`npm test` 第一步 `lint.mjs` 在 DSH 的 Windows 沙箱下会误报 `13 FAILED TO PARSE`：它用
+`spawnSync(..., { encoding: 'utf8' })` 捕获子进程输出，而该沙箱不允许管道 stdio（EPERM），
+`res.status` 变成 `null`。等价手工核验（逐个 `node --check`）13/13 全部通过，CI 亦不受影响。
+
 ## [1.4.1] — 2026-10-22
 
 运行期缺陷（桌面端 / 网页版审计）与安全审查（对 1.4.0 源码）发现的问题修复，

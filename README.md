@@ -586,7 +586,7 @@ GUI 与路由本就同主机不同端口），`none`（用户直接导航）放�
 
 | 等级 | 证明什么 | 覆盖 |
 | --- | --- | --- |
-| ① **真实启动** | 在该宿主版本上真的把 DSH 跑起来：插件装载、注入真的进入**组装后的提示**、插件 HTTP 路由可应答、客户端设置页模块被下发（Windows / Node 22） | `0.1.3-alpha.2` · `0.1.5-alpha.1` · `0.1.5-alpha.2` · `0.1.5-rc.1` · `0.1.5-rc.2` · `0.1.5-rc.3` · **`0.2.0-rc.1`** ⁽*⁾ · **`0.2.0-rc.2`** ⁽**⁾ · `0.2.1-alpha.2` ⁽***⁾ · **`0.2.1-alpha.3`** ⁽***⁾ · **`0.2.1-alpha.4`** ⁽***⁾ |
+| ① **真实启动** | 在该宿主版本上真的把 DSH 跑起来：插件装载、注入真的进入**组装后的提示**、插件 HTTP 路由可应答、客户端设置页模块被下发（Windows / Node 22） | `0.1.3-alpha.2` · `0.1.5-alpha.1` · `0.1.5-alpha.2` · `0.1.5-rc.1` · `0.1.5-rc.2` · `0.1.5-rc.3` · **`0.2.0-rc.1`** ⁽*⁾ · **`0.2.0-rc.2`** ⁽**⁾ · `0.2.1-alpha.2` ⁽***⁾ · **`0.2.1-alpha.3`** ⁽***⁾ · **`0.2.1-alpha.4`** ⁽***⁾ · **`0.2.1-rc.2`** · **`0.2.1-rc.3`** ⁽⁴⁾ |
 | ② **契约核验** | 抓该版本**真实发布的源码**，逐个核验本插件实际用到的每个符号：`systemPrompt.section()`、`assemble()` 是否求值**函数型** `text`、`FILE_REFERENCE=900` / `TOOL_BASH=1000` 仍在（决定 order 950 是否空档）、重名注册是否抛错、`webServer.register()` / `get host()`、`ctx.inject()` / `ctx.effect()`、`dsh.client.inject` 两包在该版本是否存在且声明了 `dsh.client` | 声明范围接住的**全部 18 个已发布版本**（`0.1.3-alpha.2` → `0.2.1-alpha.4`） |
 | ③ **真实执行** | 把插件**真的挂载**进该版本的 `@deepseek-ai/cordis`，跑装载 / 路由注册 / 卸载共 9 项断言 | cordis `4.0.2` 与 `4.0.4`（各 9/9） |
 
@@ -595,6 +595,8 @@ GUI 与路由本就同主机不同端口），`none`（用户直接导航）放�
 ⁽**⁾ **`0.2.0-rc.2` 的①档**：桌面版 `0.2.0-rc.2`（私有发行版 `dsh-desktop-runtime`，见仓库 `dsh-memory-verification/DSH-VERSION-COMPAT.md` §12）上完成过路由 200 + `registered=true` + 注入段落真实出现在会话提示中的活体实测；网页版宿主 `0.2.0-rc.2` 上对本插件路由的 `state` 探测同样返回 200。同样**未做设置页人工视觉确认**。
 
 ⁽***⁾ **`0.2.1-alpha.2`（2026-10-10）与 `0.2.1-alpha.3` / `0.2.1-alpha.4`（2026-10-16）的①档**：隔离安装该版本宿主树 + 独立 `DSH_HOME` 装入 npm 正式发布物，真实启动 web 宿主后以 **21 项 HTTP 断言**驱动（CRUD、落盘持久化、SSE 连接帧、`section` 注册/注销、4 项请求门禁、IPv6 同源等价与混源拒绝、30 连发稳定性、清理回基线）——三个版本各 **21/21 PASS**。证据：`dsh-memory-verification/out/compat-1016-live-live-alpha2.json`、`dsh-memory-verification/out/compat-133-live-alpha{3,4}.json`。同样**未做设置页人工视觉确认**。
+
+⁽⁴⁾ **`0.2.1-rc.2` / `0.2.1-rc.3` 的①档**（2026-10-24，插件 1.4.2）：`rc.3` 上隔离 `DSH_HOME` + 真实 `dsh web` 宿主驱动 **21 项 HTTP 断言 21/21 PASS**，桌面端活体 `pulls=5052`、p50 0.72 ms；并且**首次直接抓到了客户端模块的下发证据**——boot HTML 的预加载清单含 `dsh-instruction-memory/client.js`，该合并 bundle 返回 `200 text/javascript`（2,204,270 字节），正文含 Client 半源码与「指令记忆」文案。因此上一条 ⁽*⁾ 里"无法直接抓到 `window.__DSH_BOOT__`"的限制**已对 rc.3 解除**。`rc.2` 未单独起宿主，靠它与 `rc.3` 的逐文件字节比对（仅 `package.json` 与一行构建号不同）承接结论。证据：`dsh-memory-verification/out/compat-1016-live-latest-rc3.json`、`…-rc3b.json`。仍**未做设置页人工视觉确认**。
 
 此外 `host-range-test.mjs` 的固定矩阵覆盖 `0.1.6-alpha.2`、`0.1.7-rc.2`、`0.2.0-rc.1`、`0.2.0-rc.2` 与 `0.2.1-alpha.1`~`0.2.1-alpha.4`（回归守卫把最新验证过的宿主逐名钉住），并会**读取本机实际安装的宿主版本**做实时断言。
 

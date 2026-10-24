@@ -11,6 +11,7 @@ Thumbs.db
 # Local agent/tooling state — not part of the package, never published
 # (`files` in package.json already excludes them from the tarball).
 .workbuddy/
+.workbuddy-ai/
 .zcode/
 .mnemon/
 .claude/
@@ -19,6 +20,9 @@ Thumbs.db
 .graphflow-cache/
 graphflow-out/
 .demo-server.mjs
+
+# Scratch logs from `npm test > .npm-test.log` style runs.
+/.npm-test*.log
 
 # Local scratch log written by the DSH host process (Electron/gin). Root only,
 # so logs inside subdirectories stay visible.

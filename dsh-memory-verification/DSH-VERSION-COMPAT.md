@@ -783,3 +783,89 @@ evil Origin (跨源)      -> 403        evil Host -> 403
   打开桌面版 → 设置 → 指令记忆）。
 - 桌面版真实 LLM 会话中的 `pulls` 增长（本轮无会话活动）。
 
+
+## 13. 2026-10-24 复核（插件 1.4.1 → 1.4.2）：宿主 `0.2.1-rc.3` 双端适配
+
+### 13.1 结论
+
+| 端 | 判定 | 依据等级 |
+| --- | --- | --- |
+| 桌面端 `0.2.1-rc.3`（Electron 壳，:14582） | **适配** | ① 真实启动：路由可应答、注入进入组装提示、真实回合拉取 5052 次 |
+| 网页端 `0.2.1-rc.3`（`dsh web`，隔离 `DSH_HOME`，:19387） | **适配** | ① 真实启动：21 项 HTTP 断言 21/21、客户端 bundle 实际下发 |
+
+缺口只有一个：**设置页的人工视觉确认**（两端都还没有用眼睛看过一次：桌面壳 token 取不到，Client
+`Slots` 的 occupants 查询因入参序列化失败而放弃）。机制链已闭合，但"看一次"只能由人完成。
+
+### 13.2 版本事实
+
+- 宿主：`0.2.1-rc.3`（`~/.dsh/profiles/node_modules/@deepseek-ai/dsh/package.json`）。
+- 插件：`1.4.1`（本次发 `1.4.2`）；`engines.dsh` 区间 `… || >=0.2.1-alpha.0 <0.3.0-0 || >=0.2.0-0` 覆盖 rc.3。
+- npm `latest`：`1.4.1`（2026-10-22T01:11:20.584Z），共 27 个已发布版本；tag `v1.4.1` → `5a73f09`。
+
+### 13.3 `rc.2` → `rc.3` 是重建，不是行为变化
+
+取 npm 上 `0.2.1-rc.2` 发布物与已装 `rc.3` 逐文件 SHA-256 比对：
+
+| 包 | 差异 |
+| --- | --- |
+| `dsh-system-prompt` / `dsh-client-ui-renderer` / `dsh-client-ui-settings` / `dsh-host-webserver` / `dsh-app-boot` | 仅 `package.json`（版本号 + peer 指向自身 rc.3），代码逐字节相同 |
+| `dsh-client-modules` | 1001 行里只有 `const commit = "332895e"` → `"be72761"`，合成/校验逻辑未动 |
+| `dsh-agent-loop` | 自身代码未变，rc.3 只是把 `zod` 打进包内（+718 个 node_modules 文件） |
+| `dsh-client-ui-slots` | 未进扁平 `node_modules`，但 npm 上 `0.2.1-rc.3` 存在（dist-tag `next`），rc.2 树 9 个文件 |
+
+### 13.4 活体读数
+
+| 指标 | 桌面端 :14582 | 网页端 :19387（空库 / 1 条生效） |
+| --- | --- | --- |
+| `state` p50 / p95 | 0.72 / 1.11 ms | 0.45 / 0.93 ms · 0.77 / 0.91 ms |
+| SSE 首事件 | 1.2232 ms | 0.5393 · 0.6117 ms |
+| `injection.registered` | true | false / true |
+| `injection.chars` | 546 | 0 / 255 |
+| `injection.activeCount` | 3 | 0 / 1 |
+| `injection.pulls` | **5052**（真实回合） | 0（隔离宿主没跑过真实回合） |
+| `problems` | `[]` | 空库时 1 条（脚本无条件判 `registered`，属脚本语义） |
+
+网页端另有 21 项 HTTP 断言 **21/21 PASS**：CRUD、落盘持久化、SSE 连接帧、`section` 注册/注销、
+4 项请求门禁（403/415/405）、IPv6 同源等价与混源拒绝、30 连发稳定性、清理回基线。
+
+### 13.5 新的直接证据：客户端模块确实下发
+
+`0.2.1-rc.3` 网页宿主的 boot HTML 预加载清单里出现 `dsh-instruction-memory/client.js`：
+
+```
+plugins/??@deepseek-ai/dsh-client-ui-user-questions/client.js,…,
+dsh-instruction-memory/client.js,@deepseek-ai/dsh-api-remote-access/client.js,…,&rev=86efbdbc7c6e
+```
+
+抓取该合并 bundle：`200 text/javascript`、**2,204,270 字节**，正文含
+`/** dsh-instruction-memory — Client half. …` 与「指令记忆」。⇒ README ⁽*⁾ 里"无法直接抓到
+`window.__DSH_BOOT__`"的限制，对 rc.3 解除。
+
+### 13.6 复现
+
+```sh
+# 隔离网页宿主（独立 DSH_HOME，勿动真实 profile）
+DSH_HOME="D:/…/.tmp-compat/webhome" node "<dsh>/lib/bin.js" web --no-open --host 127.0.0.1 --port 19387
+# 装插件（脚本自己读 $DSH_HOME）
+DSH_HOME="D:/…/.tmp-compat/webhome" node install.mjs
+# 21 项断言
+node dsh-memory-verification/scripts/compat-1016-live-check.mjs http://127.0.0.1:19387 "<home>" latest-rc3 <token>
+# 桌面端活体（宿主需在跑）
+node live-host-smoke.mjs --desktop 14582 --json --rounds 10
+```
+
+### 13.7 本轮新增的操作知识
+
+- ⚠️ `dsh --profile web web …` **会被误解析**：报 `too many arguments. Expected 0 arguments but got 1: web`。
+  正确形式是省略 `--profile`（默认就是 web）：`dsh web --no-open --host 127.0.0.1 --port 19387`。
+- `DSH_HOME` 用 **Windows 路径**（`D:/…`）而不是 git-bash 的 `/d/…`，否则会被当成未设置而落到真实 `~/.dsh`。
+  一旦落到真实 profile，沙箱会以 `EPERM` 拒绝写 `cordis.yml`（本轮就是这样被拦住的，事后核对
+  `LastWriteTime` 未变）。
+- 取 boot payload 要**两步**：`GET /?token=…` 返回 `303` + `set-cookie`（cookie 名形如 `dsh-auth-…`），
+  带该 cookie 再 `GET /` 才是 `200` HTML。
+- 单文件地址 `/plugins/<pkg>/client.js` 是 **404**；客户端模块只经 `plugins/??a/client.js,b/client.js&rev=…`
+  合并地址下发，必须按 HTML 里的 href 去取。
+- 停宿主：`taskkill //F //PID` 在沙箱下被拒（拒绝访问）、git-bash `kill -9` 报 `No such process`；
+  可用 `powershell -NoProfile -Command "Stop-Process -Id <pid> -Force"`。
+- `lint.mjs` 在 DSH 的 Windows 沙箱下会误报 `13 FAILED TO PARSE`（`spawnSync` 的管道 stdio 被拒，
+  `res.status` 为 `null`）；逐个 `node --check` 13/13 通过，CI 不受影响。
