@@ -27,14 +27,31 @@ for (const name of readdirSync('.')) {
 files.sort()
 
 let failed = 0
+
+/**
+ * Parse one file with `node --check`. The piped run is preferred because it
+ * lets this script print the parser's message itself; but some confined
+ * environments (sandboxes that forbid piped child stdio) cannot start a child
+ * that way at all — spawnSync then returns status=null with an EPERM error and
+ * the file would be reported as unparseable even though it is fine. In that
+ * case fall back to inherited stdio: the exit status is still authoritative
+ * and node prints its own diagnostics straight to the terminal.
+ */
+function parseCheck(file) {
+  const piped = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' })
+  if (piped.error === undefined && piped.status !== null) return piped
+  return spawnSync(process.execPath, ['--check', file], { stdio: 'inherit' })
+}
+
 for (const file of files) {
   // --check parses without executing: nothing is imported, no DSH_HOME is
   // touched, and a module that touches window at top level still parses.
-  const res = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' })
+  const res = parseCheck(file)
   if (res.status !== 0) {
     failed += 1
     console.log('FAIL  ' + file)
-    console.log(String(res.stderr).trim())
+    const detail = String(res.stderr ?? '').trim()
+    if (detail !== '') console.log(detail)
   } else {
     console.log('PASS  ' + file)
   }

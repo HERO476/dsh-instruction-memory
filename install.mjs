@@ -17,7 +17,7 @@
  *
  * The profile package.json is backed up before the first modification.
  */
-import { existsSync, readFileSync, writeFileSync, symlinkSync, rmSync, unlinkSync, copyFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, symlinkSync, lstatSync, unlinkSync, copyFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -56,14 +56,46 @@ function bundlesOf(pkg) {
 
 if (remove) {
   let touched = false
-  if (existsSync(link)) {
+  // `link` is normally a junction, and unlinking one removes only the link —
+  // the real package stays where it is. It can also be a REAL directory (pnpm
+  // materialises `link:` dependencies into node_modules as a copy), and there
+  // the old `rmSync(link, {recursive: true})` fallback deleted the installed
+  // copy itself: an uninstall that silently destroys the thing it was told to
+  // detach. Refuse that case and say what to do instead.
+  let linkKind = null
+  try {
+    linkKind = lstatSync(link).isSymbolicLink() ? 'link' : 'directory'
+  } catch {
+    linkKind = null
+  }
+  if (linkKind === 'link') {
+    // A junction can still refuse to go away (EBUSY/EPERM while DSH holds it
+    // open). The old call let that throw as an unhandled rejection, which read
+    // as a crash rather than "nothing was removed".
     try {
       unlinkSync(link)
-    } catch {
-      rmSync(link, { recursive: true, force: true })
+      console.log('removed junction: ' + link)
+      touched = true
+    } catch (err) {
+      console.error('could not remove ' + link + ': ' + (err && err.code ? err.code : String(err)))
+      console.error('  close DSH (or any process using the plugin) and run this again.')
+      process.exitCode = 1
     }
-    console.log('removed junction: ' + link)
-    touched = true
+  } else if (linkKind === 'directory') {
+    console.error('refusing to delete ' + link)
+    console.error('  it is a real directory (a pnpm-materialised copy), not a junction;')
+    console.error('  recursive deletion would remove the installed plugin itself.')
+    console.error('  delete it yourself once you have confirmed that is what you want.')
+    // Stop HERE: continuing would strip the dependency and the bundle entry
+    // while the plugin is still on disk, leaving a profile that reports the
+    // plugin as absent and an install that cannot find it either.
+    console.log('\nNOT UNINSTALLED — see the refusal above.')
+    process.exit(1)
+  }
+  if (process.exitCode) {
+    // The junction could not be removed; do not report the plugin as detached.
+    console.log('\nNOT UNINSTALLED — see the refusal above.')
+    process.exit(process.exitCode)
   }
   const pkg = readPkg()
   let changed = false
@@ -84,8 +116,14 @@ if (remove) {
     touched = true
   }
   if (existsSync(backupPath)) console.log('backup kept at: ' + backupPath)
-  console.log(touched ? '\nUNINSTALLED — restart DSH to unload the plugin.' : '\nnothing to remove')
-  process.exit(0)
+  if (process.exitCode) {
+    console.log('\nNOT UNINSTALLED — see the refusal above.')
+  } else {
+    console.log(touched ? '\nUNINSTALLED — restart DSH to unload the plugin.' : '\nnothing to remove')
+  }
+  // Honour the failure flag the refused-deletion branch may have set: a bare
+  // process.exit(0) would report success for an uninstall that did nothing.
+  process.exit(process.exitCode ?? 0)
 }
 
 // ---- install ----
@@ -106,10 +144,16 @@ if (existsSync(link)) {
   console.log('junction created: ' + link)
 }
 
-if (!existsSync(backupPath)) {
-  copyFileSync(pkgPath, backupPath)
-  console.log('backed up profile package.json -> ' + backupPath)
+// Roll the previous backup forward instead of keeping the first one forever:
+// a profile package.json broken by a later run is exactly what the user needs
+// the backup for, and a backup frozen at the first install cannot restore it.
+const lastBackupPath = backupPath + '.last'
+if (existsSync(backupPath)) {
+  copyFileSync(backupPath, lastBackupPath)
+  console.log('rotated previous backup -> ' + lastBackupPath)
 }
+copyFileSync(pkgPath, backupPath)
+console.log('backed up profile package.json -> ' + backupPath)
 
 const pkg = readPkg()
 let changed = false

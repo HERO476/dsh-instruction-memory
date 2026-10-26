@@ -445,10 +445,16 @@ check('a multi-line 适用场景 is collapsed',
   const v = (headers, guarded = true) => requestOriginVerdict(headers, guarded).ok
   check('IPv6 bracketed loopback Host + same Origin is accepted',
     v({ host: '[::1]:8080', origin: 'http://[::1]:8080' }), (x) => x === true)
-  check('IPv6 loopback with an Origin on a different port is same-host',
-    v({ host: '[::1]:8080', origin: 'http://[::1]:9999' }), (x) => x === true)
+  check('IPv6 loopback with an Origin on a different port is refused',
+    v({ host: '[::1]:8080', origin: 'http://[::1]:9999' }), (x) => x === false)
   check('a bare ::1 Host is treated as loopback',
     v({ host: '::1' }), (x) => x === true)
+  check('a bare ::1 Host does not read the address as a port',
+    v({ host: '::1', origin: 'http://[::1]' }), (x) => x === true)
+  check('a default port compares equal to no port',
+    v({ host: '127.0.0.1:80', origin: 'http://127.0.0.1' }), (x) => x === true)
+  check('a Host with no port is not refused against an Origin that states one',
+    v({ host: '127.0.0.1', origin: 'http://127.0.0.1:8080' }), (x) => x === true)
   check('IPv4-mapped loopback is accepted with its bracketed Origin',
     v({ host: '[::ffff:127.0.0.1]:8080', origin: 'http://[::ffff:127.0.0.1]:8080' }), (x) => x === true)
   check('IPv4-mapped loopback: dotted Host vs the URL-parser hex Origin is accepted',
@@ -464,7 +470,14 @@ check('a multi-line 适用场景 is collapsed',
   check('IPv4 same-origin is still accepted',
     v({ host: '127.0.0.1:8080', origin: 'http://127.0.0.1:8080' }), (x) => x === true)
   check('localhost same-origin is still accepted',
-    v({ host: 'localhost:8080', origin: 'http://localhost:9000' }), (x) => x === true)
+    v({ host: 'localhost:8080', origin: 'http://localhost:8080' }), (x) => x === true)
+  check('localhost on another local port is refused',
+    v({ host: 'localhost:8080', origin: 'http://localhost:9000' }), (x) => x === false)
+  check('a same-site request is refused (same-site is not same-origin)',
+    v({ host: '127.0.0.1:8080', origin: 'http://127.0.0.1:8080', 'sec-fetch-site': 'same-site' }),
+    (x) => x === false)
+  check('a trailing-dot Host is still loopback',
+    v({ host: 'localhost.:8080', origin: 'http://localhost:8080' }), (x) => x === true)
   // Non-loopback binds disable the Host allowlist but keep Origin checks.
   check('a published bind keeps accepting a concrete Host',
     v({ host: '192.168.1.5:8080' }, false), (x) => x === true)
@@ -555,16 +568,19 @@ check('a multi-line 适用场景 is collapsed',
   check('profile: master enabled=false suppresses persona and instructions',
     switchedOff.text === '' && switchedOff.profiles.length === 0, truthy)
 
-  // Personas are NOT subject to the entry budget: a big profile survives a
-  // tight budget in full while instructions are trimmed independently.
+  // Personas share the injection ceiling with the entries: a big profile is
+  // truncated (and the cut is disclosed) instead of smuggling 50k chars past
+  // the one number the settings panel tells the user to tune.
   const longContent = '形象'.repeat(1500) // 3000 chars
   const tight = planInjection({
     version: 1, enabled: true, budgetChars: 800,
     entries: [sanitizeEntry({ id: 'e1', title: 'T', content: '指令内容 '.repeat(400) })],
     profiles: [sanitizeProfile({ id: 'p1', name: '长篇背景', content: longContent })],
   })
-  check('profile: persona content is injected in full regardless of the entry budget',
-    tight.text.includes(longContent) && tight.profiles[0].chars >= longContent.length, truthy)
+  check('profile: persona content is bounded by the injection ceiling, not injected in full',
+    !tight.text.includes(longContent) && tight.profiles[0].chars < longContent.length, truthy)
+  check('profile: the truncation is disclosed in the injected text',
+    tight.text.includes('此形象因注入字数上限被截断'), truthy)
   check('profile: persona does not perturb the entry budget decision',
     tight.budget === 800 && Array.isArray(tight.included) && Array.isArray(tight.omitted), truthy)
 
@@ -789,6 +805,86 @@ check('a multi-line 适用场景 is collapsed',
     planInjection(paused, NOW).profiles.length === 0 && planInjection(paused, NOW).profileChars === 0)
   check('mute: the clock parameters are optional (arity stays 1)',
     planInjection.length === 1 && buildBlock.length === 1)
+}
+
+/* ---------------- install.mjs: the profile wiring script ---------------- */
+// The uninstall path is the destructive one and had no coverage at all: a real
+// directory at the link path was half-uninstalled (dependency and bundle entry
+// stripped while the plugin stayed on disk), and a failing unlink threw an
+// unhandled rejection instead of reporting the refusal.
+{
+  const { spawnSync } = await import('node:child_process')
+  const { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync, lstatSync, symlinkSync, unlinkSync } =
+    await import('node:fs')
+  const { dirname, join } = await import('node:path')
+  const { fileURLToPath } = await import('node:url')
+  const repo = dirname(fileURLToPath(import.meta.url))
+  const root = join(repo, '.test-install-p' + process.pid)
+  const linkPath = join(root, 'profiles', 'web', 'node_modules', 'dsh-instruction-memory')
+  const pkgPath = join(root, 'profiles', 'web', 'package.json')
+  const seed = () => {
+    mkdirSync(join(root, 'profiles', 'web', 'node_modules'), { recursive: true })
+    writeFileSync(pkgPath, JSON.stringify({
+      name: 'web-profile',
+      dependencies: { 'dsh-instruction-memory': 'link:' + repo.replaceAll('\\', '/') },
+      dsh: { profile: { bundles: ['dsh-instruction-memory'] } },
+    }, null, 2) + '\n')
+  }
+  const run = (args) => spawnSync(process.execPath, [join(repo, 'install.mjs'), ...args], {
+    env: { ...process.env, DSH_HOME: root },
+    stdio: 'inherit',
+  })
+  const cleanup = () => {
+    // Never let a recursive delete walk a junction (that is how this repo was
+    // destroyed once): unlink the link first, then remove the tree.
+    try { if (lstatSync(linkPath).isSymbolicLink()) unlinkSync(linkPath) } catch { /* absent */ }
+    rmSync(root, { recursive: true, force: true })
+  }
+  try {
+    // A real directory is NOT a junction: refuse, and leave package.json alone.
+    seed()
+    mkdirSync(linkPath, { recursive: true })
+    const before = readFileSync(pkgPath, 'utf8')
+    const refused = run(['--remove'])
+    check('install.mjs: a real directory at the link path is refused (non-zero exit)',
+      refused.status !== 0, String(refused.status))
+    check('install.mjs: the refusal leaves package.json untouched (no half-uninstall)',
+      readFileSync(pkgPath, 'utf8') === before)
+    check('install.mjs: the refused directory is still there',
+      existsSync(linkPath) && !lstatSync(linkPath).isSymbolicLink())
+    cleanup()
+
+    // A junction is uninstalled cleanly: link, dependency and bundle all go.
+    seed()
+    symlinkSync(repo, linkPath, 'junction')
+    const removed = run(['--remove'])
+    check('install.mjs: uninstalling a junction exits 0', removed.status === 0, String(removed.status))
+    check('install.mjs: the junction is gone', !existsSync(linkPath))
+    const after = JSON.parse(readFileSync(pkgPath, 'utf8'))
+    check('install.mjs: the dependency entry is gone',
+      after.dependencies === undefined || !Object.hasOwn(after.dependencies, 'dsh-instruction-memory'))
+    check('install.mjs: the bundle entry is gone',
+      !(after.dsh && after.dsh.profile && Array.isArray(after.dsh.profile.bundles)
+        && after.dsh.profile.bundles.includes('dsh-instruction-memory')))
+    cleanup()
+
+    // Install wires all three steps and is idempotent.
+    seed()
+    const first = run([])
+    check('install.mjs: install exits 0', first.status === 0, String(first.status))
+    check('install.mjs: install created a junction',
+      existsSync(linkPath) && lstatSync(linkPath).isSymbolicLink())
+    const installed = JSON.parse(readFileSync(pkgPath, 'utf8'))
+    check('install.mjs: install declares the link: dependency',
+      String(installed.dependencies['dsh-instruction-memory']).startsWith('link:'))
+    check('install.mjs: install registers the bundle',
+      installed.dsh.profile.bundles.includes('dsh-instruction-memory'))
+    const second = run([])
+    check('install.mjs: a second install is a no-op that still exits 0', second.status === 0)
+    cleanup()
+  } finally {
+    cleanup()
+  }
 }
 
 // A late stray rejection could land after ALL PASS; the crash-hook exitCode

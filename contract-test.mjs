@@ -329,6 +329,89 @@ for (const scenario of scenarios) {
     cleared.snapshot.storage.warning === null, JSON.stringify(cleared.snapshot.storage.warning))
 }
 
+// The backup guard must survive every UNUSABLE primary, not just the 0-byte
+// one: a truncated or hand-mangled JSON parses to nothing and is not zero
+// bytes, so a `size === 0` test copied it over the good .bak and destroyed the
+// only remaining copy — at the exact moment recovery needed it.
+{
+  const backupFile = STORE_FILE + '.bak'
+  const goodStore = await readFile(backupFile, 'utf8')
+  const goodBytes = Buffer.byteLength(goodStore)
+  check('backup guard: a usable .bak exists to protect', goodBytes > 0, String(goodBytes))
+  const broken = [
+    ['a truncated JSON', '{"version":2,"rev":7,"en'],
+    ['plain garbage', 'not json at all, 21 bytes'],
+    ['a whitespace stub', '  \n\t\n'],
+  ]
+  for (const [label, content] of broken) {
+    await writeFile(STORE_FILE, content, 'utf8')
+    const saved = normalize(await callRoute(handler, {
+      method: 'set-options',
+      args: { enabled: true, budgetChars: 900 },
+    }))
+    check('backup guard: ' + label + ' primary still saves', saved.ok === true, JSON.stringify(saved.message))
+    const after = await readFile(backupFile, 'utf8')
+    check('backup guard: ' + label + ' primary does not overwrite the good .bak',
+      Buffer.byteLength(after) === goodBytes && after === goodStore,
+      'bakBytes=' + Buffer.byteLength(after) + ' expected=' + goodBytes)
+    const reloaded = normalize(await callRoute(handler, { method: 'reload', args: null }))
+    check('backup guard: ' + label + ' primary is disclosed after reload',
+      reloaded.snapshot.storage.warning !== null || reloaded.snapshot.storage.backupError !== null,
+      JSON.stringify(reloaded.snapshot.storage))
+  }
+}
+
+// Two DSH windows on one store: the second must never silently drop the first
+// window's save. Bumping the rev from max(ours, disk) kept the NUMBER monotonic
+// while the CONTENT vanished with ok:true — the failure this guards.
+{
+  let secondHandler = null
+  {
+    const ctx = {
+      systemPrompt: { section: () => () => {} },
+      inject: (deps, callback) => {
+        const names = Array.isArray(deps) ? deps : Object.keys(deps)
+        if (names.includes('webServer')) {
+          callback({
+            webServer: { register: (route) => { secondHandler = route.handler; return () => {} } },
+            effect: (fn) => { fn(); return () => {} },
+          })
+        }
+        return null
+      },
+      get: () => undefined,
+      effect: (fn) => { fn(); return () => {} },
+    }
+    host.apply(ctx)
+  }
+  check('two instances: the second handler is captured', typeof secondHandler === 'function')
+
+  const first = normalize(await callRoute(handler, {
+    method: 'save-entry',
+    args: { entry: { title: 'FROM-A', content: 'written by window A', mode: 'always', priority: 1 } },
+  }))
+  check('two instances: window A saves', first.ok === true, JSON.stringify(first.message))
+
+  // Window B still holds the rev it loaded before A committed. Whether B is
+  // refused (the race is still open) or accepted (its watcher already caught
+  // up) is timing-dependent — but A's entry may never disappear either way.
+  const second = normalize(await callRoute(secondHandler, {
+    method: 'save-entry',
+    args: { entry: { title: 'FROM-B', content: 'written by window B', mode: 'always', priority: 1 } },
+  }))
+  if (second.ok === false) {
+    check('two instances: a stale write is refused with a readable reason',
+      String(second.message).includes('另一个 DSH 进程'), JSON.stringify(second.message))
+  }
+  const reread = normalize(await callRoute(handler, { method: 'reload', args: null }))
+  const titles = reread.snapshot.data.entries.map((e) => e.title)
+  check('two instances: window A\'s save survives window B\'s save',
+    titles.includes('FROM-A'), JSON.stringify(titles))
+  if (second.ok === true) {
+    check('two instances: window B\'s save survives too', titles.includes('FROM-B'), JSON.stringify(titles))
+  }
+}
+
 // Export must produce a self-describing payload; importing it back adds
 // nothing (duplicate detection); importing new entries merges them in —
 // import can never wipe what is already there.
@@ -599,8 +682,8 @@ async function statusFor(headers, body) {
       .body.includes('Sec-Fetch-Site'))
   check('Sec-Fetch-Site: same-origin is accepted',
     await statusFor({ 'content-type': 'application/json', host: '127.0.0.1:8080', 'sec-fetch-site': 'same-origin' }, JSON.stringify({ method: 'state' })) === 200)
-  check('Sec-Fetch-Site: same-site is accepted (same-site ignores ports)',
-    await statusFor({ 'content-type': 'application/json', host: '127.0.0.1:8080', 'sec-fetch-site': 'same-site' }, JSON.stringify({ method: 'state' })) === 200)
+  check('Sec-Fetch-Site: same-site is refused (same-site is not same-origin)',
+    await statusFor({ 'content-type': 'application/json', host: '127.0.0.1:8080', 'sec-fetch-site': 'same-site' }, JSON.stringify({ method: 'state' })) === 403)
   check('Sec-Fetch-Site: none is accepted (user-driven navigation)',
     await statusFor({ 'content-type': 'application/json', host: '127.0.0.1:8080', 'sec-fetch-site': 'none' }, JSON.stringify({ method: 'state' })) === 200)
 
@@ -689,8 +772,8 @@ async function statusFor(headers, body) {
     const diffPort = await statusOn(h6,
       { 'content-type': 'application/json', host: '[::1]:8080', origin: 'http://[::1]:9999' },
       JSON.stringify({ method: 'state' }))
-    check('ipv6: a different-port same-host Origin is still same-origin',
-      diffPort === 200, 'status=' + diffPort)
+    check('ipv6: a different-port same-host Origin is refused (port is part of the origin)',
+      diffPort === 403, 'status=' + diffPort)
     const mapped = await statusOn(h6,
       { 'content-type': 'application/json', host: '[::ffff:127.0.0.1]:8080', origin: 'http://[::ffff:7f00:1]:8080' },
       JSON.stringify({ method: 'state' }))
@@ -1432,6 +1515,25 @@ async function statusFor(headers, body) {
     check('F1 seam: garbage snapshot degrades to zeros',
       garbage.budget === 0 && garbage.used === 0 && garbage.omitted === 0
       && garbage.percent === 0 && garbage.tokens === 0, JSON.stringify(garbage))
+
+    // The Host caps entryChars + profileChars against the SAME budget, so a
+    // meter reading only entryChars showed a nearly empty bar while the Host
+    // was already truncating the persona block away.
+    const withProfiles = clientPlugin.__budgetMeter({
+      data: { budgetChars: 1000 },
+      injection: { registered: true, chars: 900, entryChars: 300, profileChars: 600 },
+    })
+    check('F1 seam: the meter counts the persona half too',
+      withProfiles.used === 900 && withProfiles.percent === 90, JSON.stringify(withProfiles))
+
+    // Without entryChars the fallback `chars` IS the whole section, so profiles
+    // must not be added on top of it a second time.
+    const charsOnly = clientPlugin.__budgetMeter({
+      data: { budgetChars: 1000 },
+      injection: { registered: true, chars: 900, profileChars: 600 },
+    })
+    check('F1 seam: profiles are not double-counted when entryChars is absent',
+      charsOnly.used === 900, JSON.stringify(charsOnly))
   }
 
   process.env.DSH_HOME = previousHome
@@ -2574,6 +2676,28 @@ async function statusFor(headers, body) {
     check('F7: a non-number disabledUntil is refused with a reason',
       junk.ok === false && String(junk.message).includes('disabledUntil'),
       JSON.stringify(junk.message))
+
+    // `{enabled:true, disabledUntil:0}` says "on, and nothing is paused" — both
+    // halves agree, so refusing it as ambiguous made a legitimate call fail.
+    const bothAgree = await call('set-options', { enabled: true, disabledUntil: 0, baseRev: await rev() })
+    check('F7: a switch plus disabledUntil:0 is accepted (both halves mean "not paused")',
+      bothAgree.ok === true && bothAgree.snapshot.data.enabled === true
+      && bothAgree.snapshot.data.disabledUntil === 0 && bothAgree.snapshot.injection.muted === false,
+      JSON.stringify({ ok: bothAgree.ok, msg: bothAgree.message }))
+    // A switch plus a REAL pause is still ambiguous and still refused.
+    const contradictory = await call('set-options', {
+      enabled: true, disabledUntil: Date.now() + 3600000, baseRev: await rev(),
+    })
+    check('F7: a switch plus a real pause is still refused as ambiguous',
+      contradictory.ok === false && String(contradictory.message).includes('不能同时'),
+      JSON.stringify(contradictory.message))
+    // A bare disabledUntil:0 clears a live pause.
+    await call('set-options', { disabledUntil: Date.now() + 3600000, baseRev: await rev() })
+    const clearedByZero = await call('set-options', { disabledUntil: 0, baseRev: await rev() })
+    check('F7: disabledUntil:0 alone clears a live pause',
+      clearedByZero.ok === true && clearedByZero.snapshot.data.disabledUntil === 0
+      && clearedByZero.snapshot.injection.muted === false,
+      JSON.stringify({ u: clearedByZero.snapshot.data.disabledUntil }))
 
     // The load path: a hand-edited unusable value is reset to 0 and disclosed.
     await writeFile(storeFile, muteSeed('soon'), 'utf8')
