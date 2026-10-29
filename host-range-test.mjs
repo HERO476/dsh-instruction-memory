@@ -94,12 +94,24 @@ const COVERED_LINES = [
   { floor: '0.1.5-alpha.1', below: '0.1.6-0' },
   { floor: '0.1.6-alpha.0', below: '0.1.7-0' },
   { floor: '0.1.7-alpha.0', below: '0.2.0-0' },
-  // 0.2.0 prereleases are reached by the `>=0.2.0-0` tail's own tuple; the
-  // 0.2.1 prereleases need their own tuple (npm's gate matches [maj,min,patch]
+  // 0.2.0 prereleases are reached by the tail's own tuple; the 0.2.1
+  // prereleases need their own tuple (npm's gate matches [maj,min,patch]
   // exactly), which is why 0.2.1-alpha.1 needed this line in 1.0.16.
   { floor: '0.2.1-alpha.0', below: '0.3.0-0' },
+  // 0.2.2 (the alpha channel: npm dist-tag `alpha` is 0.2.2-alpha.5). semver
+  // only matches a prerelease when a comparator carries the SAME tuple, so
+  // the 0.2.0 tail tuple cannot reach 0.2.2-alpha.N — it needs this line.
+  // Contract-verified only (section()/PromptSection/SECTION_ORDERS unchanged
+  // between 0.2.1 and 0.2.2-alpha.2); no live boot recorded yet.
+  { floor: '0.2.2-alpha.0', below: '0.3.0-0' },
 ]
-const RANGE_TAIL = '>=0.2.0-0'
+// The tail used to be `>=0.2.0-0` with no upper bound, which asserted
+// compatibility with EVERY future host (9.9.9 satisfied it) while also
+// admitting 0.2.2-alpha.2 — a release whose PromptPresentation split this
+// plugin was never tested against. It is now a bounded window that ends before
+// 0.4.0, so a new minor needs a deliberate line here instead of being claimed
+// by accident.
+const RANGE_TAIL = '>=0.2.0-0 <0.4.0-0'
 
 const generateRange = (lines, tail) =>
   [...lines.map((line) => '>=' + line.floor + ' <' + line.below), tail].join(' || ')
@@ -292,15 +304,16 @@ const MUST_PASS = [
   '0.2.1-alpha.4',
   '0.2.1-rc.2',
   '0.2.1',
+  '0.2.2-alpha.2',
   '0.3.0',
-  '1.0.0',
   // `2.0.0-rc.1` is deliberately absent for the same reason as `0.1.8-rc.1`:
   // its tuple has no comparator, so no range can reach it.
 ]
 
-// Below the declared floor: the plugin has never seen these. They must be
-// rejected, so "supports everything" cannot quietly become true either.
-const MUST_FAIL = ['0.0.9', '0.1.0', '0.1.2', '0.1.3-alpha.0', '0.1.3-alpha.1']
+// Above the declared window, or below the floor: both must be rejected, so
+// neither "supports everything" nor "supports nothing new" can quietly become
+// true. `1.0.0` used to sit in MUST_PASS only because the tail was unbounded.
+const MUST_FAIL = ['0.0.9', '0.1.0', '0.1.2', '0.1.3-alpha.0', '0.1.3-alpha.1', '0.4.0', '1.0.0', '9.9.9']
 
 for (const version of MUST_PASS) {
   const plain = semver.satisfies(version, declared)

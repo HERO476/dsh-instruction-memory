@@ -15,7 +15,8 @@
  */
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { existsSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
+import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 
 let failures = 0
@@ -1538,6 +1539,126 @@ async function statusFor(headers, body) {
 
   process.env.DSH_HOME = previousHome
   await rm(PLAN_HOME, { recursive: true, force: true })
+}
+
+/* ====================================================================
+ * F5: the published plan never exceeds the budget it publishes
+ *
+ * The persona half and the entry half each reserve room for their own
+ * "另有 N …" footer, and the two reservations used to disagree: the persona
+ * footer was measured as `footerFor(omitted + 1)` while it was later rendered
+ * with `footerFor(omitted)`, so a 12-profile store under an 800-char budget
+ * rendered 801 characters. The invariant is asserted on the real route across
+ * the budget/profile combinations that used to fail, so a future edit to
+ * either reservation trips here instead of shipping.
+ * ==================================================================== */
+{
+  const INVARIANT_HOME = scratchHome('-invariant')
+  await rm(INVARIANT_HOME, { recursive: true, force: true })
+  const previousHome = process.env.DSH_HOME
+  process.env.DSH_HOME = INVARIANT_HOME
+
+  let invariantHandler = null
+  const invariantCtx = {
+    systemPrompt: { section: () => () => {} },
+    inject: (deps, callback) => {
+      const names = Array.isArray(deps) ? deps : Object.keys(deps)
+      if (names.includes('webServer')) {
+        callback({
+          webServer: { register: (route) => { invariantHandler = route.handler; return () => {} } },
+          effect: (fn) => { fn(); return () => {} },
+        })
+      }
+      return null
+    },
+    get: () => undefined,
+    effect: (fn) => { fn(); return () => {} },
+  }
+
+  const invariantHost = await import(new URL('./lib/index.js', import.meta.url).href + '?invariant=' + Date.now())
+  invariantHost.apply(invariantCtx)
+  await callRoute(invariantHandler, { method: 'state' })
+
+  // Four entries that fit comfortably, so the entry half is never the one
+  // under pressure: the persona reservation is what the sweep stresses.
+  for (let i = 0; i < 4; i += 1) {
+    await callRoute(invariantHandler, {
+      method: 'save-entry',
+      args: { entry: { id: 'inv' + i, title: 'INV' + i, content: 'i'.repeat(60), mode: 'always', when: '', priority: 1, enabled: true } },
+    })
+  }
+
+  const profileCounts = [0, 3, 12]
+  const budgets = [300, 500, 800, 1200]
+  const violations = []
+
+  for (const count of profileCounts) {
+    const before = (await callRoute(invariantHandler, { method: 'state' })).snapshot.data.profiles
+    for (const profile of before) {
+      await callRoute(invariantHandler, { method: 'delete-profile', args: { id: profile.id } })
+    }
+    for (let i = 0; i < count; i += 1) {
+      await callRoute(invariantHandler, {
+        method: 'save-profile',
+        args: { profile: { name: 'P' + i, content: 'p'.repeat(292) } },
+      })
+    }
+    for (const budget of budgets) {
+      await callRoute(invariantHandler, { method: 'set-options', args: { budgetChars: budget } })
+      const snap = (await callRoute(invariantHandler, { method: 'state' })).snapshot
+      const chars = snap.injection.chars
+      const preview = snap.preview
+      // Compare against the EFFECTIVE ceiling: budgetChars is clamped to
+      // MIN_BUDGET_CHARS, so a 300 request runs as 800.
+      const effective = snap.injection.budget
+      if (typeof chars !== 'number' || chars !== preview.length || chars > effective) {
+        violations.push({ count, budget, effective, chars, preview: preview.length })
+      }
+    }
+  }
+
+  check('F5 plan: no profile/budget combination renders past the budget it publishes',
+    violations.length === 0, JSON.stringify(violations.slice(0, 6)))
+
+  // The budget covers the whole section, so the persona footer must be inside
+  // the ceiling too: the preview of the failing case ended with its own footer.
+  await callRoute(invariantHandler, { method: 'set-options', args: { budgetChars: 800 } })
+  const tight = (await callRoute(invariantHandler, { method: 'state' })).snapshot
+  check('F5 plan: an 800-char budget with 12 personas stays inside 800',
+    tight.injection.chars <= 800 && tight.preview.length <= 800,
+    JSON.stringify({ chars: tight.injection.chars, preview: tight.preview.length }))
+  check('F5 plan: the persona footer is counted in injection.chars',
+    tight.injection.chars === tight.preview.length,
+    JSON.stringify({ chars: tight.injection.chars, preview: tight.preview.length }))
+
+  // `available` must follow the registration, not be hard-coded true: a failed
+  // section registration used to publish `available: true` with an error string
+  // beside it, so the Client's own diagnostics disagreed with themselves.
+  const availableNow = tight.injection.available
+  check('F5 plan: injection.available mirrors the absence of an error',
+    availableNow === (tight.injection.error === null || tight.injection.error === undefined),
+    JSON.stringify({ available: availableNow, error: tight.injection.error }))
+
+  // The published locations are folded through the same display helper as
+  // storage.path, so the account name never reaches the panel or a support
+  // paste. `displayPath` folds the home prefix only (documented), so the
+  // contract asserted here is that helper plus the derivation staying inside
+  // the store's own directory.
+  const storage = tight.storage
+  const foldedHome = invariantHost.displayPath(join(homedir(), '.dsh', 'instruction-memory', 'memory.json'))
+  const keptOther = invariantHost.displayPath('D:\\elsewhere\\memory.json')
+  check('F5 plan: displayPath folds the home prefix to ~',
+    foldedHome === '~' + sep + join('.dsh', 'instruction-memory', 'memory.json'),
+    String(foldedHome))
+  check('F5 plan: displayPath leaves a non-home path untouched (documented)',
+    keptOther === 'D:\\elsewhere\\memory.json', String(keptOther))
+  check('F5 plan: backupPath/schemaFile derive from the published store path',
+    typeof storage.backupPath === 'string' && storage.backupPath.startsWith(storage.path)
+    && typeof storage.schemaFile === 'string' && storage.schemaFile.startsWith(storage.path.slice(0, storage.path.lastIndexOf(sep) + 1)),
+    JSON.stringify({ path: storage.path, backupPath: storage.backupPath, schemaFile: storage.schemaFile }))
+
+  process.env.DSH_HOME = previousHome
+  await rm(INVARIANT_HOME, { recursive: true, force: true })
 }
 
 /* ====================================================================
