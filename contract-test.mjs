@@ -2196,7 +2196,10 @@ async function statusFor(headers, body) {
     && listed.history.items[0].entries !== null,
     JSON.stringify(listed.history.items.slice(0, 2)))
   check('history: list also reports the directory on the snapshot block',
-    listed.snapshot.storage.historyDir === historyDir
+    // The snapshot publishes the folded form; expand it before comparing with
+    // the real scratch directory. A raw compare only passed when the scratch
+    // home sat outside $HOME (Windows CI) and failed on Linux CI.
+    featureHost.expandDisplayPath(listed.snapshot.storage.historyDir) === historyDir
     && listed.snapshot.storage.historyCount === listed.history.items.length,
     JSON.stringify({ dir: listed.snapshot.storage.historyDir }))
 
@@ -2430,17 +2433,19 @@ async function statusFor(headers, body) {
   const applied = await call('set-options', { backupDir: backupRoot, baseRev: await rev() })
   check('backup: a usable directory is accepted, persisted and reported',
     applied.ok === true && applied.saved === true
-    && applied.snapshot.storage.backupDir === backupRoot
+    && featureHost.expandDisplayPath(applied.snapshot.storage.backupDir) === backupRoot
     && applied.snapshot.storage.isDefaultBackupDir === false
     && String(applied.message).includes('备份位置已更新'),
     JSON.stringify(applied.message))
 
   const exportToDir = await call('export-to-dir', null)
   const backupFiles = await readdir(backupRoot)
+  const shownBackupDir = featureHost.displayPath(backupRoot)
   check('backup: export-to-dir writes a dated export into the custom folder',
-    exportToDir.ok === true && String(exportToDir.message).includes(backupRoot)
+    exportToDir.ok === true
+    && (String(exportToDir.message).includes(backupRoot) || String(exportToDir.message).includes(shownBackupDir))
     && backupFiles.some((name) => /^dsh-instruction-memory-\d{8}-\d{6}Z\.json$/.test(name)),
-    JSON.stringify(backupFiles))
+    JSON.stringify({ message: exportToDir.message, files: backupFiles }))
   check('backup: the export written there is a complete store (all sets)',
     (() => {
       const name = backupFiles.find((file) => file.startsWith('dsh-instruction-memory-'))
