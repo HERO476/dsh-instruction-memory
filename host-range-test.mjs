@@ -98,20 +98,20 @@ const COVERED_LINES = [
   // prereleases need their own tuple (npm's gate matches [maj,min,patch]
   // exactly), which is why 0.2.1-alpha.1 needed this line in 1.0.16.
   { floor: '0.2.1-alpha.0', below: '0.3.0-0' },
-  // 0.2.2 (the alpha channel: npm dist-tag `alpha` is 0.2.2-alpha.5). semver
-  // only matches a prerelease when a comparator carries the SAME tuple, so
-  // the 0.2.0 tail tuple cannot reach 0.2.2-alpha.N — it needs this line.
-  // Contract-verified only (section()/PromptSection/SECTION_ORDERS unchanged
-  // between 0.2.1 and 0.2.2-alpha.2); no live boot recorded yet.
+  // 0.2.2 (the alpha channel; npm dist-tag `alpha` pointed at 0.2.2-alpha.2
+  // on 2026-10-29). semver only matches a prerelease when a comparator carries
+  // the SAME tuple, so the 0.2.0 tail tuple cannot reach 0.2.2-alpha.N — it
+  // needs this line. Live booted 2026-10-29 against 0.2.2-alpha.2: route 200,
+  // section registered, settings page rendered; 21/21 HTTP assertions after
+  // fixing the verification script's two path assertions (false negatives).
   { floor: '0.2.2-alpha.0', below: '0.3.0-0' },
 ]
 // The tail used to be `>=0.2.0-0` with no upper bound, which asserted
-// compatibility with EVERY future host (9.9.9 satisfied it) while also
-// admitting 0.2.2-alpha.2 — a release whose PromptPresentation split this
-// plugin was never tested against. It is now a bounded window that ends before
-// 0.4.0, so a new minor needs a deliberate line here instead of being claimed
-// by accident.
-const RANGE_TAIL = '>=0.2.0-0 <0.4.0-0'
+// compatibility with EVERY future host (9.9.9 satisfied it). It is now a
+// bounded window that ends before 0.3.0: `0.4.0-0` still admitted the
+// unreleased 0.3.0, so the "a new minor needs a deliberate line" promise was
+// not actually enforced. 0.2.0 prereleases still ride this tail tuple.
+const RANGE_TAIL = '>=0.2.0-0 <0.3.0-0'
 
 const generateRange = (lines, tail) =>
   [...lines.map((line) => '>=' + line.floor + ' <' + line.below), tail].join(' || ')
@@ -285,7 +285,7 @@ const MUST_PASS = [
   '0.1.7-alpha.0',
   '0.1.7-rc.1',
   '0.1.7-rc.2',
-  // released forms and the unbounded tail the README promises.
+  // released forms.
   // `0.1.8-rc.1` is deliberately absent — see the note above.
   '0.1.3',
   '0.1.5',
@@ -303,9 +303,13 @@ const MUST_PASS = [
   '0.2.1-alpha.3',
   '0.2.1-alpha.4',
   '0.2.1-rc.2',
+  '0.2.1-rc.3',
+  '0.2.1-rc.4',
   '0.2.1',
   '0.2.2-alpha.2',
-  '0.3.0',
+  '0.2.2',
+  // `0.3.0` is NOT admitted: the tail ends before it, and no line enumerates
+  // that tuple. A future minor has to be added deliberately (see RANGE_TAIL).
   // `2.0.0-rc.1` is deliberately absent for the same reason as `0.1.8-rc.1`:
   // its tuple has no comparator, so no range can reach it.
 ]
@@ -313,7 +317,7 @@ const MUST_PASS = [
 // Above the declared window, or below the floor: both must be rejected, so
 // neither "supports everything" nor "supports nothing new" can quietly become
 // true. `1.0.0` used to sit in MUST_PASS only because the tail was unbounded.
-const MUST_FAIL = ['0.0.9', '0.1.0', '0.1.2', '0.1.3-alpha.0', '0.1.3-alpha.1', '0.4.0', '1.0.0', '9.9.9']
+const MUST_FAIL = ['0.0.9', '0.1.0', '0.1.2', '0.1.3-alpha.0', '0.1.3-alpha.1', '0.3.0', '0.3.0-rc.1', '0.4.0', '1.0.0', '9.9.9']
 
 for (const version of MUST_PASS) {
   const plain = semver.satisfies(version, declared)
@@ -325,7 +329,7 @@ for (const version of MUST_PASS) {
 for (const version of MUST_FAIL) {
   const plain = semver.satisfies(version, declared)
   const pre = semver.satisfies(version, declared, { includePrerelease: true })
-  check('range rejects ' + version + ' (below the floor, both modes)', !plain && !pre,
+  check('range rejects ' + version + ' (outside the window, both modes)', !plain && !pre,
     'default=' + plain + ' includePrerelease=' + pre)
 }
 

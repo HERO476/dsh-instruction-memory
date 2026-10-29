@@ -7,6 +7,35 @@
 > 1.0.13 起由 CI 经 OIDC Trusted Publishing 发布（首个带 provenance 的版本）。
 > 这些历史 tag **不应回填**——npm 上的版本号已被占用。
 
+## [1.4.5] — 2026-10-29
+
+对 1.4.4 发布物与最新桌面端 / 网页端复核（桌面 `0.2.1-rc.3`，网页 `0.2.1-rc.4` 与
+`0.2.2-alpha.2`）后修复的缺陷。
+
+### 修复
+
+- **发布包自依赖**：1.4.4 的 `dependencies` 里混入了 `dsh-instruction-memory@^1.4.3`，
+  pnpm 安装时会多拉一份嵌套的 1.4.3（`pnpm-lock.yaml` 同时出现 1.4.3 与 1.4.4）。
+  已删除整个 `dependencies`（本插件没有运行时依赖），并新增发布前与 `verify.mjs` 断言，
+  禁止包依赖自身。
+- **Windows 上折叠路径不可用**：快照把家目录折叠成 `~`，Windows 资源管理器 / CMD 不会展开它。
+  现在 Windows 折叠为 `%USERPROFILE%`（资源管理器、CMD、PowerShell 都会展开），macOS/Linux
+  仍为 `~`；新增 `expandDisplayPath()` 作为 `displayPath()` 的逆函数，README 与代码注释同步。
+- **L3 验证脚本假阴性**：`compat-1016-live-check.mjs` 直接用折叠后的 `storage.path` 与绝对
+  `DSH_HOME` 比较，1.4.4 之后 `store-inside-home` / `store-on-disk` 必然 FAIL。现在先展开
+  平台占位符再判定；隔离宿主复验 **21/21 PASS**。
+- **全新 profile 安装失败**：`install.mjs` 在 `profiles/web/node_modules` 不存在时
+  `symlinkSync` 报 `ENOENT`。现在先 `mkdirSync(dirname(link), { recursive: true })`，
+  并新增“没有 node_modules 的全新 profile”回归测试。
+
+### 兼容区间
+
+- 尾部收窄为 `>=0.2.0-0 <0.3.0-0`：1.4.4 写的 `<0.4.0-0` 仍会放行未发布的 `0.3.0`，
+  与“新 minor 必须显式加一行”的承诺不符。`0.3.0` 与 `0.3.0-rc.1` 现在在默认与
+  `includePrerelease` 两种语义下都被拒绝。
+- 更正 1.4.4 说明中的版本错误：npm `alpha` 标签当时是 `0.2.2-alpha.2`，不是 `alpha.5`；
+  `0.2.2-alpha.2` 已在网页隔离宿主实机启动验证（路由 200、section 注册、设置页渲染）。
+
 ## [1.4.4] — 2026-10-29
 
 最新版审计（桌面端 0.2.1-rc.3、网页端同一宿主，并对照 npm `next` 上的 0.2.1-rc.4）发现的缺陷修复。
@@ -21,8 +50,8 @@
 
 ### 兼容区间
 
-- 尾部 `|| >=0.2.0-0` **没有上界**：`0.3.0`、`1.0.0`、`9.9.9` 都被判兼容。现收窄为 `>=0.2.0-0 <0.4.0-0`。
-- 新增 `>=0.2.2-alpha.0 <0.3.0-0`：semver 只在同一 tuple 上匹配预发布号，`0.2.0` 那段够不到 `0.2.2-alpha.N`（npm `alpha` 标签当前即 `0.2.2-alpha.5`）。该线**只做过契约比对，尚未实机启动**。
+- 尾部 `|| >=0.2.0-0` **没有上界**：`0.3.0`、`1.0.0`、`9.9.9` 都被判兼容。现收窄为 `>=0.2.0-0 <0.4.0-0`（仍会放行 `0.3.0`，1.4.5 进一步收窄为 `<0.3.0-0`）。
+- 新增 `>=0.2.2-alpha.0 <0.3.0-0`：semver 只在同一 tuple 上匹配预发布号，`0.2.0` 那段够不到 `0.2.2-alpha.N`（npm `alpha` 标签当时为 `0.2.2-alpha.2`；原文误写为 `alpha.5`，1.4.5 更正）。该线在 1.4.4 时只做过契约比对；1.4.5 已实机启动验证。
 - 三处声明（`peerDependencies` / `dsh.engines.dsh` / `dsh.compatibility.dsh`）仍由 `host-range-test.mjs` 生成并校验一致。
 
 ### 说明（未改动，但需要知道）

@@ -17,7 +17,7 @@
  *
  * The profile package.json is backed up before the first modification.
  */
-import { existsSync, readFileSync, writeFileSync, symlinkSync, lstatSync, unlinkSync, copyFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, symlinkSync, lstatSync, unlinkSync, copyFileSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -140,6 +140,10 @@ if (!existsSync(join(PROF, 'package.json'))) {
 if (existsSync(link)) {
   console.log('junction already present: ' + link)
 } else {
+  // A freshly initialised profile has no node_modules directory yet; symlink()
+  // does not create the parent, so this used to fail with ENOENT on exactly
+  // the "new profile" case this script exists to support.
+  mkdirSync(dirname(link), { recursive: true })
   symlinkSync(SRC, link, 'junction')
   console.log('junction created: ' + link)
 }

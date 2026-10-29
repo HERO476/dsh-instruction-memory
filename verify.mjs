@@ -7,9 +7,11 @@
  * Client half: executed against a stub ModuleLoader / slots service, asserting
  *              that it registers the settings page without throwing.
  */
+import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { readFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { readFileSync, mkdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { dirname, join, sep } from 'node:path'
 
 // The repo files are what the profile junction points at (install.mjs links
 // them), so loading locally keeps `npm test` working on a fresh clone.
@@ -84,6 +86,60 @@ check('host: no longer depends on the harness fs service (data lives under DSH_H
   typeof host.resolveStorePath === 'function', typeof host.resolveStorePath)
 check('host: exports apply()', typeof host.apply === 'function', typeof host.apply)
 check('host: exports buildBlock()', typeof host.buildBlock === 'function', typeof host.buildBlock)
+
+// Packaging red line: this plugin is pure-local and has no runtime dependencies.
+// 1.4.4 accidentally gained `dsh-instruction-memory@^1.4.3` as a dependency on
+// itself; pnpm then installed a nested 1.4.3 copy next to 1.4.4. The assertion
+// is on the whole `dependencies` block, not just the self name, so any future
+// accidental `npm install <something>` inside the repo is caught here too.
+check('package.json declares no runtime dependencies (self-dependency regression)',
+  PKG.dependencies === undefined || Object.keys(PKG.dependencies).length === 0,
+  JSON.stringify(PKG.dependencies))
+
+// The snapshot's home token must stay usable in the platform's shell/Explorer:
+// %USERPROFILE% on Windows (Explorer/CMD/PowerShell expand it; ~ is not a path
+// there), ~ on POSIX. `expandDisplayPath` is the inverse used by tooling.
+{
+  const homeToken = process.platform === 'win32' ? '%USERPROFILE%' : '~'
+  const realPath = join(homedir(), '.dsh', 'instruction-memory', 'memory.json')
+  const folded = host.displayPath(realPath)
+  const expanded = host.expandDisplayPath(folded)
+  const foreign = host.displayPath('D:\\elsewhere\\memory.json')
+  check('path display: folds the home prefix to the platform token',
+    folded === homeToken + sep + join('.dsh', 'instruction-memory', 'memory.json'), String(folded))
+  check('path display: expandDisplayPath restores the absolute path',
+    expanded === realPath, String(expanded))
+  check('path display: a non-home path is left untouched', foreign === 'D:\\elsewhere\\memory.json', String(foreign))
+}
+
+// install.mjs must survive a freshly initialised profile: node_modules does not
+// exist yet, and symlinkSync does not create its parent. 1.4.4 failed with ENOENT
+// on exactly this case — the "new profile" scenario the script exists to support.
+{
+  const installHome = join(SCRATCH_HOME, 'install-home')
+  mkdirSync(join(installHome, 'profiles', 'web'), { recursive: true })
+  writeFileSync(join(installHome, 'profiles', 'web', 'package.json'), JSON.stringify({
+    name: 'dsh-profile-web',
+    private: true,
+    dsh: { profile: { bundles: [] } },
+  }) + '\n')
+  const run = spawnSync(process.execPath, [fileURLToPath(new URL('./install.mjs', import.meta.url))], {
+    cwd: fileURLToPath(new URL('.', import.meta.url)),
+    env: { ...process.env, DSH_HOME: installHome },
+    encoding: 'utf8',
+  })
+  const installedPkg = JSON.parse(readFileSync(join(installHome, 'profiles', 'web', 'package.json'), 'utf8'))
+  const dep = installedPkg.dependencies?.['dsh-instruction-memory'] ?? ''
+  check('install.mjs: a profile without node_modules installs (ENOENT regression)',
+    run.status === 0
+      && Array.isArray(installedPkg.dsh?.profile?.bundles)
+      && installedPkg.dsh.profile.bundles.includes('dsh-instruction-memory')
+      && typeof dep === 'string' && dep.startsWith('link:'),
+    'status=' + run.status + ' dep=' + dep + ' stderr=' + String(run.stderr).slice(0, 200))
+  // Remove the junction explicitly before the scratch tree disappears: recursive
+  // deletion must never be trusted to decide whether it follows a link.
+  try { unlinkSync(join(installHome, 'profiles', 'web', 'node_modules', 'dsh-instruction-memory')) } catch { /* best effort */ }
+}
 
 /* ---------------- shipped JSON Schema (F15) ---------------- */
 

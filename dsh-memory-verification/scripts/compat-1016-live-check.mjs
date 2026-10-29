@@ -17,6 +17,10 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import http from 'node:http'
+// Single source of truth for the snapshot's platform token (%USERPROFILE% on
+// Windows, ~ elsewhere). Copied logic here would drift exactly like the
+// storage-path assertion this replaces.
+import { expandDisplayPath } from '../../lib/index.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const VROOT = join(HERE, '..')
@@ -106,11 +110,15 @@ let restoredOptions = null
 /* ---- 1. boot state + storage path ---- */
 const s0 = await call('state', null)
 check('state-200', 'state envelope answers 200 ok', s0.status === 200 && s0.json?.ok === true, `status=${s0.status}`)
-const storePath = s0.json?.snapshot?.storage?.path
+const publishedStorePath = s0.json?.snapshot?.storage?.path
   ?? s0.json?.snapshot?.state?.storagePath ?? s0.json?.snapshot?.storagePath ?? null
+// 1.4.4 folded the home prefix for display. A raw string comparison then
+// failed on every host even though the store was exactly where promised;
+// expand the platform token back to the real path before judging it.
+const storePath = publishedStorePath === null ? null : expandDisplayPath(publishedStorePath)
 check('store-inside-home', 'materialised store is inside the isolated DSH_HOME',
   storePath !== null && storePath.replace(/\\/g, '/').startsWith(DSH_HOME.replace(/\\/g, '/')),
-  `storePath=${storePath} dshHome=${DSH_HOME}`)
+  `storePath=${storePath} published=${publishedStorePath} dshHome=${DSH_HOME}`)
 check('store-on-disk', 'memory.json exists on disk after state',
   storePath !== null && existsSync(storePath), storePath)
 

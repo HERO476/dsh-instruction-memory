@@ -1645,11 +1645,17 @@ async function statusFor(headers, body) {
   // contract asserted here is that helper plus the derivation staying inside
   // the store's own directory.
   const storage = tight.storage
+  // Windows gets %USERPROFILE% (Explorer/CMD/PowerShell expand it); POSIX keeps ~.
+  const homeToken = process.platform === 'win32' ? '%USERPROFILE%' : '~'
   const foldedHome = invariantHost.displayPath(join(homedir(), '.dsh', 'instruction-memory', 'memory.json'))
+  const expandedHome = invariantHost.expandDisplayPath(foldedHome)
   const keptOther = invariantHost.displayPath('D:\\elsewhere\\memory.json')
-  check('F5 plan: displayPath folds the home prefix to ~',
-    foldedHome === '~' + sep + join('.dsh', 'instruction-memory', 'memory.json'),
+  check('F5 plan: displayPath folds the home prefix to the platform token',
+    foldedHome === homeToken + sep + join('.dsh', 'instruction-memory', 'memory.json'),
     String(foldedHome))
+  check('F5 plan: expandDisplayPath restores the absolute path (verification tooling)',
+    expandedHome === join(homedir(), '.dsh', 'instruction-memory', 'memory.json'),
+    String(expandedHome))
   check('F5 plan: displayPath leaves a non-home path untouched (documented)',
     keptOther === 'D:\\elsewhere\\memory.json', String(keptOther))
   check('F5 plan: backupPath/schemaFile derive from the published store path',
