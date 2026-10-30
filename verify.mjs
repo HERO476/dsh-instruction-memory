@@ -9,7 +9,7 @@
  */
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { readFileSync, mkdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, sep } from 'node:path'
 
@@ -110,6 +110,13 @@ check('package.json declares no runtime dependencies (self-dependency regression
   check('path display: expandDisplayPath restores the absolute path',
     expanded === realPath, String(expanded))
   check('path display: a non-home path is left untouched', foreign === 'D:\\elsewhere\\memory.json', String(foreign))
+  // Windows paths are case-insensitive, so the same directory spelled in
+  // another case must still fold: a mismatch published the raw account name.
+  if (process.platform === 'win32') {
+    const shouty = join(homedir().toUpperCase(), '.dsh', 'instruction-memory', 'memory.json')
+    check('path display: a differently-cased home still folds',
+      host.displayPath(shouty) === folded, String(host.displayPath(shouty)))
+  }
 }
 
 // install.mjs must survive a freshly initialised profile: node_modules does not
@@ -139,6 +146,42 @@ check('package.json declares no runtime dependencies (self-dependency regression
   // Remove the junction explicitly before the scratch tree disappears: recursive
   // deletion must never be trusted to decide whether it follows a link.
   try { unlinkSync(join(installHome, 'profiles', 'web', 'node_modules', 'dsh-instruction-memory')) } catch { /* best effort */ }
+}
+
+// A profile package.json that cannot be parsed must fail BEFORE anything is
+// written. 1.4.5 unlinked the junction and then threw on the parse, leaving the
+// profile declaring a dependency whose junction was gone.
+{
+  const brokenHome = join(SCRATCH_HOME, 'install-broken')
+  const webProfile = join(brokenHome, 'profiles', 'web')
+  const installScript = fileURLToPath(new URL('./install.mjs', import.meta.url))
+  const linkPath = join(webProfile, 'node_modules', 'dsh-instruction-memory')
+  const brokenText = '{ "name": "dsh-profile-web", '
+  mkdirSync(webProfile, { recursive: true })
+  writeFileSync(join(webProfile, 'package.json'), brokenText)
+  const run = (args) => spawnSync(process.execPath, [installScript, ...args], {
+    cwd: fileURLToPath(new URL('.', import.meta.url)),
+    env: { ...process.env, DSH_HOME: brokenHome },
+    encoding: 'utf8',
+  })
+  const installRun = run([])
+  check('install.mjs: an unparsable profile fails before creating the junction',
+    installRun.status !== 0 && !existsSync(linkPath)
+    && readFileSync(join(webProfile, 'package.json'), 'utf8') === brokenText,
+    'status=' + installRun.status + ' stderr=' + String(installRun.stderr).slice(0, 160))
+  check('install.mjs: the failure explains how to recover',
+    String(installRun.stderr).includes('.bak'), String(installRun.stderr).slice(0, 200))
+  // --remove has the same guard, and it is the case that used to leave a
+  // dangling dependency: the junction went away, the manifest stayed.
+  const fakePackage = join(SCRATCH_HOME, 'fake-package')
+  mkdirSync(fakePackage, { recursive: true })
+  mkdirSync(join(webProfile, 'node_modules'), { recursive: true })
+  symlinkSync(fakePackage, linkPath, 'junction')
+  const removeRun = run(['--remove'])
+  check('install.mjs: --remove refuses to unlink when the profile is unreadable',
+    removeRun.status !== 0 && existsSync(linkPath),
+    'status=' + removeRun.status + ' link=' + existsSync(linkPath))
+  try { unlinkSync(linkPath) } catch { /* best effort */ }
 }
 
 /* ---------------- shipped JSON Schema (F15) ---------------- */

@@ -483,6 +483,25 @@ check('a multi-line 适用场景 is collapsed',
     v({ host: '192.168.1.5:8080' }, false), (x) => x === true)
   check('a published bind still refuses a cross Origin',
     v({ host: '192.168.1.5:8080', origin: 'http://evil.com' }, false), (x) => x === false)
+  // A concrete bind address is the authority the browser had to use, while the
+  // request's own Host header is attacker-controlled. Comparing Origin to Host
+  // therefore proved nothing on a LAN bind: an attacker pair passed (1.4.5 A4).
+  const vb = (headers, guarded, expected) => requestOriginVerdict(headers, guarded, expected).ok
+  check('published bind: an Origin matching the bind address is accepted',
+    vb({ host: '192.168.1.5:8080', origin: 'http://192.168.1.5:8080' }, false, '192.168.1.5'), (x) => x === true)
+  check('published bind: an attacker Host+Origin pair is refused',
+    vb({ host: 'attacker.example:8080', origin: 'http://attacker.example:8080' }, false, '192.168.1.5'), (x) => x === false)
+  check('published bind: a loopback Origin is refused against a LAN bind',
+    vb({ host: '192.168.1.5:8080', origin: 'http://127.0.0.1:8080' }, false, '192.168.1.5'), (x) => x === false)
+  check('no concrete bind: the Host comparison is unchanged',
+    vb({ host: 'attacker.example:8080', origin: 'http://attacker.example:8080' }, false, ''), (x) => x === true)
+  // The bind authority is for publishes only: on loopback the allowlist already
+  // pins Host, and forcing the bind name would break legitimate aliasing
+  // (::1 / 127.0.0.1 / ::ffff:127.0.0.1 all reach the same local server).
+  check('a loopback bind keeps mapped-spelling aliasing (Host/Origin differ in spelling)',
+    vb({ host: '[::ffff:127.0.0.1]:8080', origin: 'http://[::ffff:7f00:1]:8080' }, true, '::1'), (x) => x === true)
+  check('a LAN-bind Origin still compares against a DNS-name bind',
+    vb({ host: 'box.lan:8080', origin: 'http://box.lan:8080' }, false, 'box.lan'), (x) => x === true)
 }
 
 // ---- 用户形象 (persona profiles): facts about the user, never a role ----

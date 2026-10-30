@@ -43,6 +43,27 @@ function readPkg() {
   return JSON.parse(readFileSync(pkgPath, 'utf8'))
 }
 
+/**
+ * Read the profile manifest BEFORE touching anything on disk.
+ *
+ * Reading it late turned one unparsable `package.json` (interrupted write, hand
+ * edit, failed market install) into a half state: `--remove` had already
+ * unlinked the junction when the parse threw, and `install` had already created
+ * the junction and rolled the backup, so the profile either kept dependency
+ * entries for a plugin that is gone or listed a link that was never enabled.
+ * Failing first keeps the filesystem exactly as it was.
+ */
+function readPkgOrExit() {
+  try {
+    return readPkg()
+  } catch (err) {
+    console.error('cannot read ' + pkgPath + ': ' + (err && err.message ? err.message : String(err)))
+    console.error('  it is not valid JSON — an interrupted write or a hand edit is the usual cause.')
+    console.error('  nothing was changed. Restore it from ' + backupPath + ' and run this again.')
+    process.exit(1)
+  }
+}
+
 function writePkg(pkg) {
   writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8')
 }
@@ -56,6 +77,8 @@ function bundlesOf(pkg) {
 
 if (remove) {
   let touched = false
+  // Fail before any filesystem change: see readPkgOrExit.
+  const pkg = readPkgOrExit()
   // `link` is normally a junction, and unlinking one removes only the link —
   // the real package stays where it is. It can also be a REAL directory (pnpm
   // materialises `link:` dependencies into node_modules as a copy), and there
@@ -97,7 +120,6 @@ if (remove) {
     console.log('\nNOT UNINSTALLED — see the refusal above.')
     process.exit(process.exitCode)
   }
-  const pkg = readPkg()
   let changed = false
   if (pkg.dependencies !== undefined && Object.hasOwn(pkg.dependencies, NAME)) {
     delete pkg.dependencies[NAME]
@@ -137,6 +159,8 @@ if (!existsSync(join(PROF, 'package.json'))) {
   process.exit(1)
 }
 
+const pkg = readPkgOrExit()
+
 if (existsSync(link)) {
   console.log('junction already present: ' + link)
 } else {
@@ -159,7 +183,6 @@ if (existsSync(backupPath)) {
 copyFileSync(pkgPath, backupPath)
 console.log('backed up profile package.json -> ' + backupPath)
 
-const pkg = readPkg()
 let changed = false
 
 // Step 3: a link: dependency, so the market lists it under 「已安装」.

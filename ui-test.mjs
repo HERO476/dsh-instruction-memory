@@ -771,6 +771,37 @@ check('panel: resume clears the bar and the section returns',
 tree = await click(tree, '重新载入')
 check('panel: reload keeps the panel alive', hasText(tree, '指令记忆') || hasTextContaining(tree, '指令记忆'))
 
+// ---- a host that publishes `slots` late still gets the panel ----
+// 1.4.5 resolved the service exactly once during activation and, on a miss,
+// logged one console.error and gave up for good: the plugin looked installed
+// while its settings page never appeared. The retry window is ~1s, so this
+// case publishes the service after two failed lookups.
+{
+  let lateRender = null
+  let lookups = 0
+  const lateSlots = {
+    inject: (key, callback) => { callback(); return () => {} },
+    register: (options, render) => { lateRender = render; return () => {} },
+  }
+  const lateCtx = {
+    get: (name) => {
+      if (name !== 'slots') return undefined
+      lookups += 1
+      return lookups <= 2 ? undefined : lateSlots
+    },
+    effect: (fn) => { fn(); return () => {} },
+  }
+  const lateInstance = globalThis.__spec.factory((id) => {
+    if (id === 'react') return shim
+    throw new Error('unexpected require: ' + id)
+  })
+  lateInstance.apply(lateCtx)
+  check('late slots: nothing is registered before the service exists',
+    lateRender === null, String(lateRender))
+  await new Promise((resolve) => setTimeout(resolve, 600))
+  check('late slots: the panel mounts once the service appears',
+    typeof lateRender === 'function', String(lateRender))
+}
 // The scratch home goes before the exit code is captured: it is the one await
 // (yield point) between here and process.exit, and a stray rejection during it
 // must not be able to mask a crash-hook exitCode.

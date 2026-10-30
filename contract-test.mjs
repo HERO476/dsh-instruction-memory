@@ -2446,6 +2446,14 @@ async function statusFor(headers, body) {
     && (String(exportToDir.message).includes(backupRoot) || String(exportToDir.message).includes(shownBackupDir))
     && backupFiles.some((name) => /^dsh-instruction-memory-\d{8}-\d{6}Z\.json$/.test(name)),
     JSON.stringify({ message: exportToDir.message, files: backupFiles }))
+  // Every path the snapshot publishes is folded, not only `storage.path`: an
+  // absolute account path is the one thing 1.4.4 fixed for one field and left
+  // in backupPath / historyDir / schemaFile / migratedFrom.
+  const homeRaw = homedir()
+  const storageFields = Object.entries(applied.snapshot.storage || {})
+  check('backup: no published storage path carries the raw home directory',
+    storageFields.every(([, value]) => typeof value !== 'string' || !value.includes(homeRaw)),
+    JSON.stringify(applied.snapshot.storage))
   check('backup: the export written there is a complete store (all sets)',
     (() => {
       const name = backupFiles.find((file) => file.startsWith('dsh-instruction-memory-'))
