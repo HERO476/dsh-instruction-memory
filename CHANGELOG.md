@@ -7,6 +7,30 @@
 > 1.0.13 起由 CI 经 OIDC Trusted Publishing 发布（首个带 provenance 的版本）。
 > 这些历史 tag **不应回填**——npm 上的版本号已被占用。
 
+## [1.4.7] — 2026-10-31
+
+**文档版**：没有一行运行时代码变更，只把 2026-10-31「插件在 DSH Go（Android）上的适配性」
+审计结论写进 README，并补上新跑的一组实机证据。
+
+### 新增证据
+
+- `0.2.1-rc.4`（正是 DSH Go 锁定的内核版本）在隔离 `DSH_HOME` 上复跑
+  `compat-1016-live-check.mjs`：**21/21**；注入 `chars=292 / budget=4000`、`state` p95 1.09 ms、
+  SSE 首帧 0.71 ms。证据文件 `dsh-memory-verification/out/compat-1016-live-rc4-audit.json`。
+
+### 文档
+
+- README「请求来源防护」新增一节：**DSH Go 的鉴权来自平台补丁** `runtime/patches/route-guard.diff`
+  （钉在 `0.2.1-rc.4`），在 `route.handler` 之前对 `exact`/`prefix` 路由统一执行
+  `connection.requestRejection()`，缺 cookie → 401、`connection` 未挂载 → 503；
+  并写明这层保护是**平台属性**——手动 `dsh web` 不带 `--patch`、或升级到锚点对不上的内核，
+  就会回退成"仅回环、无鉴权"。
+- README「兼容性」新增「在 DSH Go（Android）上运行」：引擎经 `/usr/bin/env -i` 启动，
+  `HOME=/root`、`DSH_HOME=/root/.dsh`（App 侧设置的 `HOME` 对引擎无效）；数据落在
+  `/root/.dsh/instruction-memory/memory.json`（App 私有、与桌面端不共享）；配置入口是网页岛
+  （本插件没有 config schema）；发现页索引 `api.dshfind.com/market/dsh-index.json` 仍只登记
+  `1.4.2`，要最新版需在 guest shell 里 `dsh plugin --profile web add dsh-instruction-memory`。
+
 ## [1.4.6] — 2026-10-30
 
 针对 1.4.5 的三方复核（架构 / 安全 / 验收）结论做的修复版本。安全面**没有新增对外暴露**，

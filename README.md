@@ -586,6 +586,20 @@ DNS 重绑定恰好推翻了它**：`evil.com` 解析到 `127.0.0.1` 之后，�
    路径前缀为 `/instruction-memory/api`，代理转发规则需覆盖它。
 5. **限制来源**：至少用代理层做 IP 白名单或加 Basic Auth——插件本身不提供任何鉴权。
 
+### 在 DSH Go（Android）上：鉴权来自平台补丁，不是本插件
+
+DSH Go 给官方 Web 服务器包了一层**构建期补丁** `runtime/patches/route-guard.diff`（钉在
+`0.2.1-rc.4`，`pins.json` 记了 before/after SHA-256，锚点对不上时构建直接失败）：它在
+`route.handler` 之前对**每一条命名路由**调用 `connection.requestRejection()`——`exact` 与
+`prefix` 都算，本插件的 `/instruction-memory/api` 属后者；放行名单只有 `/connect` 与
+`/oauth/callback`；缺 cookie → **401**，`connection` 尚未挂载 → **503**（fail-closed），拒绝响应
+带 `x-dsh-go-guard: reject`。因此 Android 上"同机其他 App 直接打本插件路由"这条路已被平台挡住；
+上面几节描述的"无鉴权"缺口只适用于桌面端 / 网页端的端口。
+
+⚠️ 这层保护是**平台属性，不是插件属性**：在 guest shell 里手动 `dsh web`（不带 `--patch`），
+或在 guest 内把内核升级到补丁锚点对不上的版本，鉴权就回退成"仅回环、无鉴权"。判断装机是否
+仍受保护，只看启动命令行里有没有 `--patch /etc/dsh-app/dsh-web.patch.yml`。
+
 ## 兼容性
 
 同一串范围写在**三处**，而**只有一处会被宿主强制执行**——这一点以前写错过，现在按实测更正：
@@ -721,6 +735,30 @@ FAIL  LIVE GUARD: the installed host 0.1.8-rc.1 is admitted by both modes  -> ..
 
 `host-range-test.mjs` 会断言 `peerDependencies` 与另外两处字段**逐字节一致**，并断言 peer 只声明这一个包名——
 三处任一被手改都会在测试里失败。
+
+### 在 DSH Go（Android）上运行
+
+DSH Go（Android 客户端）内置的引擎就是**真实 DSH**，锁定 `@deepseek-ai/dsh` **`0.2.1-rc.4`**
+（`runtime/locks/dsh-0.2.1-rc.4/package.json`），在 PRoot rootfs 内以
+`dsh web --patch /etc/dsh-app/dsh-web.patch.yml --host 127.0.0.1 --port N --no-open` 运行；
+环境经 `/usr/bin/env -i` 清空后只注入 `HOME=/root`、`DSH_HOME=/root/.dsh`——**App 侧设置的
+`HOME` 对引擎无效**，别按字面读 `DshProcess.kt`。
+
+- **兼容性**：`0.2.1-rc.4` 正好是上表①档已实测的版本。2026-10-31 又用同一个 rc.4 在隔离的
+  `DSH_HOME` 上复跑一遍 **21/21**（`compat-1016-live-check.mjs`），注入实测
+  `chars=292 / budget=4000`、`state` p95 1.09 ms、SSE 首帧 0.71 ms；证据
+  `dsh-memory-verification/out/compat-1016-live-rc4-audit.json`。
+- **数据位置**：`/root/.dsh/instruction-memory/memory.json`，在 App 私有目录的 rootfs 内，
+  与桌面端**不是同一份**；快照里的路径以 `~` 显示，不泄露绝对路径。卸载 App 会连 rootfs 一起清空，
+  卸载**插件**保留数据。
+- **配置入口**：原生设置页依赖 schema 表单，本插件没有 config schema，所以那一行点进去是
+  **网页岛**（WebView 里加载的官方 Web UI），`settings.section` 的落点在网页客户端里。
+  若从未打开过任何网页岛，这一行可能尚未出现。
+- **市场版本可能滞后**：DSH Go 的发现页只读 `api.dshfind.com/market/dsh-index.json`，该文件对本
+  插件在 2026-10-31 仍只登记 `1.4.2`（npm latest 已是 1.4.6）。要装最新版，在 guest shell 里执行
+  `dsh plugin --profile web add dsh-instruction-memory`，直接取 npm 上的版本。
+- **双端记忆不共享**：手机与"遥控 PC"各自维护自己的 `memory.json`，没有同步——这是当前形态，
+  不是缺陷。
 
 ## 发布（维护者）
 
