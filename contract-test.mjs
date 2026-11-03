@@ -13,11 +13,10 @@
  * directory under .test-dsh-home, seeded with an over-cap memory.json so the
  * dropped-entries warning path is exercised too.
  */
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
-import { existsSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { join, sep } from 'node:path'
-import { homedir } from 'node:os'
-import { fileURLToPath } from 'node:url'
+import { homedir, tmpdir } from 'node:os'
 
 let failures = 0
 const check = (label, ok, detail) => {
@@ -45,25 +44,25 @@ process.on('unhandledRejection', (err) => {
 // DSH_HOME here is what guarantees this suite never reads or writes the user's
 // real memory store.
 /**
- * Scratch homes carry a per-PROCESS suffix ("-p<pid>"). Every block deletes
- * and re-creates its home around itself, so two concurrent runs of this suite
- * (an IDE test task plus "npm test", say) would otherwise delete each other's
- * store mid-write — which surfaced as a baffling ENOTEMPTY crash inside a
- * cleanup rather than as a test failure. The gitignore pattern
- * ".test-dsh-home-star" covers every variant. (No literal "star-slash" here:
- * inside a block comment it would terminate the comment early.)
+ * Scratch homes live in the OS temp directory, not in the checkout.
+ *
+ * mkdtemp() gives every process its own directory, so two concurrent runs of
+ * this suite (an IDE test task plus "npm test", say) can no longer delete each
+ * other's store mid-write — which surfaced as a baffling ENOTEMPTY crash inside
+ * a cleanup rather than as a test failure. Keeping them out of the repo also
+ * stops one crashed run from leaving untracked noise in `git status`, and stops
+ * a recursive delete from ever walking part of the checkout.
  */
 /**
- * Per-PID scratch homes must not outlive the run: every suite previously
- * left its home behind (39 directories were piling up in the repo), because
- * only some named blocks removed theirs. This hook deletes ONLY this
- * process's homes on any exit path (crash, throw, or a failed check), so
- * concurrent runs stay untouched; blocks that clean up on the green path
- * simply find nothing left.
+ * Scratch homes must not outlive the run: every suite previously left its home
+ * behind (39 directories were piling up in the repo), because only some named
+ * blocks removed theirs. This hook deletes ONLY this process's homes on any
+ * exit path (crash, throw, or a failed check), so concurrent runs stay
+ * untouched; blocks that clean up on the green path simply find nothing left.
  */
 const scratchHomes = new Set()
 const scratchHome = (name) => {
-  const dir = fileURLToPath(new URL('./.test-dsh-home' + name + '-p' + process.pid + '/', import.meta.url))
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-im-contract' + name + '-'))
   scratchHomes.add(dir)
   return dir
 }
@@ -702,12 +701,20 @@ async function statusFor(headers, body) {
 // and the old `boundHost !== '0.0.0.0'` comparison left those deployments
 // 403-ing every legitimate client that reached them by hostname.
 {
-  async function mountWithHost(boundHost) {
+  async function mountWithHost(boundHost, options = {}) {
+    // `gate: true` simulates the real deployment, where the profile publishes
+    // the host's authentication fence. Without it a non-loopback bind must fail
+    // closed (asserted in the same loop below).
+    const withGate = options.gate === true
+    const fence = { requestRejection: () => null }
     let h = null
     const ctx = {
       systemPrompt: { section: () => () => {} },
       inject: (deps, callback) => {
         const names = Array.isArray(deps) ? deps : Object.keys(deps)
+        if (names.includes('connection') && withGate) {
+          callback({ connection: fence, effect: (fn) => { fn(); return () => {} } })
+        }
         if (names.includes('webServer')) {
           callback({
             // `host: undefined` exercises the "server did not say" default,
@@ -727,6 +734,7 @@ async function statusFor(headers, body) {
     }
     const mod = await import(new URL('./lib/index.js', import.meta.url).href
       + '?bind=' + encodeURIComponent(boundHost === '' ? 'unset' : boundHost)
+      + (withGate ? '-gate' : '-nogate')
       + '-' + Date.now() + Math.random().toString(36).slice(2))
     mod.apply(ctx)
     if (h === null) throw new Error('route not registered for bind ' + boundHost)
@@ -739,14 +747,38 @@ async function statusFor(headers, body) {
   }
 
   // A published deployment: the client legitimately arrives with the address
-  // it dialed, which is not a loopback name.
+  // it dialed, which is not a loopback name. The request is authenticated by
+  // the host's fence, so the bind-based allowlist stays switched off.
   for (const bound of ['::', '0.0.0.0', '192.168.1.5']) {
-    const h = await mountWithHost(bound)
+    const h = await mountWithHost(bound, { gate: true })
     const status = await statusOn(h,
       { 'content-type': 'application/json', host: '192.168.1.5:8080' },
       JSON.stringify({ method: 'state' }))
     check('host guard: bind ' + bound + ' accepts a non-loopback Host (published deployment)',
       status === 200, 'status=' + status)
+
+    // The plugin must NOT re-judge Origin once the fence accepted the request:
+    // it only knows the bind address, so a reverse proxy forwarding the public
+    // name (`Host: dsh.example.com`) would be refused for a difference the
+    // operator never made. This was a real 403 for every proxy deployment.
+    const proxied = await statusOn(h,
+      { 'content-type': 'application/json', host: 'dsh.example.com:8443', origin: 'https://dsh.example.com:8443' },
+      JSON.stringify({ method: 'state' }))
+    check('host guard: bind ' + bound + ' accepts the reverse-proxy name once the fence accepted it',
+      proxied === 200, 'status=' + proxied)
+
+    const gatedState = await callRoute(h, { method: 'state', args: null })
+    check('fence: the snapshot reports the attached authentication fence (bind ' + bound + ')',
+      gatedState.ok === true && gatedState.snapshot.security.authFence === true,
+      JSON.stringify(gatedState.snapshot === undefined ? null : gatedState.snapshot.security))
+
+    // … and with no fence at all it must refuse instead of serving the LAN.
+    const ungated = await mountWithHost(bound)
+    const refused = await statusOn(ungated,
+      { 'content-type': 'application/json', host: '192.168.1.5:8080' },
+      JSON.stringify({ method: 'state' }))
+    check('host guard: bind ' + bound + ' fails closed without an authentication fence',
+      refused === 503, 'status=' + refused)
   }
   // A loopback (or unset — the server default) bind must keep the allowlist.
   for (const bound of ['127.0.0.1', 'localhost', '::1', '']) {
@@ -756,6 +788,12 @@ async function statusFor(headers, body) {
       JSON.stringify({ method: 'state' }))
     check('host guard: bind ' + (bound === '' ? '(unset)' : bound) + ' still refuses a non-loopback Host',
       status === 403, 'status=' + status)
+
+    const plain = await callRoute(h, { method: 'state', args: null })
+    check('fence: a deployment without the service reports authFence false (bind '
+      + (bound === '' ? '(unset)' : bound) + ')',
+      plain.ok === true && plain.snapshot.security.authFence === false,
+      JSON.stringify(plain.snapshot === undefined ? null : plain.snapshot.security))
   }
 
   // IPv6 loopback END TO END through the real route. The shipped defect
@@ -2430,6 +2468,50 @@ async function statusFor(headers, body) {
   const notADir = await call('set-options', { backupDir: filePath, baseRev: await rev() })
   check('backup: a path that is a file is refused with "not a directory"',
     notADir.ok === false && String(notADir.message).includes('不是目录'), JSON.stringify(notADir.message))
+  // F19: writing outside the harness home is opt-in, and spelling is not
+  // containment — a link inside the home that resolves outside is refused too.
+  {
+    const outsideRoot = join(tmpdir(), 'dsh-im-outside-' + process.pid)
+    await mkdir(outsideRoot, { recursive: true })
+    const refusedOutside = await call('set-options', { backupDir: outsideRoot, baseRev: await rev() })
+    check('backup: a directory outside the harness home is refused by default',
+      refusedOutside.ok === false && String(refusedOutside.message).includes('ALLOW_EXTERNAL_BACKUP'),
+      JSON.stringify(refusedOutside.message))
+    check('backup: the refused outside directory was not stored',
+      (await snap()).data.backupDir === '', JSON.stringify((await snap()).data.backupDir))
+
+    process.env.DSH_INSTRUCTION_MEMORY_ALLOW_EXTERNAL_BACKUP = '1'
+    try {
+      const allowedOutside = await call('set-options', { backupDir: outsideRoot, baseRev: await rev() })
+      check('backup: the same directory is accepted once the operator opts in',
+        allowedOutside.ok === true, JSON.stringify(allowedOutside.message))
+      await call('set-options', { backupDir: '', baseRev: await rev() })
+    } finally {
+      delete process.env.DSH_INSTRUCTION_MEMORY_ALLOW_EXTERNAL_BACKUP
+    }
+
+    const linkDir = join(FEATURE_HOME, 'linked-outside')
+    const linkTarget = join(tmpdir(), 'dsh-im-link-' + process.pid)
+    await mkdir(linkTarget, { recursive: true })
+    let linked = true
+    try {
+      await symlink(linkTarget, linkDir, 'junction')
+    } catch {
+      linked = false
+    }
+    if (linked) {
+      const viaLink = await call('set-options', { backupDir: linkDir, baseRev: await rev() })
+      check('backup: a link inside the harness home that resolves outside is refused',
+        viaLink.ok === false && String(viaLink.message).includes('ALLOW_EXTERNAL_BACKUP'),
+        JSON.stringify(viaLink.message))
+      await rm(linkDir, { force: true })
+    } else {
+      console.log('SKIP  backup: junction/symlink unavailable on this platform')
+    }
+    await rm(linkTarget, { recursive: true, force: true })
+    await rm(outsideRoot, { recursive: true, force: true })
+  }
+
   const applied = await call('set-options', { backupDir: backupRoot, baseRev: await rev() })
   check('backup: a usable directory is accepted, persisted and reported',
     applied.ok === true && applied.saved === true
@@ -2848,15 +2930,21 @@ async function statusFor(headers, body) {
       JSON.stringify({ u: reloaded.snapshot.data.disabledUntil, warn: reloaded.snapshot.storage.warning }))
   }
 
-  // B. A non-loopback bind publishes hostGuarded:false and names the address.
+  // B. A non-loopback bind with no connection service fails CLOSED.
+  //
+  // It used to answer every call and merely advertise `hostGuarded: false` in
+  // the snapshot. A route that can rewrite the instructions injected into every
+  // later turn is not something to leave open to the LAN because the profile
+  // happens to lack the host's authentication fence.
   {
-    const { handler } = await mountMute('open', '0.0.0.0')
-    const state1 = await callRoute(handler, { method: 'state', args: null })
-    check('F12: a non-loopback bind turns the guard off and the snapshot says so',
-      state1.snapshot.security.hostGuarded === false
-      && state1.snapshot.security.boundHost === '0.0.0.0'
-      && state1.ok === true,
-      JSON.stringify(state1.snapshot.security))
+    const { handler: openHandler } = await mountMute('open', '0.0.0.0')
+    const refused = await rawRoute(openHandler, JSON.stringify({ method: 'state', args: null }))
+    const body = String(refused.body)
+    check('F12: a non-loopback bind without an authentication fence refuses the route',
+      refused.status === 503 && body.includes('connection') && body.includes('"ok":false'),
+      JSON.stringify({ status: refused.status, body: body.slice(0, 160) }))
+    // The loopback bind is the documented deployment and must keep working
+    // (asserted above against the same mount helper).
   }
 
   process.env.DSH_HOME = previousHome
@@ -2959,6 +3047,120 @@ async function statusFor(headers, body) {
 
   process.env.DSH_HOME = previousHome
   await rm(BOOT_HOME, { recursive: true, force: true })
+}
+
+/* ---------------- F19: the fences that only matter on a deployed host ---------------- */
+
+// The security fixes are the ones least likely to be exercised on a developer
+// machine: a loopback GUI never needs a trusted alias, the default backup dir
+// is already inside the harness home, and the directory mode is invisible until
+// someone else on the box lists it. Each is asserted here against the real
+// implementation instead of being taken on faith.
+{
+  // 1. Trusted host aliases (R2): the loopback allowlist may be extended, and
+  //    only by names that were declared.
+  const normalized = host.normalizeTrustedHosts(' https://App.Example:8443/ , [::1],, tail.example ')
+  check('trusted hosts: origins, ports and IPv6 brackets fold to bare hostnames',
+    normalized.join('|') === 'app.example|::1|tail.example', normalized.join('|'))
+  const verdict = (headers, trusted = []) => host.requestOriginVerdict(headers, true, '', trusted)
+  check('trusted hosts: an undeclared non-loopback Host is refused (DNS rebinding)',
+    verdict({ host: 'app.example' }).ok === false)
+  check('trusted hosts: the declared alias passes under the loopback allowlist',
+    verdict({ host: 'app.example' }, ['app.example']).ok === true)
+  check('trusted hosts: Origin may name the declared alias but never a stranger',
+    verdict({ host: 'app.example', origin: 'https://app.example' }, ['app.example']).ok === true
+    && verdict({ host: 'app.example', origin: 'https://evil.example' }, ['app.example']).ok === false)
+  check('trusted hosts: a declaration does not disable the loopback names',
+    verdict({ host: 'localhost' }, ['app.example']).ok === true
+    && verdict({ host: '127.0.0.1:3082' }, ['app.example']).ok === true)
+
+  // 2. Backup directory fence (R7): outside the harness home is refused BEFORE
+  //    the probe, and the documented env var is the only way out.
+  const outside = join(tmpdir(), 'dsh-im-contract-outside-' + process.pid)
+  await rm(outside, { recursive: true, force: true })
+  const escaped = await callRoute(handler, { method: 'set-options', args: { backupDir: outside } })
+  check('backup dir: a path outside the harness home is refused without being created',
+    escaped.ok === false
+    && typeof escaped.message === 'string' && escaped.message.includes('DSH 主目录内')
+    && !existsSync(outside),
+    JSON.stringify({ ok: escaped.ok, message: escaped.message }))
+  process.env.DSH_INSTRUCTION_MEMORY_ALLOW_EXTERNAL_BACKUP = '1'
+  try {
+    await mkdir(outside, { recursive: true })
+    const allowed = await callRoute(handler, { method: 'set-options', args: { backupDir: outside } })
+    check('backup dir: the documented env var is honoured, and the setting still validates the path',
+      allowed.ok === true, JSON.stringify({ ok: allowed.ok, message: allowed.message }))
+  } finally {
+    delete process.env.DSH_INSTRUCTION_MEMORY_ALLOW_EXTERNAL_BACKUP
+    await callRoute(handler, { method: 'set-options', args: { backupDir: '' } })
+    await rm(outside, { recursive: true, force: true })
+  }
+  const restored = await callRoute(handler, { method: 'state', args: null })
+  check('backup dir: the env var stops applying the moment it is removed',
+    restored.ok === true && restored.snapshot.storage.isDefaultBackupDir === true,
+    JSON.stringify(restored.snapshot === undefined ? null : restored.snapshot.storage))
+
+  // 3. Directory mode (R9): 0700, because another local user listing the store
+  //    directory is a real disclosure even when every file is 0600. Windows has
+  //    no mode bits; the check is skipped there rather than faked.
+  if (process.platform !== 'win32') {
+    const storeDir = join(SCRATCH_HOME, 'instruction-memory')
+    const modeOf = (path) => (statSync(path).mode & 0o777).toString(8)
+    check('store dir: created 0700 (umask may only tighten it further)',
+      modeOf(storeDir) === '700', modeOf(storeDir))
+  } else {
+    console.log('note  store dir mode is not asserted on Windows (no POSIX mode bits)')
+  }
+}
+
+/* ---------------- upgrade path: directories an older version created ---------------- */
+
+// `mkdir(...,{mode})` never re-applies the mode to a path that already exists,
+// so a store first written by 1.4.7 stayed 0755 forever and the review could
+// read it off the live machine. The plugin repairs its own directories on
+// boot; this drives that repair with a directory that is already 0755.
+if (process.platform === 'win32') {
+  console.log('note  directory repair is not asserted on Windows (no POSIX mode bits)')
+} else {
+  const home = scratchHome('upgrade')
+  const storeDir = join(home, 'instruction-memory')
+  const historyDir = join(storeDir, 'history')
+  mkdirSync(storeDir, { recursive: true })
+  chmodSync(storeDir, 0o755)
+  mkdirSync(historyDir, { recursive: true })
+  chmodSync(historyDir, 0o755)
+  const previousHome = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  try {
+    let route = null
+    const ctx = {
+      systemPrompt: { section: () => () => {} },
+      inject: (deps, callback) => {
+        const names = Array.isArray(deps) ? deps : Object.keys(deps)
+        if (names.includes('webServer')) {
+          callback({
+            webServer: { host: '127.0.0.1', register: (r) => { route = r.handler; return () => {} } },
+            effect: (fn) => { fn(); return () => {} },
+          })
+        }
+        return null
+      },
+      get: () => undefined,
+      effect: (fn) => { fn(); return () => {} },
+      logger: () => ({ info: () => {}, debug: () => {} }),
+    }
+    const mod = await import(new URL('./lib/index.js', import.meta.url).href + '?upgrade=' + Date.now())
+    mod.apply(ctx)
+    const booted = await callRoute(route, { method: 'state', args: null })
+    const modeOf = (path) => (statSync(path).mode & 0o777).toString(8)
+    check('upgrade path: a 0755 store directory is tightened to 0700 on boot',
+      booted.ok === true && modeOf(storeDir) === '700', modeOf(storeDir))
+    check('upgrade path: a 0755 history directory is tightened too',
+      modeOf(historyDir) === '700', modeOf(historyDir))
+  } finally {
+    if (previousHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previousHome
+  }
 }
 
 // A late stray rejection could land after ALL PASS; the crash-hook exitCode

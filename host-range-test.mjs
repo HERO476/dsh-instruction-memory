@@ -30,10 +30,10 @@
  * Runs on the semver instance the profile ships, falling back to node's own
  * resolution, so it needs no dependency of its own.
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
 let failures = 0
 const check = (label, ok, detail) => {
@@ -171,15 +171,43 @@ function remedyFor(version) {
 
 /* ---------------- load a semver ---------------- */
 
+// Same resolution as install.mjs and the plugin itself: explicit $DSH_HOME,
+// else ~/.dsh.
+const DSH_HOME = typeof process.env.DSH_HOME === 'string' && process.env.DSH_HOME.trim() !== ''
+  ? resolve(process.env.DSH_HOME.trim())
+  : join(homedir(), '.dsh')
+
+/**
+ * Every visible profile's node_modules, plus the shared one under
+ * `profiles/node_modules`.
+ *
+ * Both probes below used to hardcode the `web` profile. On a machine whose DSH
+ * runs another profile (this one runs `superagent`) that pointed at a tree the
+ * host never loads: the semver lookup quietly fell back to the global copy, and
+ * the host lookup missed the running host entirely — which turned a real
+ * mismatch into `SKIP`, the most misleading outcome this suite can print.
+ */
+function profileNodeModulesRoots() {
+  const profilesDir = join(DSH_HOME, 'profiles')
+  const roots = []
+  try {
+    const entries = readdirSync(profilesDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort()
+    for (const name of entries) roots.push(join(profilesDir, name, 'node_modules'))
+  } catch {
+    // No profiles directory: the shared and global roots below still apply.
+  }
+  roots.push(join(profilesDir, 'node_modules'))
+  return roots
+}
+
 // Prefer the profile's own semver (the one every DSH host actually evaluates
 // with); fall back to whatever node resolves so the suite still runs on a
 // machine with no DSH profile.
 function loadSemver() {
-  const roots = [
-    join(homedir(), '.dsh', 'profiles', 'web', 'node_modules'),
-    join(homedir(), '.dsh', 'profiles', 'node_modules'),
-  ]
-  for (const root of roots) {
+  for (const root of profileNodeModulesRoots()) {
     try {
       return createRequire(join(root, 'noop.js'))('semver')
     } catch {
@@ -195,6 +223,18 @@ function loadSemver() {
 
 const semver = loadSemver()
 if (semver === null) {
+  // A missing semver is only benign when there is no DSH to judge (bare
+  // checkout, CI). If a host IS installed, skipping is precisely the false
+  // green this file exists to prevent: the version gate would go unexercised
+  // while printing "ALL PASS". Name the tree that needs semver and fail.
+  const detected = hostPackageCandidates().find((path) => existsSync(path))
+  if (detected !== undefined) {
+    console.log('FAIL  no semver implementation available, but a DSH install was found at')
+    console.log('      ' + detected)
+    console.log('      add semver where that tree can resolve it, or set DSH_HOME to the profile')
+    console.log('\n1 FAILED')
+    process.exit(1)
+  }
   console.log('SKIP  no semver implementation available on this machine')
   console.log('\nALL PASS (skipped)')
   process.exit(0)
@@ -225,23 +265,31 @@ console.log('#       semver ' + semver.SEMVER_SPEC_VERSION + ' semantics\n')
 
 /* ---------------- locate the DSH actually installed here ---------------- */
 
-// The profile's own dependency tree is the authoritative "what is running"
-// answer when a profile exists; the editor-bundled copy is the other way DSH
-// reaches a machine. Both are probed, in that order, because a profile can
-// pin an older host than the editor ships.
-//
-// Returns null (→ SKIP, not FAIL) when neither is present: this suite has to
-// stay runnable on a bare checkout and in CI, where no DSH is installed.
-function readInstalledHostVersion() {
-  const candidates = [
-    join(homedir(), '.dsh', 'profiles', 'web', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'),
-    join(homedir(), '.dsh', 'profiles', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'),
+// Where an installed host package may live: every visible profile's tree first
+// (a profile can pin an older host than the machine ships), then the global
+// installs that `npm -g` and editor-bundled runtimes produce.
+function hostPackageCandidates() {
+  const candidates = profileNodeModulesRoots().map((root) =>
+    join(root, '@deepseek-ai', 'dsh', 'package.json'))
+  candidates.push(
+    join('/usr', 'lib', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'),
+    join('/usr', 'local', 'lib', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'),
     // Windows: the TRAE-packaged runtime. Kept as a literal rather than a scan
     // so a failing lookup costs one stat, not a directory walk.
     join(homedir(), 'AppData', 'Roaming', 'TRAE SOLO CN', 'ModularData', 'ai-agent',
       'vm', 'tools', 'node', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'),
-  ]
-  for (const path of candidates) {
+  )
+  return candidates
+}
+
+// The profile's own dependency tree is the authoritative "what is running"
+// answer when a profile exists; a global install (npm -g, the editor-bundled
+// runtime) is the other way DSH reaches a machine.
+//
+// Returns null (→ SKIP, not FAIL) when none is present: this suite has to stay
+// runnable on a bare checkout and in CI, where no DSH is installed.
+function readInstalledHostVersion() {
+  for (const path of hostPackageCandidates()) {
     try {
       const parsed = JSON.parse(readFileSync(path, 'utf8'))
       if (typeof parsed.version === 'string' && semver.valid(parsed.version) !== null) {
@@ -308,6 +356,8 @@ const MUST_PASS = [
   '0.2.1-rc.5',
   '0.2.1',
   '0.2.2-alpha.2',
+  // the host 1.4.8 was verified against (2026-11-03, live GUI on this machine)
+  '0.2.2-alpha.3',
   '0.2.2',
   // `0.3.0` is NOT admitted: the tail ends before it, and no line enumerates
   // that tuple. A future minor has to be added deliberately (see RANGE_TAIL).

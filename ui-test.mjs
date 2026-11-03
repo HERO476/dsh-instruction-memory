@@ -15,13 +15,15 @@
  * snapshot shape) rather than a mock of it.
  */
 import { mkdir, rm, writeFile } from 'node:fs/promises'
-import { readFileSync, rmSync } from 'node:fs'
+import { readFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { tmpdir } from 'node:os'
 
-// Per-process scratch home: two concurrent runs must not delete each other's
-// store mid-write (see the same note in contract-test.mjs).
-const SCRATCH_HOME = fileURLToPath(new URL('./.test-dsh-home-ui-p' + process.pid + '/', import.meta.url))
+// Scratch home under the OS temp dir: mkdtemp() isolates concurrent runs, and a
+// crashed run cannot leave untracked noise inside the checkout (see the same
+// note in contract-test.mjs).
+const PLUGIN_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
+const SCRATCH_HOME = mkdtempSync(join(tmpdir(), 'dsh-im-ui-'))
 const STORE_FILE = join(SCRATCH_HOME, 'instruction-memory', 'memory.json')
 process.env.DSH_HOME = SCRATCH_HOME
 // Own-pid scratch cleanup on every exit path (crash, throw, failed check);
@@ -692,27 +694,58 @@ check('panel: the diagnostics card collapses again', !hasTextContaining(tree, '�
 // ---- F12: the non-loopback security warning ----
 // A second host instance whose web server reports a non-loopback bind; its
 // route replaces the handler for one reload, then the panel goes back.
+//
+// Two halves now, because the route fails closed: WITH the host's authentication
+// fence the panel loads and warns about the published bind; WITHOUT one the
+// request is refused outright and the panel has to say why instead of pretending
+// the store is empty.
 {
-  const warnHost = await import(new URL('./lib/index.js', import.meta.url).href + '?diag-warn-' + Date.now())
-  let warnHandler = null
-  warnHost.apply({
-    systemPrompt: { section: () => () => {} },
-    inject: (deps, callback) => {
-      callback({
-        webServer: { host: '0.0.0.0', register: (route) => { warnHandler = route.handler; return () => {} } },
-        effect: (fn) => { fn(); return () => {} },
-      })
-      return null
-    },
-    get: () => undefined,
-    effect: (fn) => { fn(); return () => {} },
-  })
+  const mountWarn = async (options = {}) => {
+    const mod = await import(new URL('./lib/index.js', import.meta.url).href
+      + '?diag-warn-' + (options.gate === true ? 'gate' : 'nogate') + '-' + Date.now()
+      + Math.random().toString(36).slice(2))
+    let registered = null
+    const ctx = {
+      systemPrompt: { section: () => () => {} },
+      inject: (deps, callback) => {
+        const names = Array.isArray(deps) ? deps : Object.keys(deps)
+        if (names.includes('connection')) {
+          if (options.gate === true) {
+            callback({
+              connection: { requestRejection: () => null },
+              effect: (fn) => { fn(); return () => {} },
+            })
+          }
+          return null
+        }
+        if (names.includes('webServer')) {
+          callback({
+            webServer: { host: '0.0.0.0', register: (route) => { registered = route.handler; return () => {} } },
+            effect: (fn) => { fn(); return () => {} },
+          })
+        }
+        return null
+      },
+      get: () => undefined,
+      effect: (fn) => { fn(); return () => {} },
+    }
+    mod.apply(ctx)
+    return registered
+  }
+
   const realHandler = handler
-  handler = warnHandler
+  handler = await mountWarn({ gate: true })
   tree = await click(tree, '重新载入')
   check('panel: a non-loopback bind shows the security warning at the top',
     hasTextContaining(tree, '非回环地址') && hasTextContaining(tree, '0.0.0.0'),
     JSON.stringify(texts(tree).filter((l) => l.includes('回环')).slice(0, 2)))
+
+  handler = await mountWarn({})
+  tree = await click(tree, '重新载入')
+  check('panel: without an authentication fence the route is refused and the panel says why',
+    hasTextContaining(tree, 'connection') && hasTextContaining(tree, '503'),
+    JSON.stringify(texts(tree).filter((l) => l.includes('503')).slice(0, 2)))
+
   handler = realHandler
   tree = await click(tree, '重新载入')
   check('panel: back on a loopback bind the warning is gone', !hasTextContaining(tree, '非回环地址'))
@@ -802,6 +835,84 @@ check('panel: reload keeps the panel alive', hasText(tree, '指令记忆') || ha
   check('late slots: the panel mounts once the service appears',
     typeof lateRender === 'function', String(lateRender))
 }
+// ---- a host that NEVER publishes `slots`: the failure is VISIBLE, and names the version ----
+// R8: one console.error used to be the whole story — the plugin looked
+// installed while the settings page never appeared. The banner is deliberately
+// plain DOM, so this block hands the client a real (minimal) DOM instead of the
+// shim above, which is enough for the React tree but not for appended nodes.
+{
+  const savedDocument = globalThis.document
+  const created = []
+  const makeElement = (tag) => {
+    const el = {
+      tagName: String(tag).toUpperCase(),
+      children: [],
+      style: {},
+      attrs: {},
+      id: '',
+      type: '',
+      parentNode: null,
+      _text: '',
+      setAttribute(name, value) {
+        el.attrs[name] = String(value)
+        if (name === 'id') el.id = String(value)
+      },
+      appendChild(child) {
+        child.parentNode = el
+        el.children.push(child)
+        return child
+      },
+      removeChild(child) {
+        const index = el.children.indexOf(child)
+        if (index >= 0) el.children.splice(index, 1)
+        child.parentNode = null
+      },
+      remove() {
+        if (el.parentNode !== null) el.parentNode.removeChild(el)
+      },
+      addEventListener() {},
+      get isConnected() { return el.parentNode !== null },
+      set textContent(value) { el._text = String(value) },
+      get textContent() {
+        const own = el._text
+        const kids = el.children.map((child) => child.textContent).join(' ')
+        return kids === '' ? own : own + ' ' + kids
+      },
+    }
+    return el
+  }
+  const body = makeElement('body')
+  globalThis.document = {
+    baseURI: 'http://instruction-memory.local/',
+    body,
+    head: makeElement('head'),
+    createElement: (tag) => { const el = makeElement(tag); created.push(el); return el },
+    getElementById: (id) => created.find((el) => el.id === id) || null,
+  }
+  try {
+    const noSlotsCtx = {
+      get: () => undefined,
+      effect: (fn) => { fn(); return () => {} },
+    }
+    const noSlotsInstance = globalThis.__spec.factory((id) => {
+      if (id === 'react') return shim
+      throw new Error('unexpected require: ' + id)
+    })
+    noSlotsInstance.apply(noSlotsCtx)
+    check('no slots: nothing is shown while the retry window is still open',
+      body.children.length === 0, String(body.children.length))
+    await new Promise((resolve) => setTimeout(resolve, 1400))
+    const banner = body.children.find((el) => el.id === 'dsh-instruction-memory-mount-failure')
+    check('no slots: the failure reaches the page as a dismissible banner', banner !== undefined)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    check('no slots: the banner names the running plugin version',
+      banner !== undefined && banner.textContent.includes('插件版本 ' + PLUGIN_VERSION),
+      banner === undefined ? 'no banner' : banner.textContent.slice(0, 240))
+  } finally {
+    globalThis.document = savedDocument
+  }
+}
+
 // The scratch home goes before the exit code is captured: it is the one await
 // (yield point) between here and process.exit, and a stray rejection during it
 // must not be able to mask a crash-hook exitCode.

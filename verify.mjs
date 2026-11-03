@@ -9,8 +9,8 @@
  */
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { dirname, join, sep } from 'node:path'
 
 // The repo files are what the profile junction points at (install.mjs links
@@ -21,9 +21,21 @@ const PKG = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
 
 // The Host resolves its data file under the harness home; pin it to a scratch
 // directory so this suite can never read or write the user's real store.
-// Per-process scratch home: two concurrent runs must not delete each other's
-// store mid-write (see the same note in contract-test.mjs).
-const SCRATCH_HOME = fileURLToPath(new URL('./.test-dsh-home-p' + process.pid + '/', import.meta.url))
+// mkdtemp() gives every process its own directory under the OS temp dir, so two
+// concurrent runs cannot delete each other's store mid-write, and a crashed run
+// cannot leave untracked noise inside the checkout (see contract-test.mjs).
+const SCRATCH_HOME = mkdtempSync(join(tmpdir(), 'dsh-im-verify-'))
+
+// Spawned install.mjs runs must see the fixture home. DSH exports
+// DSH_PROFILE_DIR/DSH_PROFILE to every process it spawns, and install.mjs
+// honours them ahead of $DSH_HOME — an inherited value would point these
+// fixtures at the LIVE profile.
+function fixtureEnv(home) {
+  const env = { ...process.env, DSH_HOME: home }
+  delete env.DSH_PROFILE_DIR
+  delete env.DSH_PROFILE
+  return env
+}
 const STORE_FILE = join(SCRATCH_HOME, 'instruction-memory', 'memory.json')
 process.env.DSH_HOME = SCRATCH_HOME
 // Own-pid scratch cleanup on every exit path (crash, throw, failed check):
@@ -132,7 +144,7 @@ check('package.json declares no runtime dependencies (self-dependency regression
   }) + '\n')
   const run = spawnSync(process.execPath, [fileURLToPath(new URL('./install.mjs', import.meta.url))], {
     cwd: fileURLToPath(new URL('.', import.meta.url)),
-    env: { ...process.env, DSH_HOME: installHome },
+    env: fixtureEnv(installHome),
     encoding: 'utf8',
   })
   const installedPkg = JSON.parse(readFileSync(join(installHome, 'profiles', 'web', 'package.json'), 'utf8'))
@@ -161,7 +173,7 @@ check('package.json declares no runtime dependencies (self-dependency regression
   writeFileSync(join(webProfile, 'package.json'), brokenText)
   const run = (args) => spawnSync(process.execPath, [installScript, ...args], {
     cwd: fileURLToPath(new URL('.', import.meta.url)),
-    env: { ...process.env, DSH_HOME: brokenHome },
+    env: fixtureEnv(brokenHome),
     encoding: 'utf8',
   })
   const installRun = run([])

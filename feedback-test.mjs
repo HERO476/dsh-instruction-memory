@@ -10,9 +10,14 @@
 
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const SCRATCH = join(process.cwd(), '.test-dsh-home-feedback-p' + process.pid)
+// Scratch home under the OS temp dir: mkdtemp() isolates concurrent runs, and a
+// crashed run cannot leave untracked noise inside the checkout (see the same
+// note in contract-test.mjs).
+const SCRATCH = mkdtempSync(join(tmpdir(), 'dsh-im-feedback-'))
 process.env.DSH_HOME = SCRATCH
 
 const PACKAGE_VERSION = JSON.parse(await readFile(new URL('./package.json', import.meta.url), 'utf8')).version

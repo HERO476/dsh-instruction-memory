@@ -7,6 +7,111 @@
 > 1.0.13 起由 CI 经 OIDC Trusted Publishing 发布（首个带 provenance 的版本）。
 > 这些历史 tag **不应回填**——npm 上的版本号已被占用。
 
+## [1.4.8] — 2026-11-03
+
+针对 2026-11-03 三方复核（架构 / 安全 / 验收）下达的 R1–R11 逐项修复，以及同日第二轮复核
+（同一批专家 + 我方对运行中实例的 HTTP 探针）追加的 9 项。宿主侧没有新 API 可用，所以安全项
+走的是"能用宿主的就用，用不上就 fail-closed"。
+
+### 安全
+
+- **设置路由接入宿主的鉴权门**：注册后向宿主申请 `connection` 服务，每个请求先过
+  `connection.requestRejection(req)`——宿主 403（Host/Origin 不被信任）与 401（未登录）
+  原样回绝，鉴权组件抛错按 401 处理（守卫坏掉不能变成敞开的门）。没有该服务时**非回环绑定
+  一律 503**：此前 `--host 0.0.0.0` 的机器等于把"改写此后每一轮注入内容"的写入口敞开给
+  整个局域网。回环绑定（默认部署）不受影响，仍然吃 Host / Origin / Sec-Fetch-Site 三道本地校验。
+- **`DSH_INSTRUCTION_MEMORY_TRUSTED_HOSTS`**：回环绑定下显式放行额外的 `Host` / `Origin`
+  主机名（`hosts` 别名、Tailscale MagicDNS、隧道域名）。逗号分隔，可写完整 origin / 带端口 /
+  IPv6 方括号，统一折成小写、去端口、去括号的主机名；只放宽回环绑定那两处校验，端口比对不变。
+- **备份位置与导出目录默认限定在 `$DSH_HOME` 内**：该路由在没有鉴权门的 profile 上等于
+  "仅回环可访问"，而 `backupDir` 此前接受任意绝对路径（设置时探针写入、之后每次保存都写副本），
+  是一个"把磁盘写满"的原语。改用非 `$DSH_HOME` 路径必须显式设
+  `DSH_INSTRUCTION_MEMORY_ALLOW_EXTERNAL_BACKUP=1`；手改存储文件把 `backupDir` 指到外面同样被拒。
+- **导出 2 秒节流**：整份存储（满配约 1.2 M 字符）连点不再变成写放大。
+- **报错文本折叠自定义备份目录**为 `<备份目录>`（云盘路径常带账号名），此前只有当它位于家目录
+  之下才会被折叠。
+- **状态目录按 0700 创建**（`instruction-memory/`、`history/`、备份目录），不再继承 umask 的 0755。
+
+### 复核跟进（第二轮，同日）
+
+- **有鉴权门时不再重复判 `Origin`**（P1，可用性缺陷）：此前门放行后插件仍用自己的
+  `requestOriginVerdict` 复审，而它只知道**绑定地址**——绑 `192.168.1.5`、经反向代理用
+  `https://dsh.example.com` 访问一律 403。宿主那道门已经用**它**的 `trustedHosts` 与绑定地址
+  判过同一件事，且知道对外域名，所以门放行后跳过本地那套 Host/Origin/Sec-Fetch-Site 判定；
+  门不存在时它仍是唯一防线（非回环绑定 503 不变）。README 原先"Origin 与转发 Host 一致即可"
+  的说法同时更正。新增契约断言：三种非回环绑定下，带门的反代域名请求 200、无门的仍是 503。
+- **升级路径上的目录权限**：`mkdir({mode:0o700})` 不会作用到已存在的目录，1.4.7 建的
+  `instruction-memory/`、`history/` 升级后仍是 0755——实测本机就是 755。现在启动时对**已存在**
+  的目录做一次 best-effort `chmod 0700`（不创建目录：首次运行保持惰性，仍由"启动不建目录"的
+  契约钉住）；写入路径统一走 `hardenDir()`。
+- **面板鉴权状态可见**：快照新增 `security.authFence`；非回环绑定的告警分两文案——门已挂载时
+  说明"仍需登录"，而不是谎称"无鉴权可访问"。
+- **门被 dispose 时不再静默**：宿主撤销 `connection` 服务后，若插件仍在挂载，记一条日志并把
+  `authFence` 反映为 false，而不是无声退回回环规则。
+- **提示词拉取计数不再能中断整轮**：`assembledSectionText()` 里的 `logDebug` 移进 try——宿主
+  组装提示词时不包 try/catch，日志实现抛错会直接毁掉整轮对话。
+- **`SECTION_ORDER` 改为向宿主询问**：`systemPrompt.getSectionOrder()` 存在时取
+  `FILE_REFERENCE`(900) 与 `TOOL_BASH`(1000) 的中点，宿主表将来在 950 插入条目也不会变成
+  "静默并列、按字典序"。取不到时仍回落 950。
+- **`feedback.json` 权限提示**：该文件可能含 SMTP 凭据，权限对 group/others 开放时记一条日志
+  （插件不创建这个文件，只能提示）。
+- **威胁模型表述更正**：README 不再暗示"模型绝对写不进去"——插件不注册模型工具，但同 UID
+  的进程（含被授予 shell 的 agent）可以直接改存储文件，轮询会照常载入。
+- **`--host 0.0.0.0` 文档更正**：本宿主在加载期就拒绝通配绑定，示例改为具体 IP，并说明对外
+  域名要写进宿主 `dsh-client-connection` 的 `trustedHosts`（插件的
+  `DSH_INSTRUCTION_MEMORY_TRUSTED_HOSTS` 只对没有门的 profile 生效）。
+
+### 修复
+
+- **`fs.watch` 兜底轮询**：WSL 的 drvfs（`/mnt/c`、`/mnt/d`）、部分网络盘与容器挂载上
+  `fs.watch` 可能从不触发，而"从不触发"与"存储没变"无法区分——没有事件可用于触发降级。现在
+  宿主**总是**并行跑 5 秒的 `size:mtime:ino` 签名轮询，变化时走与 watcher 相同的重读路径；
+  原生文件系统上它看到的签名就是 watcher 刚处理过的那个，不产生额外重载。定时器 `unref()`。
+- **子路径挂载时设置页打错 API 基址**：客户端改用以 `document.baseURI` 解析的绝对 URL，
+  GUI 不再假定自己挂在站点根上。
+- **设置页挂载失败曾经完全静默**：slot 挂载抛错时现在有可见告警，而不是"入口消失但日志空白"。
+- **`install.mjs` 把 profile 写死成 `web`**：解析顺序改为 `$DSH_PROFILE_DIR` → `--profile <名>`
+  → `$DSH_PROFILE` → `web`；目标 profile 不存在（没有 `package.json`）时**拒绝写入**并列出
+  `<DSH_HOME>/profiles/` 下真正有 profile 的目录，而不是装进一个不会被加载的目录后打印成功。
+
+### 测试与工具
+
+- **`host-range-test.mjs` 不再只认 web profile**：枚举 `$DSH_HOME/profiles/*/node_modules`、
+  `profiles/node_modules` 与全局安装去找 `semver` 和 `@deepseek-ai/dsh/package.json`。此前在
+  superagent 这类 profile 上探测不到宿主版本，测试会以 `ALL PASS (skipped)` 假绿。
+- **5 个套件的临时目录移出仓库**：改用 `os.tmpdir()` + `mkdtemp()`，崩溃的运行不再在检出的
+  仓库里留下 `.test-dsh-home*` / `.test-install-*`；spawn `install.mjs` 的子进程环境里剥掉
+  继承来的 `DSH_PROFILE_DIR` / `DSH_PROFILE`，夹具 home 不会被新解析顺序顶掉。
+- **`lint.mjs` 增加静态断言**：`lib/` 内不得出现 `@deepseek-ai/*` 的包名导入（插件只通过宿主
+  传入的上下文对象接触宿主；按包名 import 会把插件钉死在某个安装位置）。
+- **契约 / 设置页测试跟到 fail-closed 语义**：非回环绑定 + 有鉴权门 → 200 且面板显示安全警告；
+  没有门 → 503 且面板显示被拒原因（此前断言"面板能读快照并警告"，与新行为相反）。
+- 全套 7 个套件（含 `lint.mjs`）在宿主 `0.2.2-alpha.3` / WSL drvfs 上全绿。
+
+### 源码复核的第 2 轮补丁（2026-11-03）
+
+上面那批改动做了一次逐行复核，补了 5 处；前两条都出在"守卫自己判断得对不对"上。
+
+- **"在 `$DSH_HOME` 内"改为按真实路径判断**：`isInsideDshRoot` 原来只比字符串前缀。Windows 上
+  建 junction 不需要任何权限，所以 `$DSH_HOME` 里一个指向外部的链接就能让"备份位置限定"形同
+  虚设——已用临时 junction 复现：词法检查通过、`realpath` 在外部。现在两端都取 `realpath`
+  比较，尚不存在的目标按"最深的已存在祖先的真实路径 + 待创建部分"判断（负向对照：把判断退回
+  词法版本，新断言会失败）。
+- **`$DSH_HOME` 由解析得出，不再反推**：`dirname(dirname(storePath))` 今天恰好等于它，但存储
+  目录多一层、或文件上移一层，这个"守卫的根"就会静默变成**父目录**。新增
+  `resolveDshRoot()`（`resolveStorePath` 改为复用它），`$DSH_HOME=/` 这类极端值也不再无声放开。
+- **`--profile` 只接受名字**：`install.mjs` 直接把参数拼进 `profiles/`，`--profile ../../x`
+  可以逃出 profile 根（仍需目标已有 `package.json`）。现在用 `^[a-z0-9][a-z0-9._-]*$` 校验，
+  不合规就报错退出并提示改用 `$DSH_PROFILE_DIR`。
+- **`fs.watch` 失败不再静默**：watcher 报错时只 `stopWatching()`，之后仅靠 5 秒轮询兜底，
+  用户与日志都看不到"已经降级"。现在先记一行 `logInfo` 再降级。
+- **文档两处对齐**：非回环绑定那一行补上"该结论以宿主发布了 `connection` 为前提，否则一律 503"
+  的交叉引用；`DSH_INSTRUCTION_MEMORY_TRUSTED_HOSTS` 一节写明它**不放宽** `Sec-Fetch-Site`
+  （反代 + 子域若发出 `same-site` 仍 403，应改用隧道）。
+- **补齐这两类开关的测试**：可信主机名 8 条（放行 / 其他名仍拒 / 外来 `Origin` 仍拒 /
+  `same-site` 仍拒 / `cross-site` 仍拒 / 空表不放宽 / 解析折叠 / 垃圾项丢弃），备份根 4 条
+  （默认拒绝并在拒绝时不落库、`=1` 后放行、链接解析到外部被拒）。全套 7 个套件 **965 条断言** 全绿。
+
 ## [1.4.7] — 2026-10-31
 
 **文档版**：没有一行运行时代码变更，只把 2026-10-31「插件在 DSH Go（Android）上的适配性」

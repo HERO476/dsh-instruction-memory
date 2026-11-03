@@ -3,7 +3,7 @@
  *   node smoke-test.mjs
  */
 import { isAbsolute, join, resolve } from 'node:path'
-import { MAX_BODY_CHARS, LIMITS, HISTORY_FILE_PATTERN, activeScope, buildBlock, canonicalIp, deviceTag, exportFileName, historyDeviceOf, historyEpochOf, historyFileName, historyRevOf, historyStamp, hostnameOf, inScope, isMuted, muteExpired, planHistoryPrune, planInjection, requestOriginVerdict, resolveStorePath, sanitizeEntry, sanitizeProfile, sanitizeSet, sanitizeTags, truncatedProfileFields, truncatedSetFields } from './lib/index.js'
+import { MAX_BODY_CHARS, LIMITS, HISTORY_FILE_PATTERN, activeScope, buildBlock, canonicalIp, deviceTag, exportFileName, historyDeviceOf, historyEpochOf, historyFileName, historyRevOf, historyStamp, hostnameOf, inScope, isMuted, muteExpired, normalizeTrustedHosts, planHistoryPrune, planInjection, requestOriginVerdict, resolveStorePath, sanitizeEntry, sanitizeProfile, sanitizeSet, sanitizeTags, truncatedProfileFields, truncatedSetFields } from './lib/index.js'
 
 let failures = 0
 /**
@@ -495,6 +495,28 @@ check('a multi-line 适用场景 is collapsed',
     vb({ host: '192.168.1.5:8080', origin: 'http://127.0.0.1:8080' }, false, '192.168.1.5'), (x) => x === false)
   check('no concrete bind: the Host comparison is unchanged',
     vb({ host: 'attacker.example:8080', origin: 'http://attacker.example:8080' }, false, ''), (x) => x === true)
+
+  // F19 trusted hosts: an operator-listed name is accepted on a loopback bind,
+  // and ONLY that rule is relaxed — Origin, cross-site and same-site still stand.
+  const vt = (headers, guarded, trusted) => requestOriginVerdict(headers, guarded, '', trusted).ok
+  check('trusted host: an explicitly listed name passes the loopback allowlist',
+    vt({ host: 'dsh.lan:8080', origin: 'http://dsh.lan:8080' }, true, ['dsh.lan']), (x) => x === true)
+  check('trusted host: any other non-loopback name is still refused',
+    vt({ host: 'evil.com:8080', origin: 'http://evil.com:8080' }, true, ['dsh.lan']), (x) => x === false)
+  check('trusted host: a trusted name does not excuse a foreign Origin',
+    vt({ host: 'dsh.lan:8080', origin: 'http://evil.com' }, true, ['dsh.lan']), (x) => x === false)
+  check('trusted host: same-site is still refused (only the Host rule is relaxed)',
+    vt({ host: 'dsh.lan:8080', origin: 'http://dsh.lan:8080', 'sec-fetch-site': 'same-site' }, true, ['dsh.lan']), (x) => x === false)
+  check('trusted host: cross-site is still refused',
+    vt({ host: 'dsh.lan:8080', origin: 'http://dsh.lan:8080', 'sec-fetch-site': 'cross-site' }, true, ['dsh.lan']), (x) => x === false)
+  check('trusted host: an empty list changes nothing',
+    vt({ host: 'dsh.lan:8080', origin: 'http://dsh.lan:8080' }, true, []), (x) => x === false)
+  check('trusted host: parsing folds origin/port/brackets/case to bare hostnames',
+    JSON.stringify(normalizeTrustedHosts('https://App.Example:8443, [::1] ,dsh.lan, app.example')) === JSON.stringify(['app.example', '::1', 'dsh.lan']),
+    JSON.stringify(normalizeTrustedHosts('https://App.Example:8443, [::1] ,dsh.lan, app.example')))
+  check('trusted host: blank/garbage entries are dropped',
+    JSON.stringify(normalizeTrustedHosts('  , ,://')) === JSON.stringify([]),
+    JSON.stringify(normalizeTrustedHosts('  , ,://')))
   // The bind authority is for publishes only: on loopback the allowlist already
   // pins Host, and forcing the bind name would break legitimate aliasing
   // (::1 / 127.0.0.1 / ::ffff:127.0.0.1 all reach the same local server).
@@ -833,12 +855,15 @@ check('a multi-line 适用场景 is collapsed',
 // unhandled rejection instead of reporting the refusal.
 {
   const { spawnSync } = await import('node:child_process')
-  const { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync, lstatSync, symlinkSync, unlinkSync } =
+  const { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync, lstatSync, symlinkSync, unlinkSync } =
     await import('node:fs')
+  const { tmpdir } = await import('node:os')
   const { dirname, join } = await import('node:path')
   const { fileURLToPath } = await import('node:url')
   const repo = dirname(fileURLToPath(import.meta.url))
-  const root = join(repo, '.test-install-p' + process.pid)
+  // Outside the checkout: an install fixture is throwaway state, and a crashed
+  // run used to leave `.test-install-p<pid>` directories in the repo.
+  const root = mkdtempSync(join(tmpdir(), 'dsh-im-install-'))
   const linkPath = join(root, 'profiles', 'web', 'node_modules', 'dsh-instruction-memory')
   const pkgPath = join(root, 'profiles', 'web', 'package.json')
   const seed = () => {
@@ -849,8 +874,17 @@ check('a multi-line 适用场景 is collapsed',
       dsh: { profile: { bundles: ['dsh-instruction-memory'] } },
     }, null, 2) + '\n')
   }
+  // The fixture home has to win. DSH exports DSH_PROFILE_DIR/DSH_PROFILE to
+  // every process it spawns, and install.mjs honours them ahead of $DSH_HOME —
+  // so an inherited value would point this fixture run at the LIVE profile.
+  const fixtureEnv = (home) => {
+    const env = { ...process.env, DSH_HOME: home }
+    delete env.DSH_PROFILE_DIR
+    delete env.DSH_PROFILE
+    return env
+  }
   const run = (args) => spawnSync(process.execPath, [join(repo, 'install.mjs'), ...args], {
-    env: { ...process.env, DSH_HOME: root },
+    env: fixtureEnv(root),
     stdio: 'inherit',
   })
   const cleanup = () => {

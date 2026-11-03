@@ -1,8 +1,14 @@
 /**
- * Install / uninstall dsh-instruction-memory into the web profile.
+ * Install / uninstall dsh-instruction-memory into a DSH profile.
  *
- *   node install.mjs           # install
- *   node install.mjs --remove  # roll back completely
+ *   node install.mjs                          # install into the default profile
+ *   node install.mjs --profile superagent     # install into a named profile
+ *   node install.mjs --remove                 # roll back completely
+ *
+ * The profile is resolved in the same order the boot uses:
+ * $DSH_PROFILE_DIR (a path), then --profile <name>, then $DSH_PROFILE, then
+ * 'web'. A profile that holds no package.json is refused before anything is
+ * written, and the profiles that do exist are listed.
  *
  * Three idempotent steps:
  *   1. make the package resolvable from the profile's node_modules (junction)
@@ -17,7 +23,7 @@
  *
  * The profile package.json is backed up before the first modification.
  */
-import { existsSync, readFileSync, writeFileSync, symlinkSync, lstatSync, unlinkSync, copyFileSync, mkdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, writeFileSync, symlinkSync, lstatSync, unlinkSync, copyFileSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -29,7 +35,75 @@ import { fileURLToPath } from 'node:url'
 const DSH_HOME = typeof process.env.DSH_HOME === 'string' && process.env.DSH_HOME.trim() !== ''
   ? resolve(process.env.DSH_HOME.trim())
   : join(homedir(), '.dsh')
-const PROF = join(DSH_HOME, 'profiles', 'web')
+
+// Which profile to install into.
+//
+// This used to be hardcoded to 'web'. On a machine whose DSH runs the
+// `superagent` profile the script created a junction and a bundle entry inside
+// a profile nothing loads, then printed INSTALLED — the plugin looked installed
+// and stayed invisible. Resolve it instead, with the same precedence the boot
+// uses (an explicit directory wins over a name; the environment wins over the
+// default):
+//
+//   $DSH_PROFILE_DIR  (a path)
+//   --profile <name>
+//   $DSH_PROFILE      (a name)
+//   'web'
+const PROFILES_ROOT = join(DSH_HOME, 'profiles')
+
+function profileNameFromArgv() {
+  const index = process.argv.indexOf('--profile')
+  if (index === -1) return null
+  const value = process.argv[index + 1]
+  if (value === undefined || value.startsWith('-')) {
+    console.error('--profile needs a profile name, e.g. --profile superagent')
+    console.error('  nothing was changed.')
+    process.exit(1)
+  }
+  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(value)) {
+    console.error('--profile takes a profile NAME (e.g. superagent), not a path: ' + value)
+    console.error('  use --profile to pick a name, or $DSH_PROFILE_DIR for an explicit directory.')
+    console.error('  nothing was changed.')
+    process.exit(1)
+  }
+  return value
+}
+
+const explicitProfileDir = typeof process.env.DSH_PROFILE_DIR === 'string' && process.env.DSH_PROFILE_DIR.trim() !== ''
+  ? resolve(process.env.DSH_PROFILE_DIR.trim())
+  : null
+const profileName = profileNameFromArgv()
+  ?? (typeof process.env.DSH_PROFILE === 'string' && process.env.DSH_PROFILE.trim() !== ''
+    ? process.env.DSH_PROFILE.trim()
+    : null)
+  ?? 'web'
+const PROF = explicitProfileDir ?? join(PROFILES_ROOT, profileName)
+
+/** Profile directories that actually hold a manifest, for the failure message. */
+function visibleProfiles() {
+  try {
+    return readdirSync(PROFILES_ROOT, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && existsSync(join(PROFILES_ROOT, entry.name, 'package.json')))
+      .map((entry) => entry.name)
+      .sort()
+  } catch {
+    return []
+  }
+}
+
+// Fail before any filesystem change: writing into a profile that does not
+// exist would create `profiles/<typo>/` and report success for an install that
+// can never load.
+if (!existsSync(join(PROF, 'package.json'))) {
+  const visible = visibleProfiles()
+  console.error('profile not found: ' + PROF)
+  console.error('  choose one with  --profile <name>  (or set $DSH_PROFILE / $DSH_PROFILE_DIR).')
+  console.error(visible.length > 0
+    ? '  profiles available under ' + PROFILES_ROOT + ': ' + visible.join(', ')
+    : '  no profile with a package.json under ' + PROFILES_ROOT)
+  console.error('  nothing was changed.')
+  process.exit(1)
+}
 // This script lives in the package root, so the source is wherever it runs from.
 const SRC = dirname(fileURLToPath(import.meta.url))
 const NAME = 'dsh-instruction-memory'
@@ -151,11 +225,6 @@ if (remove) {
 // ---- install ----
 if (!existsSync(SRC)) {
   console.error('source package not found: ' + SRC)
-  process.exit(1)
-}
-
-if (!existsSync(join(PROF, 'package.json'))) {
-  console.error('web profile not found at ' + PROF + '（DSH 尚未初始化该 profile？）')
   process.exit(1)
 }
 
