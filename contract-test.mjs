@@ -13,7 +13,7 @@
  * directory under .test-dsh-home, seeded with an over-cap memory.json so the
  * dropped-entries warning path is exercised too.
  */
-import { mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { join, sep } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
@@ -948,8 +948,17 @@ async function statusFor(headers, body) {
 // carrying the unsaved edit for the rest of the process lifetime, so the model
 // obeyed an instruction the user had been told was not saved.
 {
-  const tmpDir = join(SCRATCH_HOME, 'instruction-memory', 'memory.json.tmp')
-  await mkdir(tmpDir, { recursive: true })
+  // Inject a disk-write failure that does NOT depend on the temp-file name:
+  // the store path itself becomes a non-empty DIRECTORY, so the atomic
+  // `rename(tmp, storePath)` is what fails. The temp path is unique per
+  // attempt now (two processes sharing a $DSH_HOME must never interleave into
+  // one temp file), so the old trick of pre-creating `memory.json.tmp` no
+  // longer blocks anything — correctly.
+  const parking = STORE_FILE + '.parked-by-test'
+  await rm(parking, { force: true })
+  await rename(STORE_FILE, parking)
+  await mkdir(STORE_FILE, { recursive: true })
+  await writeFile(join(STORE_FILE, 'keep'), 'x')
 
   const failed = await callRoute(handler, {
     method: 'save-entry',
@@ -964,7 +973,8 @@ async function statusFor(headers, body) {
   check('a failed set-options also rolls back',
     (await callRoute(handler, { method: 'set-options', args: { enabled: false } })).snapshot.data.enabled === true)
 
-  await rm(tmpDir, { recursive: true, force: true })
+  await rm(STORE_FILE, { recursive: true, force: true })
+  await rename(parking, STORE_FILE)
 }
 
 // --- A missing primary with a good backup must recover, not go empty. -----
