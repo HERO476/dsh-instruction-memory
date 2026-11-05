@@ -66,7 +66,7 @@ profile 的解析顺序是 **`$DSH_PROFILE_DIR` → `--profile <名字>` → `$D
 | `smoke-test.mjs` | 注入渲染逻辑的单元测试（含「只渲染激活配置集」的隔离断言与 cwd 红线） |
 | `host-range-test.mjs` | 宿主版本范围契约测试：固定矩阵 × 两种 semver 判定模式，并把 `peerDependencies`（**被执行的那个**）、`dsh.engines.dsh`、`dsh.compatibility.dsh` 三处声明锁到同一个生成值 |
 | `lint.mjs` | 静态门禁，已并入 `npm test`：`node --check` 解析所有随包发布与本仓库运行的 JS 文件，并断言 `lib/` 里不出现 `@deepseek-ai/*` 的包名导入（插件只该通过宿主传进来的上下文对象接触宿主，按包名 import 会把插件钉死在某个安装位置，在 headless / CI / 检出目录里直接解析失败） |
-| `live-host-smoke.mjs` | 双端冒烟：对**正在运行**的 web / 桌面宿主各测 `state` p50/p95、SSE 首事件、注入注册与字符数，并比对两端快照（除 `injection.pulls` 外须逐字段相同）；`npm run smoke:hosts`，`--require-pulls` 可把「从未经历真实 Agent 回合」判为失败。**刻意不进 `npm test`**——CI 没有桌面端。请求走 Node `http` 直连，绕开 `http_proxy`（否则回环请求也会被代理转发，读数虚高） |
+| `live-host-smoke.mjs` | 双端冒烟（**1.4.8 起宿主有鉴权门，需 `--token <启动 token>` 换会话 cookie**，否则全 401）：对**正在运行**的 web / 桌面宿主各测 `state` p50/p95、SSE 首事件、注入注册与字符数，并比对两端快照（除 `injection.pulls` 外须逐字段相同）；`npm run smoke:hosts`，`--require-pulls` 可把「从未经历真实 Agent 回合」判为失败。**刻意不进 `npm test`**——CI 没有桌面端。请求走 Node `http` 直连，绕开 `http_proxy`（否则回环请求也会被代理转发，读数虚高） |
 | `docs/demo.html` | 离线演示页：桩掉 DSH 外壳、加载真实 Client 半渲染设置页（不随 npm 包发布） |
 | `memory.schema.json` | 手改存储文件用的 JSON Schema（随包发布，并被宿主复制到 `memory.json` 旁边） |
 
@@ -362,6 +362,9 @@ DSH 就会得到第二份空记忆，看起来像"记忆消失"。相对的 `$DS
   把这些设置放在别的盘（比如 Windows 上的 D:）就得显式打开：
   `DSH_INSTRUCTION_MEMORY_ALLOW_EXTERNAL_BACKUP=1`（重启宿主生效）。导出目录受同一条限制；
   手改存储文件把 `backupDir` 指到外面也同样被拒——这条路不能变成创建任意目录的通道。
+  这条规则在**写入时**也执行，不只在校验时：设置页、导出、以及每次保存附带的 `.bak` 与历史
+  快照都走同一个判断（1.5.1 起）。检测到越界的外来 `backupDir` 会被忽略并**在面板上披露**，
+  备份与快照写回默认位置，而不是在外目录里悄悄留下文件。
 - **导出有 2 秒节流**：两次「导出到备份目录」之间要隔 2 秒，否则提示"还需等几秒"。导出写的是
   整份存储（满配约 1.2 M 字符），连点不该变成写放大。
 - 报错文本会折叠路径：自定义备份目录 → `<备份目录>`（云盘路径常带账号名）、记忆目录 →
@@ -638,6 +641,11 @@ DNS 重绑定恰好推翻了它**：`evil.com` 解析到 `127.0.0.1` 之后，�
 
 ### 可信主机名（`DSH_INSTRUCTION_MEMORY_TRUSTED_HOSTS`）
 
+> ⚠️ 这一项**只放宽主机名校验，不提供任何身份认证**。在没有宿主 `connection` 服务的 profile
+> 上，如果一个反代把请求转成"合法主机名"，这条路由就是无登录可读写的。面板在该组合
+> （`security.hostGuarded=false`、`security.authFence=false`、`trustedHostCount>0`）下会显示
+> 专门的橙色警告；对外发布请改用隧道，或在代理层自己做认证。
+
 回环绑定下 `Host` 必须是回环名。若你的访问方式让浏览器发出的 `Host` 不是 `127.0.0.1` /
 `localhost` / `[::1]`——`hosts` 里把 `dsh.lan` 指向 127.0.0.1、Tailscale 的 MagicDNS 名、
 或隧道把域名透传进来——可以在启动宿主的环境里显式放行（**仅在没有 `connection` 服务的
@@ -843,7 +851,8 @@ DSH Go（Android 客户端）内置的引擎就是**真实 DSH**，锁定 `@deep
 `HOME` 对引擎无效**，别按字面读 `DshProcess.kt`。
 
 - **兼容性**：`0.2.1-rc.4` 正好是上表①档已实测的版本。2026-10-31 又用同一个 rc.4 在隔离的
-  `DSH_HOME` 上复跑一遍 **21/21**（`compat-1016-live-check.mjs`），注入实测
+  `DSH_HOME` 上复跑一遍 **21/21**（`compat-1016-live-check.mjs`；1.5.1 起该脚本第四个参数给启动
+  token 时会先 `GET /?token=` 换会话 cookie，不再在带鉴权门的宿主上假失败），注入实测
   `chars=292 / budget=4000`、`state` p95 1.09 ms、SSE 首帧 0.71 ms；证据
   `dsh-memory-verification/out/compat-1016-live-rc4-audit.json`。
 - **数据位置**：`/root/.dsh/instruction-memory/memory.json`，在 App 私有目录的 rootfs 内，

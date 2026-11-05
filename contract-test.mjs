@@ -3173,6 +3173,125 @@ if (process.platform === 'win32') {
   }
 }
 
+/* ---------------- 2026-11-05 audit: write root, version type, fence shape ----- */
+
+// Mount helper for one throwaway home: returns the route handler and the home.
+async function mountWithHome (home, { connection } = {}) {
+  let handler = null
+  const ctx = {
+    systemPrompt: { section: () => () => {} },
+    inject: (deps, callback) => {
+      const names = Array.isArray(deps) ? deps : Object.keys(deps)
+      const child = { effect: (fn) => { fn(); return () => {} } }
+      if (names.includes("webServer")) child.webServer = { register: (route) => { handler = route.handler; return () => {} } }
+      if (names.includes("connection") && connection !== undefined) child.connection = connection
+      callback(child)
+      return null
+    },
+    get: () => undefined,
+    effect: (fn) => { fn(); return () => {} },
+  }
+  const mod = await import(new URL("./lib/index.js", import.meta.url).href + "?audit1105=" + Date.now() + Math.random())
+  mod.apply(ctx)
+  return handler
+}
+
+/** Like callRoute, but keeps the status code: the fence checks need both. */
+const callOn = async (handler, payload) => {
+  const out = await rawRoute(handler, JSON.stringify(payload))
+  let json = null
+  try { json = JSON.parse(out.body) } catch { /* non-JSON refusal */ }
+  return { status: out.status, json }
+}
+
+{
+  // P2-1: a store hand-edited to point the backup directory OUTSIDE the
+  // harness home must not be able to write there on the next save. Before the
+  // fix the guard ran only in set-options and export-to-dir, so every save
+  // dropped .bak + a history snapshot into the outside directory.
+  const home = scratchHome("-wroot")
+  const outside = scratchHome("-wroot-outside")
+  await mkdir(join(home, "instruction-memory"), { recursive: true })
+  await writeFile(join(home, "instruction-memory", "memory.json"), JSON.stringify({
+    version: 2, rev: 1, enabled: true, budgetChars: 4000, backupDir: outside,
+    activeSetId: "st-default",
+    sets: [{ id: "st-default", name: "默认" }],
+    entries: [], profiles: [],
+  }), "utf8")
+  const previousHome = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  try {
+    const handler = await mountWithHome(home)
+    const state = await callOn(handler, { method: "state" })
+    check("write root: a backupDir outside the harness home is disclosed, not obeyed",
+      String(state.json.snapshot.storage.warning || "").includes("不在 DSH 主目录内"),
+      JSON.stringify(state.json.snapshot.storage.warning))
+    const saved = await callOn(handler, {
+      method: "save-entry",
+      args: { entry: { id: "wroot", title: "WROOT", content: "x", mode: "always", when: "", priority: 1, enabled: true, updatedAt: 0 }, baseRev: state.json.snapshot.data.rev },
+    })
+    const outsideEntries = await readdir(outside).catch(() => [])
+    check("write root: saving writes nothing outside the harness home",
+      saved.json.ok === true && outsideEntries.length === 0,
+      "ok=" + saved.json.ok + " outside=" + JSON.stringify(outsideEntries))
+    const localHistory = await readdir(join(home, "instruction-memory", "history")).catch(() => [])
+    check("write root: the history snapshot lands beside the store instead",
+      localHistory.length > 0, JSON.stringify(localHistory))
+  } finally {
+    if (previousHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previousHome
+  }
+}
+
+{
+  // P3-1: a version that is a STRING must not be reported as the number it
+  // spells ("declared version 2, supported versions 1 / 2").
+  const home = scratchHome("-vtype")
+  await mkdir(join(home, "instruction-memory"), { recursive: true })
+  await writeFile(join(home, "instruction-memory", "memory.json"), JSON.stringify({ version: "2", entries: [] }), "utf8")
+  const previousHome = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  try {
+    const handler = await mountWithHome(home)
+    const state = await callOn(handler, { method: "state" })
+    const error = String(state.json.snapshot.storage.error || "")
+    check("version type: a string version is reported as a TYPE problem",
+      error.includes("类型不正确") && error.includes("\"2\""), error)
+    check("version type: the message no longer claims 2 is a supported version",
+      !error.includes("声明为格式版本 2，本插件支持的格式版本为 1 / 2"), error)
+    const saved = await callOn(handler, { method: "save-entry", args: { entry: { id: "v2", title: "V2", content: "x", mode: "always", when: "", priority: 1, enabled: true, updatedAt: 0 } } })
+    check("version type: writes stay paused", saved.json.ok === false, JSON.stringify(saved.json.message))
+  } finally {
+    if (previousHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previousHome
+  }
+}
+
+{
+  // P3-5: the fence returning something other than 401/403/undefined must not
+  // be read as "admitted". A future host that answers {status:401} would have
+  // opened the route with the old check.
+  const home = scratchHome("-fence")
+  await mkdir(join(home, "instruction-memory"), { recursive: true })
+  const previousHome = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  try {
+    for (const [label, value] of [["an object", { status: 401 }], ["a string", "nope"], ["an Error", new Error("boom")]]) {
+      const handler = await mountWithHome(home, { connection: { requestRejection: () => value } })
+      const res = await callOn(handler, { method: "state" })
+      check("fence shape: " + label + " is treated as a refusal (401), not an admit",
+        res.status === 401, "status=" + res.status)
+    }
+    const handler = await mountWithHome(home, { connection: { requestRejection: () => undefined } })
+    const open = await callOn(handler, { method: "state" })
+    check("fence shape: undefined still admits (the documented value)",
+      open.status === 200, "status=" + open.status)
+  } finally {
+    if (previousHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previousHome
+  }
+}
+
 // A late stray rejection could land after ALL PASS; the crash-hook exitCode
 // must survive the final process.exit (which would otherwise force 0).
 const exitCode = failures === 0 ? (process.exitCode || 0) : 1

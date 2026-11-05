@@ -22,6 +22,9 @@
  *   node live-host-smoke.mjs --rounds 30        # latency sample count
  *   node live-host-smoke.mjs --json             # machine-readable output
  *   node live-host-smoke.mjs --require-pulls    # exit 1 if pulls === 0
+ *   node live-host-smoke.mjs --token <t>        # exchange the launch token for
+ *                                               # a session cookie (needed on
+ *                                               # every host with an auth fence)
  *
  * Exit code: 0 all green, 1 a check failed, 2 no host reachable.
  */
@@ -30,13 +33,21 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const API = '/instruction-memory/api'
+/** port -> session cookie, when that host requires one (see --token below). */
+const COOKIES = new Map()
 const args = process.argv.slice(2)
 const flag = (name) => args.includes('--' + name)
 const opt = (name, fallback) => {
   const at = args.indexOf('--' + name)
   return at === -1 ? fallback : Number(args[at + 1])
 }
+/** Same shape for values that must stay strings (the launch token). */
+const strOpt = (name) => {
+  const at = args.indexOf('--' + name)
+  return at === -1 || args[at + 1] === undefined ? null : args[at + 1]
+}
 
+const TOKEN = strOpt('token')
 const ROUNDS = opt('rounds', 20)
 const AS_JSON = flag('json')
 const REQUIRE_PULLS = flag('require-pulls')
@@ -70,6 +81,7 @@ function post (port, payload, timeoutMs = 8000) {
         'content-type': 'application/json',
         'content-length': Buffer.byteLength(body),
         origin: 'http://127.0.0.1:' + port,
+        ...(COOKIES.has(port) ? { cookie: COOKIES.get(port) } : {}),
       },
     }, (res) => {
       const chunks = []
@@ -96,7 +108,11 @@ function sseFirstEvent (port, timeoutMs = 5000) {
       port,
       path: API,
       method: 'GET',
-      headers: { accept: 'text/event-stream', origin: 'http://127.0.0.1:' + port },
+      headers: {
+        accept: 'text/event-stream',
+        origin: 'http://127.0.0.1:' + port,
+        ...(COOKIES.has(port) ? { cookie: COOKIES.get(port) } : {}),
+      },
     }, (res) => {
       let buf = ''
       let first = null
@@ -177,6 +193,36 @@ function diffSnapshots (a, b) {
   walk(a, b, '')
   return out
 }
+
+/**
+ * Exchange a launch token for that host's session cookie.
+ *
+ * Since 1.4.8 the route sits behind the harness `connection` fence, so an
+ * unauthenticated probe gets 401 on a healthy host and this tool used to
+ * report "unreachable" instead of a number. `GET /?token=…` is what the GUI
+ * itself does; the Set-Cookie it returns is kept per port.
+ */
+function bootstrap (port, token) {
+  return new Promise((resolve) => {
+    const req = http.request({
+      host: '127.0.0.1',
+      port,
+      path: '/?token=' + encodeURIComponent(token),
+      method: 'GET',
+      headers: { origin: 'http://127.0.0.1:' + port },
+    }, (res) => {
+      const raw = res.headers['set-cookie']
+      res.resume()
+      const first = Array.isArray(raw) ? raw[0] : raw
+      if (typeof first === 'string') COOKIES.set(port, first.split(';')[0])
+      resolve()
+    })
+    req.on('error', () => resolve())
+    req.end()
+  })
+}
+
+if (TOKEN !== null) for (const host of PORTS) await bootstrap(host.port, TOKEN)
 
 const results = []
 for (const host of PORTS) results.push(await probe(host))

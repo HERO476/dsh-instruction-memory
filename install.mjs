@@ -5,10 +5,16 @@
  *   node install.mjs --profile superagent     # install into a named profile
  *   node install.mjs --remove                 # roll back completely
  *
- * The profile is resolved in the same order the boot uses:
- * $DSH_PROFILE_DIR (a path), then --profile <name>, then $DSH_PROFILE, then
- * 'web'. A profile that holds no package.json is refused before anything is
- * written, and the profiles that do exist are listed.
+ * The profile is resolved in this order: $DSH_PROFILE_DIR (a path), then
+ * --profile <name>, then $DSH_PROFILE, then 'web' UNDER $DSH_HOME. Note which
+ * variable decides what: $DSH_HOME moves the profiles ROOT, while the name
+ * comes from $DSH_PROFILE_DIR / --profile / $DSH_PROFILE. A DSH that spawned
+ * this shell exports both, so $DSH_PROFILE_DIR wins over the home you just
+ * set — the script warns when the two disagree instead of silently writing
+ * into the live profile.
+ *
+ * A profile that holds no package.json is refused before anything is written,
+ * and the profiles that do exist are listed.
  *
  * Three idempotent steps:
  *   1. make the package resolvable from the profile's node_modules (junction)
@@ -37,6 +43,11 @@ const DSH_HOME = typeof process.env.DSH_HOME === 'string' && process.env.DSH_HOM
   : join(homedir(), '.dsh')
 
 // Which profile to install into.
+//
+// $DSH_HOME only moves the profiles ROOT. The NAME comes from the variables
+// below, and DSH exports both to every child process — so a shell that merely
+// sets DSH_HOME to a scratch directory still installs into $DSH_PROFILE_DIR
+// (the live profile). That mismatch is announced rather than silently obeyed.
 //
 // This used to be hardcoded to 'web'. On a machine whose DSH runs the
 // `superagent` profile the script created a junction and a bundle entry inside
@@ -78,6 +89,16 @@ const profileName = profileNameFromArgv()
     : null)
   ?? 'web'
 const PROF = explicitProfileDir ?? join(PROFILES_ROOT, profileName)
+
+// A DSH that spawned this shell exports BOTH DSH_HOME and DSH_PROFILE_DIR.
+// Setting only DSH_HOME therefore does not redirect the install: the explicit
+// profile directory still wins, and the write lands in the live profile. Say
+// so BEFORE it happens rather than after.
+if (explicitProfileDir !== null && !explicitProfileDir.startsWith(DSH_HOME)) {
+  console.error('warning: DSH_PROFILE_DIR (' + explicitProfileDir + ') is not inside DSH_HOME (' + DSH_HOME + ')')
+  console.error('  the explicit profile directory wins, so this install goes to the profile above,')
+  console.error('  not to the home you may have just set. Unset DSH_PROFILE_DIR to use DSH_HOME.')
+}
 
 /** Profile directories that actually hold a manifest, for the failure message. */
 function visibleProfiles() {

@@ -34,6 +34,17 @@ const ORIGIN = BASE_URL
 const HOST_HEADER = u.host
 /** The plugin owns this fixed prefix regardless of any path in BASE_URL. */
 const API_PATH = '/instruction-memory/api'
+/**
+ * Browser session cookie, when the host has an authentication fence.
+ *
+ * 1.4.8 put this route behind the harness `connection` service: without a
+ * logged-in session every request answers 401 before it reaches the plugin.
+ * The token printed by `dsh web` buys exactly that session — the GUI itself
+ * does `GET /?token=…` and keeps the Set-Cookie. This script used to send the
+ * token to the SSE URL only, so on any fenced host it reported a cascade of
+ * failures against a perfectly healthy plugin.
+ */
+let SESSION_COOKIE = null
 
 const results = []
 function check(id, label, ok, detail) {
@@ -56,6 +67,7 @@ function call(method, args, { headers = {}, bodyOverride = null, rawPath = null 
         host: HOST_HEADER,
         origin: ORIGIN,
         'content-length': Buffer.byteLength(payload),
+        ...(SESSION_COOKIE === null ? {} : { cookie: SESSION_COOKIE }),
         ...headers,
       },
     }, (res) => {
@@ -79,7 +91,13 @@ function getOnce({ sse = false, headers = {} } = {}) {
   return new Promise((resolve) => {
     const req = http.request({
       hostname: u.hostname, port: u.port, path: API_PATH + (sse && ACCESS_TOKEN ? `?token=${ACCESS_TOKEN}` : ''), method: 'GET',
-      headers: { host: HOST_HEADER, origin: ORIGIN, ...(sse ? { accept: 'text/event-stream' } : {}), ...headers },
+      headers: {
+        host: HOST_HEADER,
+        origin: ORIGIN,
+        ...(sse ? { accept: 'text/event-stream' } : {}),
+        ...(SESSION_COOKIE === null ? {} : { cookie: SESSION_COOKIE }),
+        ...headers,
+      },
     }, (res) => {
       let buf = ''
       res.setEncoding('utf8')
@@ -102,10 +120,42 @@ function getOnce({ sse = false, headers = {} } = {}) {
   })
 }
 
+/**
+ * Exchange the launch token for the session cookie, exactly like opening the
+ * GUI does. Returns true when a cookie was obtained (or when no token was
+ * given, in which case the host is expected to have no fence).
+ */
+function bootstrapSession() {
+  if (!ACCESS_TOKEN) return Promise.resolve(true)
+  return new Promise((resolve) => {
+    const req = http.request({
+      hostname: u.hostname,
+      port: u.port,
+      path: '/?token=' + encodeURIComponent(ACCESS_TOKEN),
+      method: 'GET',
+      headers: { host: HOST_HEADER },
+    }, (res) => {
+      const raw = res.headers['set-cookie']
+      res.resume()
+      const first = Array.isArray(raw) ? raw[0] : raw
+      if (typeof first === 'string') SESSION_COOKIE = first.split(';')[0]
+      resolve(SESSION_COOKIE !== null)
+    })
+    req.on('error', () => resolve(false))
+    req.end()
+  })
+}
+
 const startedAt = new Date().toISOString()
 const mark = 'LIVE-' + Date.now().toString(36)
 let createdId = null
 let restoredOptions = null
+
+/* ---- 0. session bootstrap (only on hosts with an authentication fence) ---- */
+if (ACCESS_TOKEN) {
+  const ok = await bootstrapSession()
+  check('auth-bootstrap', 'launch token exchanged for a session cookie', ok, ok ? undefined : 'GET /?token= did not return Set-Cookie')
+}
 
 /* ---- 1. boot state + storage path ---- */
 const s0 = await call('state', null)
