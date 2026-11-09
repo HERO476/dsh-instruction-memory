@@ -7,6 +7,33 @@
 > 1.0.13 起由 CI 经 OIDC Trusted Publishing 发布（首个带 provenance 的版本）。
 > 这些历史 tag **不应回填**——npm 上的版本号已被占用。
 
+## [1.5.3] — 2026-11-09
+
+1.5.2 的发布后修正，两处都是当天发现：一处**判断依据用错**，一处**依赖了初始化顺序**。没有新功能，
+存储格式、注入文本与面板行为不变。
+
+### 修复
+
+- **背压判断把健康但读得慢的订阅者当成死连接（1.5.2 引入）**：1.5.2 让 `send()` 返回 `res.write()`
+  的结果，并在返回 `false` 时立刻 `cleanup()`。但 `write()` 的 `false` 只表示**这一次写入超过了
+  socket 缓冲的高水位**——一个健康、但此刻读得慢的客户端同样会拿到 `false`。于是一个大帧（极限存储
+  约 3.4 MB）就可能把正常订阅者踢下线。现在返回值不再用作存活判据：心跳只负责让"写失败"这条路走通
+  ——对端真的消失时，写入会报错并触发该流早已注册的 `close`/`error` 清理；`pushSnapshot` 恢复
+  1.5.1 的语义。
+- **`diskRevFrom()` 的声明顺序依赖**：1.5.2 把它定义在 `writeToDisk()` 之后。`apply()` 是同步函数，
+  通常情况下没有问题；但"缺主文件时从 `.bak` 恢复"这条路径会在 boot 序列里调用 `writeToDisk()`，
+  那是一次**可能先于声明执行**的调用，而 `const` 会落在暂时性死区并抛 `ReferenceError`（保存因此
+  失败、`storageError` 报"保存失败"）。现在两个 helper 提到 `writeToDisk()` 之前，用顺序消除这个
+  假设，而不是依赖"今天恰好先 await"。
+
+### 验收
+
+- 全套 7 个套件与 `node check-metadata.mjs` 全绿；`contract-test.mjs` 连续独立运行 5 次均 ALL PASS。
+- 1.5.2 的 CI 在 `windows-latest / Node 24` 上失败了 2 条 SSE 断言：
+  `sse: a writer that throws on broadcast is fully disposed (response ended)` 与
+  `sse: disposing the dead writer does not interrupt a healthy stream`。本版按上面的修正重新验证这两个
+  断言所在的路径（死连接清理 + 健康流不受牵连）。
+
 ## [1.5.2] — 2026-11-09
 
 针对 2026-11-09 的代码审查（Host 侧与 Client 侧并行只读审查，逐条复核后落地）。本版**没有新增功能、
