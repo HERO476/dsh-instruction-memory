@@ -7,6 +7,55 @@
 > 1.0.13 起由 CI 经 OIDC Trusted Publishing 发布（首个带 provenance 的版本）。
 > 这些历史 tag **不应回填**——npm 上的版本号已被占用。
 
+## [1.5.2] — 2026-11-09
+
+针对 2026-11-09 的代码审查（Host 侧与 Client 侧并行只读审查，逐条复核后落地）。本版**没有新增功能、
+没有格式变更**：存储文件、注入文本与面板行为在正常路径上与 1.5.1 逐字节一致，改的是一条静默失效的
+降级路径、一条失效的乱序保护，以及几处可以量化的重复 I/O 与空转渲染。
+
+### 修复
+
+- **watcher 降级把轮询器一起杀掉了（P0）**：`storeWatcher.on('error')` 的日志写的是「falling back to
+  the 5s poller」，紧接着却调用 `stopWatching()` —— 而该函数同时 `clearInterval(storePoll)`。于是
+  `fs.watch` 一旦报错（被监视目录被删或 rename、Windows 目录句柄失效、inotify 句柄耗尽），**watcher
+  与轮询器双双消失**，外部改动检测彻底静默，直到本进程下一次保存成功才重新装回。期间手改
+  `memory.json`、或另一个 DSH 进程保存，本窗口会一直显示旧数据，而面板没有任何提示。现在错误分支
+  只关闭 watcher 并显式 `startPolling()`（幂等），注释所承诺的降级才真的发生。
+- **SSE 乱序快照保护在推送路径上失效（P1）**：`absorb()` 用渲染作用域的 `view` 判定「到来的快照是否
+  比已在屏上的更旧」，但 SSE effect 的依赖是空数组，它捕获的是**首渲染**那份 `absorb`，其闭包里的
+  `view` 恒为 `null`，`currentRev` 永远是 `undefined` —— 于是注释点名的「SSE 触发刷新与 POST 回包
+  竞争」恰恰是唯一没被保护的那条路径。现在改读 `viewRef.current`（面板一直在维护它）。
+
+### 性能与加固（不改变外部行为）
+
+- **一次保存不再整读同一个文件三次（P1）**：`writeToDisk()` 在跨进程锁内依次 `readDiskRev()`、
+  再一次 `readDiskRev()`、再 `readStoreFile()`，只为拿磁盘 rev（两次结果必然相同，锁在自己手上）
+  与 `.bak` 的形状判定。现在一次读取同时供两处使用，`diskReadError` 保留原有 `ENOENT` / 空文件 /
+  非本插件存储三条分支的语义。极限存储（200 条 × 6000 字 ≈ 3.4 MB）下每次保存少约 10 MB 读取与
+  2 次整文件 `JSON.parse`，并缩短了锁的持有时间。
+- **事件流加上心跳与背压（P2）**：原来的 `send` 丢弃 `res.write()` 的返回值，清理只依赖
+  `close`/`error` 事件。客户端崩溃或休眠（没有 FIN）时条目不会被移除，积满 `MAX_SSE_STREAMS=32`
+  后所有新订阅者都被 503 拒绝，面板实时同步失效直到重启宿主；慢客户端还会让极限 3.4 MB 的全量帧
+  在 socket 缓冲里无界堆积。现在 25 秒共享心跳（`: ping` 注释帧，SSE 客户端按规范忽略）逐个探测，
+  `write()` 返回 `false` 即清理该流；`pushSnapshot` 同样按返回值清理。
+- **暂停倒计时不再空转重渲染整个面板（P2）**：`nowTick` 每秒写一次 state，但全文没有任何地方读取它
+  （剩余时间在渲染时用 `Date.now()` 现算）——每秒重跑并 diff 约 3000 个 vnode，只为让一行文字变化。
+  现在倒计时抽成 `MuteCountdown` 子组件，自带 1s tick，且只在归零时回调一次（SSE 已断、宿主不再推
+  快照时，暂停条也能自行退场）。
+- **列表派生计算记忆化（P2）**：排序、标签索引、筛选、关键词扫描与「按需预演」打分原先全部裸写在
+  渲染体里，每次按键或勾选一条都要重排 200 条并对全部正文重复小写化。现在收进 `deriveListState()`
+  并由 `useStableMemo()` 按（快照, UI 状态）缓存；预演只在展开时才打分（收起后不再扫全库）。
+  `useStableMemo` 建在 `useRef` 上而不是 `useMemo` 上，因为 ui-test 里那套迷你 React 只实现了
+  `useState`/`useEffect`/`useRef` —— 这样测试与生产走同一条代码路径，而不是为了测试加分支。
+
+### 验收
+
+- 全套 7 个套件（lint / host-range / smoke / contract / verify / feedback / ui）与
+  `node check-metadata.mjs` 全绿；`lib/` 13 个文件全部 PARSE 且无宿主包名导入。
+- **未做的验证（明确记录）**：watcher 故障注入没有做成真机测试——`storeWatcher` 是闭包内变量，
+  无法从外部触发 `error`，Windows 上删除被监视目录只会产生 `rename` 事件。第一条的保证来自
+  「`stopWatching()` 现在只剩插件卸载一处调用点」这一结构性证明，不是行为测试。
+
 ## [1.5.1] — 2026-11-05
 
 针对 2026-11-05 桌面端 / 网页端复核（架构 / 安全 / 验收三方）的 P1–P3 逐项修复。运行时在
