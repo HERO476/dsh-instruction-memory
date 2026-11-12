@@ -19,6 +19,10 @@
  *   node live-host-smoke.mjs                    # both, ports 8080 / 19387
  *   node live-host-smoke.mjs --web 8080         # only the web host
  *   node live-host-smoke.mjs --desktop 19387    # only the desktop host
+ *   node live-host-smoke.mjs --both             # both defaults, explicitly
+ *   node live-host-smoke.mjs --base http://127.0.0.1:11685
+ *                                               # one host serving both shells
+ *                                               # (parity is skipped, and said)
  *   node live-host-smoke.mjs --rounds 30        # latency sample count
  *   node live-host-smoke.mjs --json             # machine-readable output
  *   node live-host-smoke.mjs --require-pulls    # exit 1 if pulls === 0
@@ -51,9 +55,53 @@ const TOKEN = strOpt('token')
 const ROUNDS = opt('rounds', 20)
 const AS_JSON = flag('json')
 const REQUIRE_PULLS = flag('require-pulls')
+const WANTS_WEB = args.includes('--web')
+const WANTS_DESKTOP = args.includes('--desktop')
+const BASE = strOpt('base')
+/**
+ * `--web` / `--desktop` each select ONE side (optionally with its port). Giving
+ * both used to cancel both out — `PORTS` stayed empty, no request was sent, and
+ * the script still printed `ALL CHECKS PASSED`. A conflict is an error now, and
+ * `--both` is the honest way to say "the two default ports".
+ *
+ * `--base <origin>` is the single-host topology that actually ships: the desktop
+ * app serves its own GUI (and this route) over `http://127.0.0.1:<port>`, so
+ * "both shells" is one process, not two. Parity is meaningless there and the
+ * script says so instead of implying it compared something.
+ */
+const BOTH = flag('both')
+if (WANTS_WEB && WANTS_DESKTOP && !BOTH) {
+  console.error('--web and --desktop each select a single host; give one, or --both for the two defaults.')
+  process.exit(2)
+}
 const PORTS = []
-if (!args.includes('--desktop')) PORTS.push({ name: 'web', port: opt('web', 8080) })
-if (!args.includes('--web')) PORTS.push({ name: 'desktop', port: opt('desktop', 19387) })
+if (BASE !== null) {
+  let basePort = 0
+  try {
+    basePort = Number(new URL(BASE).port)
+  } catch {
+    basePort = 0
+  }
+  if (!Number.isFinite(basePort) || basePort <= 0) {
+    console.error('--base needs a full origin with an explicit port, e.g. --base http://127.0.0.1:11685')
+    process.exit(2)
+  }
+  PORTS.push({ name: 'host', port: basePort })
+} else if (!BOTH && (WANTS_WEB || WANTS_DESKTOP)) {
+  if (WANTS_WEB) PORTS.push({ name: 'web', port: opt('web', 8080) })
+  else PORTS.push({ name: 'desktop', port: opt('desktop', 19387) })
+} else {
+  PORTS.push({ name: 'web', port: opt('web', 8080) })
+  PORTS.push({ name: 'desktop', port: opt('desktop', 19387) })
+}
+/**
+ * Never let an empty target list reach the reporting stage: that is exactly how
+ * this script used to print a green line for a run that probed nothing.
+ */
+if (PORTS.length === 0) {
+  console.log('NO HOST PROBED — no --base / --web / --desktop resolved to a port')
+  process.exit(2)
+}
 
 // Threshold for "the route is unusably slow". The audit measured sub-millisecond
 // p50 on both shells; 50 ms leaves two orders of magnitude of headroom so this
@@ -137,7 +185,7 @@ const quantile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.floor(p 
 async function probe (host) {
   const first = await post(host.port, { method: 'state' })
   if (first.status !== 200) {
-    return { ...host, reachable: false, error: first.error || ('HTTP ' + first.status) }
+    return { ...host, reachable: false, status: first.status, error: first.error || ('HTTP ' + first.status) }
   }
   const samples = []
   let last = first
@@ -231,7 +279,12 @@ const live = results.filter((r) => r.reachable)
 const problems = []
 for (const r of results) {
   if (!r.reachable) {
-    problems.push(r.name + ': 无法连接 127.0.0.1:' + r.port + '（' + r.error + '）')
+    // A 401/403 is not an unreachable host: the route answered and the fence
+    // refused. Saying "无法连接" sent people looking for a dead server instead
+    // of a missing session cookie.
+    problems.push(r.status === 401 || r.status === 403
+      ? r.name + ': 被鉴权门拒绝（HTTP ' + r.status + '）——加 --token <启动令牌> 再跑'
+      : r.name + ': 无法连接 127.0.0.1:' + r.port + '（' + r.error + '）')
     continue
   }
   if (!r.injection.registered) problems.push(r.name + ': injection.registered=false（section 未注册）')
@@ -256,6 +309,7 @@ if (AS_JSON) {
   console.log(JSON.stringify({
     rounds: ROUNDS,
     clientBytes: CLIENT_BYTES,
+    topology: PORTS.length === 1 ? 'single-host' : 'dual-host',
     hosts: results.map((r) => ({
       name: r.name, port: r.port, reachable: r.reachable, error: r.error,
       latency: r.latency, sse: r.sse, injection: r.injection, bytes: r.bytes,
@@ -264,7 +318,7 @@ if (AS_JSON) {
     problems,
   }, null, 1))
 } else {
-  console.log('live dual-host smoke — ' + ROUNDS + ' rounds per host, direct HTTP (no proxy fallback)')
+  console.log('live ' + (PORTS.length === 1 ? 'single-host' : 'dual-host') + ' smoke — ' + ROUNDS + ' rounds per host, direct HTTP (no proxy fallback)')
   if (CLIENT_BYTES !== null) console.log('client bundle: ' + CLIENT_BYTES + ' bytes on disk (both shells serve the same file)')
   console.log('')
   for (const r of results) {
@@ -284,6 +338,11 @@ if (AS_JSON) {
     console.log(extra.length === 0
       ? 'snapshot parity: identical except injection.pulls (' + live[0].injection.pulls + ' vs ' + live[1].injection.pulls + ')'
       : 'snapshot parity: ' + extra.length + ' unexpected difference(s)')
+    console.log('')
+  } else if (live.length === 1) {
+    // One process serving both shells cannot be compared with itself. Say it
+    // out loud: a silent skip reads as "parity passed".
+    console.log('single-host topology: parity skipped (one host serves both shells)')
     console.log('')
   }
   if (problems.length === 0) {

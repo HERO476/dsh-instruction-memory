@@ -94,8 +94,18 @@ check('host: inject declares systemPrompt but NOT webServer',
 // (headless, tui), so apply() never ran and the user lost the settings page AND
 // the prompt injection — even though memory needs no web server at all. The
 // route is registered from a non-blocking ctx.inject() child fiber instead.
-check('host: no longer depends on the harness fs service (data lives under DSH_HOME)',
-  typeof host.resolveStorePath === 'function', typeof host.resolveStorePath)
+// The old check here was named "no longer depends on the harness fs service"
+// but only asserted that resolveStorePath exists — a name that promised a
+// constraint the body never tested (the real constraint is line 87-91 above:
+// `inject` must not list `fs`). This one asserts the thing the name claims.
+check('host: the store resolves under <DSH_HOME>/instruction-memory',
+  typeof host.resolveStorePath === 'function'
+    && /instruction-memory[\\/]memory\.json$/.test(
+      String(host.resolveStorePath({ DSH_HOME: 'C:\\dsh-home' }, 'C:\\home')),
+    ),
+  String(typeof host.resolveStorePath === 'function'
+    ? host.resolveStorePath({ DSH_HOME: 'C:\\dsh-home' }, 'C:\\home')
+    : host.resolveStorePath))
 check('host: exports apply()', typeof host.apply === 'function', typeof host.apply)
 check('host: exports buildBlock()', typeof host.buildBlock === 'function', typeof host.buildBlock)
 

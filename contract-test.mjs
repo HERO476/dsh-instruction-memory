@@ -1185,6 +1185,46 @@ async function statusFor(headers, body) {
         && frame.data.entries.some((entry) => entry.title === 'SSE-LITE')))
   }
 
+  // The store can change WITHOUT the rev moving — a hand-edit that keeps the
+  // `rev` field, or the F7 pause expiring (a state change, not a save). A lite
+  // frame that carried only `rev` was therefore byte-identical to the previous
+  // one, so the panel never refetched and kept showing the muted/old state while
+  // the host had already moved on. `seq` is the signal that says "the picture
+  // moved, pull it again" regardless of what the disk rev says.
+  {
+    const liteStream = openStream(
+      { accept: 'text/event-stream', host: '127.0.0.1:8080' },
+      handler,
+      '/instruction-memory/api?lite=1',
+    )
+    const connectFrame = framesOf(liteStream.out)[0]
+    check('sse lite: the connect frame carries a frame counter',
+      connectFrame !== null && typeof connectFrame.seq === 'number', JSON.stringify(connectFrame))
+    const seqBefore = connectFrame === null ? -1 : connectFrame.seq
+    const revBefore = connectFrame === null ? -1 : connectFrame.rev
+
+    // Exactly what an editor does: rewrite the content, leave `rev` alone.
+    const onDisk = JSON.parse(await readFile(STORE_FILE, 'utf8'))
+    await writeFile(STORE_FILE, JSON.stringify({
+      ...onDisk,
+      entries: [
+        ...(Array.isArray(onDisk.entries) ? onDisk.entries : []),
+        { id: 'hand-edit-1', title: 'HAND-EDIT', content: 'written outside the host, rev untouched', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 9 },
+      ],
+    }), 'utf8')
+
+    let moved = null
+    for (let i = 0; i < 400 && moved === null; i += 1) {
+      const frames = framesOf(liteStream.out)
+      moved = frames.length > 1 ? frames[frames.length - 1] : null
+      if (moved === null) await new Promise((resolve) => setTimeout(resolve, 25))
+    }
+    check('sse lite: a change that keeps the rev still produces a distinguishable frame',
+      moved !== null && moved.rev === revBefore && typeof moved.seq === 'number' && moved.seq > seqBefore,
+      JSON.stringify(moved) + ' (rev before ' + revBefore + ', seq before ' + seqBefore + ')')
+    liteStream.req.fire('close')
+  }
+
   // A writer whose socket has died: res.write throws on the next broadcast.
   // pushSnapshot must run that stream's full cleanup (end the response and
   // unsubscribe) and keep serving the healthy streams — previously it only
@@ -1231,6 +1271,46 @@ async function statusFor(headers, body) {
     }
     check('sse: disposing the dead writer does not interrupt a healthy stream',
       healthyGotIt === true, 'the open stream never saw SSE-DEAD')
+  }
+
+  // 1.5.3 regression guard: a SLOW but healthy subscriber. `res.write()`
+  // returning false only means "this write passed the socket's high-water
+  // mark" — which a healthy client that happens to be reading slowly also
+  // produces. 1.5.2 treated that as a dead peer and dropped the stream. No test
+  // could catch it: every fake writer in this file returns undefined or throws,
+  // never false.
+  {
+    const slowOut = { status: 0, chunks: [], ended: false }
+    const slowReq = {
+      method: 'GET',
+      headers: { accept: 'text/event-stream', host: '127.0.0.1:8080' },
+      on() { return slowReq },
+      fire() {},
+    }
+    const slowRes = {
+      writeHead(status) { slowOut.status = status },
+      write(chunk) { slowOut.chunks.push(String(chunk)); return false },
+      end() { slowOut.ended = true },
+      on() {},
+    }
+    handler(slowReq, slowRes)
+    check('sse: a backpressured writer is not treated as dead on connect',
+      slowOut.status === 200 && slowOut.ended === false, 'status=' + slowOut.status)
+
+    await callRoute(handler, {
+      method: 'save-entry',
+      args: { entry: { id: '', title: 'SLOW-1', content: 'still reading', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 } },
+    })
+    await callRoute(handler, {
+      method: 'save-entry',
+      args: { entry: { id: '', title: 'SLOW-2', content: 'still reading', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 } },
+    })
+    const slowFrames = framesOf(slowOut)
+    check('sse: a backpressured writer stays subscribed and keeps receiving frames',
+      slowOut.ended === false
+        && slowFrames.some((f) => f.data !== undefined && f.data.entries.some((e) => e.title === 'SLOW-2')),
+      'ended=' + slowOut.ended + ' frames=' + slowFrames.length)
+    slowReq.fire('close')
   }
 
   // External change: memory.json rewritten on disk by something else (another
@@ -1325,6 +1405,79 @@ async function statusFor(headers, body) {
     early.req.fire('close')
     process.env.DSH_HOME = previousHome
     await rm(BOOT_HOME, { recursive: true, force: true })
+  }
+
+  /**
+   * 1.5.2 regression guard: losing the OS watcher must not take the 5s poller
+   * with it. 1.5.1's error handler called stopWatching(), which clears BOTH — a
+   * dead watcher therefore left the process with no change detection at all
+   * until the next successful save re-armed both. The fake watcher below never
+   * fires events, so ONLY the poller can notice the edit made after the error.
+   */
+  {
+    const WATCH_HOME = scratchHome('-watch')
+    await mkdir(join(WATCH_HOME, 'instruction-memory'), { recursive: true })
+    const watchStoreFile = join(WATCH_HOME, 'instruction-memory', 'memory.json')
+    await writeFile(watchStoreFile, JSON.stringify({
+      version: 1, enabled: true, budgetChars: 4000,
+      entries: [{ id: 'w-1', title: 'WATCHER-SEED', content: 'seeded', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 1 }],
+    }), 'utf8')
+    const previousHome = process.env.DSH_HOME
+    process.env.DSH_HOME = WATCH_HOME
+
+    const watchHandlers = {}
+    const fakeWatcher = {
+      on(event, callback) { watchHandlers[event] = callback; return fakeWatcher },
+      close() {},
+    }
+    let watchHandler = null
+    const watchCtx = {
+      systemPrompt: { section: () => () => {} },
+      inject: (deps, callback) => {
+        const names = Array.isArray(deps) ? deps : Object.keys(deps)
+        if (names.includes('webServer')) {
+          callback({
+            webServer: { register: (route) => { watchHandler = route.handler; return () => {} } },
+            effect: (fn) => { fn(); return () => {} },
+          })
+        }
+        return null
+      },
+      get: () => undefined,
+      effect: (fn) => { fn(); return () => {} },
+    }
+    const watchMod = await import(new URL('./lib/index.js', import.meta.url).href + '?watch=' + Date.now())
+    watchMod.apply(watchCtx, { watch: () => fakeWatcher })
+
+    const watcherStream = openStream(undefined, watchHandler)
+    for (let i = 0; i < 200 && framesOf(watcherStream.out).length === 0; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    check('watch: the seeded store is delivered before the watcher is killed',
+      framesOf(watcherStream.out).some((f) => f.data.entries.some((e) => e.title === 'WATCHER-SEED')),
+      'frames=' + framesOf(watcherStream.out).length)
+
+    check('watch: the watcher registered an error handler',
+      typeof watchHandlers.error === 'function', Object.keys(watchHandlers).join(','))
+    if (typeof watchHandlers.error === 'function') watchHandlers.error(new Error('EINVAL: fake watcher died'))
+
+    // Nothing but the poller can see this: the fake watcher never fires.
+    await writeFile(watchStoreFile, JSON.stringify({
+      version: 1, enabled: true, budgetChars: 4000,
+      entries: [{ id: 'w-2', title: 'WATCHER-POLL', content: 'seen by the poller only', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 2 }],
+    }), 'utf8')
+
+    let polled = null
+    for (let i = 0; i < 400 && polled === null; i += 1) {
+      polled = framesOf(watcherStream.out).find((f) => f.data.entries.some((e) => e.title === 'WATCHER-POLL')) || null
+      if (polled === null) await new Promise((resolve) => setTimeout(resolve, 25))
+    }
+    check('watch: after the watcher errors the 5s poller still notices an external edit',
+      polled !== null, 'no WATCHER-POLL frame within 10s')
+
+    watcherStream.req.fire('close')
+    process.env.DSH_HOME = previousHome
+    await rm(WATCH_HOME, { recursive: true, force: true })
   }
 }
 
