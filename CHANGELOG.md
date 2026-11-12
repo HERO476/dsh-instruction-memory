@@ -7,6 +7,46 @@
 > 1.0.13 起由 CI 经 OIDC Trusted Publishing 发布（首个带 provenance 的版本）。
 > 这些历史 tag **不应回填**——npm 上的版本号已被占用。
 
+## [1.5.5] — 2026-11-12
+
+DSH Go（Android / WebView）适配。**没有真机验证**（本机 `adb devices` 为空），所以这一版只做
+"插件侧能自救的部分"：把所有**静默失败**变成可见的降级路径，其余列给平台侧。存储格式、注入文本
+与面板在浏览器/桌面上的行为均不变。
+
+### 修复（Android / WebView 静默失败）
+
+- **导出在 WebView 上点了没反应**（P1）：`<a download>` 只在宿主实现 `DownloadListener` 时才有
+  意义，且 Chromium WebView 拿不到 `blob:` 的字节。现在识别 WebView 后不再点那个必然失败的链接，
+  直接把完整 JSON 渲染在面板里（可全选复制）；非 WebView 路径补上「已开始下载」反馈。
+- **导入 / 从备份恢复依赖文件选择器**（P1）：WebView 未实现 `onShowFileChooser` 时点击完全无反应。
+  面板在 WebView 上常驻一行提示，指向不依赖任何原生能力的「源码模式」粘贴通道。
+- **批量加标签被误判成"用户取消"**（P1）：这段判定当初是为 Electron（`prompt` 抛错）写的；Android
+  WebView 是第四种形态——`typeof === 'function'`、不抛错、但返回 `null` 且不弹框。现在 WebView 上
+  把 `null` 判为"问不了"，直接走内联输入框。
+- **SSE 断流后静默陈旧**（P2）：连续 6 次（≈30 秒）订阅失败后显示「实时更新已断开，请重新载入」，
+  收到下一帧自动清除。此前只有手动「重新载入」能救。同时给事件流 socket 打开 TCP keepalive 与
+  `setNoDelay`，让被系统杀掉的 WebView 能被 OS 更快发现（半开连接占满 32 条上限的窗口收窄）。
+
+### 加固
+
+- **新增 fail-closed 开关** `DSH_INSTRUCTION_MEMORY_REQUIRE_AUTH_FENCE=1`：缺少宿主 `connection`
+  服务时直接 503，而不是退回"仅回环"。Android 的回环由整机共享，"仅回环"在手机上不构成边界。
+- **备份目录的提示在 Linux / Android 上不再给死指令**：原来一律让用户"设置环境变量后重启宿主"，
+  而 DSH Go 用 `/usr/bin/env -i` 启动引擎，那条路根本走不通；现在补一句"该变量设不了，请改用
+  「导出」复制 JSON"。
+
+### 其它
+
+- 面板 `-webkit-text-size-adjust:100%`（挡住 Android 系统字号把固定 px 卡片排成乱行）、挂载失败
+  提示避开 `env(safe-area-inset-bottom)`。
+- `docs/demo.html` 进入 npm 发布物（手机上可直接打开预演布局）。
+
+### 测试
+
+- `contract-test.mjs`：新增 fail-closed 三连断言（开开关 503 / 文案点名开关 / 关掉同一 handler 恢复
+  200），确保"503 是开关造成的"而不是别的原因。
+- `ui-test.mjs`：新增「6 次流错误后必须出现重新载入提示」，并在同一渲染里验证订阅的是 `?lite=1`。
+
 ## [1.5.4] — 2026-11-12
 
 2026-11-12 的三方评审（架构 / 安全 / 验收，桌面端 0.2.2-rc.1 + 网页端同进程）落地的一轮修复。

@@ -67,7 +67,7 @@ profile 的解析顺序是 **`$DSH_PROFILE_DIR` → `--profile <名字>` → `$D
 | `host-range-test.mjs` | 宿主版本范围契约测试：固定矩阵 × 两种 semver 判定模式，并把 `peerDependencies`（**被执行的那个**）、`dsh.engines.dsh`、`dsh.compatibility.dsh` 三处声明锁到同一个生成值 |
 | `lint.mjs` | 静态门禁，已并入 `npm test`：`node --check` 解析所有随包发布与本仓库运行的 JS 文件，并断言 `lib/` 里不出现 `@deepseek-ai/*` 的包名导入（插件只该通过宿主传进来的上下文对象接触宿主，按包名 import 会把插件钉死在某个安装位置，在 headless / CI / 检出目录里直接解析失败） |
 | `live-host-smoke.mjs` | 双端冒烟（**1.4.8 起宿主有鉴权门，需 `--token <启动 token>` 换会话 cookie**，否则全 401）：对**正在运行**的 web / 桌面宿主各测 `state` p50/p95、SSE 首事件、注入注册与字符数，并比对两端快照（除 `injection.pulls` 外须逐字段相同）；`npm run smoke:hosts`，`--require-pulls` 可把「从未经历真实 Agent 回合」判为失败。单宿主拓扑（桌面应用自己服务 `11685`）用 `--base http://127.0.0.1:11685`，parity 会**显式跳过**而不是假装比过；`--web` / `--desktop` 各选一端，同时给直接报错、零探测时打印 `NO HOST PROBED` 而不是 `ALL CHECKS PASSED`。**刻意不进 `npm test`**——CI 没有桌面端。请求走 Node `http` 直连，绕开 `http_proxy`（否则回环请求也会被代理转发，读数虚高） |
-| `docs/demo.html` | 离线演示页：桩掉 DSH 外壳、加载真实 Client 半渲染设置页（不随 npm 包发布） |
+| `docs/demo.html` | 离线演示页：桩掉 DSH 外壳、加载真实 Client 半渲染设置页（1.5.5 起随 npm 包发布，手机上也能直接打开预演布局） |
 | `memory.schema.json` | 手改存储文件用的 JSON Schema（随包发布，并被宿主复制到 `memory.json` 旁边） |
 
 ## 生效方式
@@ -457,6 +457,9 @@ DSH 就会得到第二份空记忆，看起来像"记忆消失"。相对的 `$DS
   把这些设置放在别的盘（比如 Windows 上的 D:）就得显式打开：
   `DSH_INSTRUCTION_MEMORY_ALLOW_EXTERNAL_BACKUP=1`（重启宿主生效）。导出目录受同一条限制；
   手改存储文件把 `backupDir` 指到外面也同样被拒——这条路不能变成创建任意目录的通道。
+  **在 Linux / Android 上这句话会说全**：DSH Go 用 `/usr/bin/env -i` 启动引擎，用户根本没有
+  设置该变量的途径，因此提示会补上"该变量设不了，请改用「导出」把 JSON 复制出来备份"，
+  而不是给一条无法执行的指令（1.5.5 起）。
   这条规则在**写入时**也执行，不只在校验时：设置页、导出、以及每次保存附带的 `.bak` 与历史
   快照都走同一个判断（1.5.1 起）。检测到越界的外来 `backupDir` 会被忽略并**在面板上披露**，
   备份与快照写回默认位置，而不是在外目录里悄悄留下文件。
@@ -787,6 +790,10 @@ nginx / Caddy 等反向代理之后远程访问，需要注意：
 5. **限制来源**：至少用代理层做 IP 白名单或加 Basic Auth——插件本身不带任何鉴权，它只会
    转用宿主发布的 `connection` 服务（没有该服务时非回环绑定直接 503）。
 
+> **手机 / 多租户环境请打开 fail-closed**：设 `DSH_INSTRUCTION_MEMORY_REQUIRE_AUTH_FENCE=1`
+> 后，"没有 `connection` 服务"直接变成 **503**，而不再退回"仅回环"。桌面单用户机器上回环还能
+> 当边界用；Android 上不能——整机共享回环命名空间，任何装了 App 的程序都能连 127.0.0.1。
+
 > **桌面端渲染器 origin 的一个已知边界**（2026-11-12 实测）：宿主对 `Origin: dsh-app://app`
 > 的请求返回 **403**，本插件在没有 `connection` 服务时的自判（`requestOriginVerdict`）同样拒绝
 > 该 origin（它按 Origin ↔ Host 同源比较）。当前桌面窗口发的是 `http://127.0.0.1:<port>`，
@@ -969,6 +976,33 @@ DSH Go（Android 客户端）内置的引擎就是**真实 DSH**，锁定 `@deep
   `dsh plugin --profile web add dsh-instruction-memory`，直接取 npm 上的版本。
 - **双端记忆不共享**：手机与"遥控 PC"各自维护自己的 `memory.json`，没有同步——这是当前形态，
   不是缺陷。
+
+#### Android / WebView 适配（1.5.5 起）
+
+WebView 不是浏览器：它能把 `window.prompt` 保留成函数却永不弹框，能暴露 `<a download>` 却没有
+下载管线，也要宿主自己实现文件选择器。这三处以前都是**点了没反应、也不报错**，而它们恰好是手机上
+唯一的数据进出口。现在插件侧这样处理：
+
+| 场景 | WebView 上的行为 | 依据 |
+| --- | --- | --- |
+| 导出 | 不再点击一个必然失败的链接，直接把完整 JSON 渲染在面板里（全选即可复制） | `client.js` 的 `isAndroidWebView()` + `exportFallback` 分支 |
+| 导入 / 从备份恢复 | 面板常驻一行提示：文件选择器不弹时改用「源码模式」粘贴 JSON（这条通道不依赖任何原生能力） | `import.webviewHint` |
+| 批量加标签 | 不再调用 `window.prompt`：WebView 返回的 `null` 被判为"问不了"，直接走内联输入框 | `batchTagOutcome(..., { nullMeansUnavailable: true })` |
+| 实时更新 | 连续 6 次（≈30 秒）订阅失败后显示「实时更新已断开，请重新载入」；收到下一帧自动清除 | `source.onerror` 计数 |
+| 字号 / 手势条 | `text-size-adjust:100%` 挡住系统字号重排；挂载失败提示避开安全区 | CSS |
+
+**插件侧做不到、必须平台提供的**：`DownloadListener`（WebView 拿不到 `blob:` 的字节，
+插件无法自救）、`WebChromeClient.onShowFileChooser`、`onJsPrompt`、`env -i` 白名单
+（否则备份目录那个开关永远设不上）、以及 WebView 销毁/后台时显式关闭 SSE
+（否则半开连接会占满 32 条上限）。
+
+**纵深开关**：Android 的回环是全机共享的，没有宿主鉴权门时"仅回环"不构成边界。设置
+`DSH_INSTRUCTION_MEMORY_REQUIRE_AUTH_FENCE=1` 后，缺少 `connection` 服务的 profile **直接
+503**（fail-closed），宁可设置页打不开，也不留一个可被同机任何 App 改写的长期指令入口。
+
+> **证据等级**：以上为代码级适配，`adb devices` 在本机为空，**没有任何真机验证**。
+> 真机验收顺序见 `dsh-memory-verification/DSH-VERSION-COMPAT.md`；第一条永远先确认平台门在位
+> （无 cookie 请求必须返回 `401` 且带 `x-dsh-go-guard: reject`），否则后续结论都不成立。
 
 ## 发布（维护者）
 

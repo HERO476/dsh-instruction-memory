@@ -913,6 +913,24 @@ check('panel: reload keeps the panel alive', hasText(tree, '指令记忆') || ha
   }
 }
 
+/* Android / Doze: a stream that never recovers must say so instead of showing
+ * stale data as if it were live. Six consecutive failures ≈ 30 s. */
+{
+  await settle()
+  const es = FakeEventSource.instances[FakeEventSource.instances.length - 1]
+  check('live-updates: the panel subscribes to the lite stream',
+    es !== undefined && es.url.includes('lite=1'), es === undefined ? 'none' : es.url)
+  if (es !== undefined && typeof es.onerror === 'function') {
+    for (let i = 0; i < 6; i += 1) es.onerror()
+    const tree = await settle()
+    check('live-updates: six consecutive stream errors surface the reload hint',
+      texts(tree).join(' ').includes('实时更新已断开'),
+      texts(tree).join(' ').slice(0, 160))
+  } else {
+    check('live-updates: the stream exposes an onerror handler', false, 'no onerror')
+  }
+}
+
 // The scratch home goes before the exit code is captured: it is the one await
 // (yield point) between here and process.exit, and a stray rejection during it
 // must not be able to mask a crash-hook exitCode.

@@ -3445,6 +3445,62 @@ const callOn = async (handler, payload) => {
   }
 }
 
+/**
+ * DSH Go / Android: loopback is not a security boundary there — every app on
+ * the device shares the namespace, so "reachable from this machine" stops
+ * meaning "reachable from this user". The opt-in switch turns "no fence" into
+ * "no route" instead of degrading to the loopback rule, so a profile that lost
+ * its `connection` service fails closed rather than staying writable.
+ */
+{
+  const FENCE_HOME = scratchHome('-nofence')
+  await mkdir(join(FENCE_HOME, 'instruction-memory'), { recursive: true })
+  const previousHome = process.env.DSH_HOME
+  const previousFlag = process.env.DSH_INSTRUCTION_MEMORY_REQUIRE_AUTH_FENCE
+  process.env.DSH_HOME = FENCE_HOME
+  process.env.DSH_INSTRUCTION_MEMORY_REQUIRE_AUTH_FENCE = '1'
+  try {
+    let fenceHandler = null
+    const fenceCtx = {
+      systemPrompt: { section: () => () => {} },
+      inject: (deps, callback) => {
+        const names = Array.isArray(deps) ? deps : Object.keys(deps)
+        if (names.includes('webServer')) {
+          callback({
+            webServer: { register: (route) => { fenceHandler = route.handler; return () => {} } },
+            effect: (fn) => { fn(); return () => {} },
+          })
+        }
+        return null
+      },
+      get: () => undefined,
+      effect: (fn) => { fn(); return () => {} },
+    }
+    const fenceMod = await import(new URL('./lib/index.js', import.meta.url).href + '?nofence=' + Date.now())
+    fenceMod.apply(fenceCtx)
+    const refused = await rawRoute(fenceHandler, JSON.stringify({ method: 'state', args: null }))
+    check('fail-closed: REQUIRE_AUTH_FENCE=1 makes a fence-less profile refuse the route (503)',
+      refused.status === 503, 'status=' + refused.status)
+    check('fail-closed: the refusal names the switch that caused it',
+      typeof refused.body === 'string'
+        && refused.body.includes('DSH_INSTRUCTION_MEMORY_REQUIRE_AUTH_FENCE'),
+      String(refused.body).slice(0, 160))
+
+    // The switch must be the CAUSE, not a coincidence: drop it and the very
+    // same handler answers again.
+    delete process.env.DSH_INSTRUCTION_MEMORY_REQUIRE_AUTH_FENCE
+    const allowed = await rawRoute(fenceHandler, JSON.stringify({ method: 'state', args: null }))
+    check('fail-closed: without the switch the same profile still answers on loopback (200)',
+      allowed.status === 200, 'status=' + allowed.status)
+  } finally {
+    if (previousHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previousHome
+    if (previousFlag === undefined) delete process.env.DSH_INSTRUCTION_MEMORY_REQUIRE_AUTH_FENCE
+    else process.env.DSH_INSTRUCTION_MEMORY_REQUIRE_AUTH_FENCE = previousFlag
+    await rm(FENCE_HOME, { recursive: true, force: true })
+  }
+}
+
 // A late stray rejection could land after ALL PASS; the crash-hook exitCode
 // must survive the final process.exit (which would otherwise force 0).
 const exitCode = failures === 0 ? (process.exitCode || 0) : 1
