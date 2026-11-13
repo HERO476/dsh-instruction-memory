@@ -956,9 +956,14 @@ FAIL  LIVE GUARD: the installed host 0.1.8-rc.1 is admitted by both modes  -> ..
 
 DSH Go（Android 客户端）内置的引擎就是**真实 DSH**，锁定 `@deepseek-ai/dsh` **`0.2.1-rc.4`**
 （`runtime/locks/dsh-0.2.1-rc.4/package.json`），在 PRoot rootfs 内以
-`dsh web --patch /etc/dsh-app/dsh-web.patch.yml --host 127.0.0.1 --port N --no-open` 运行；
-环境经 `/usr/bin/env -i` 清空后只注入 `HOME=/root`、`DSH_HOME=/root/.dsh`——**App 侧设置的
-`HOME` 对引擎无效**，别按字面读 `DshProcess.kt`。
+`dsh web --patch /etc/dsh-app/dsh-web.patch.yml --host 127.0.0.1 --port N --no-open` 运行。
+
+引擎进程的环境**不是** `/usr/bin/env -i`（早先这里写错了，2026-11-12 读源码更正）：壳用
+`ProcessBuilder(argv)`，先 `environment().clear()`，再逐个填 `PATH` / `HOME`（= **App 的
+`filesDir`**，不是 `/root`）/ `TMPDIR` / `ANDROID_ROOT` / `ANDROID_DATA` / `PROOT_TMP_DIR`，
+最后合并运行时清单的 `launchEnv` 与 guest 环境（`DshProcess.kt:172-188`）。也就是说：宿主变量
+一律不继承（这一点与 `env -i` 等效），但**壳想加什么变量都能加**——只是它目前没有加
+`DSH_INSTRUCTION_MEMORY_ALLOW_EXTERNAL_BACKUP`，所以备份目录开关在手机上仍然不可达。
 
 - **兼容性**：`0.2.1-rc.4` 正好是上表①档已实测的版本。2026-10-31 又用同一个 rc.4 在隔离的
   `DSH_HOME` 上复跑一遍 **21/21**（`compat-1016-live-check.mjs`；1.5.1 起该脚本第四个参数给启动
@@ -980,21 +985,28 @@ DSH Go（Android 客户端）内置的引擎就是**真实 DSH**，锁定 `@deep
 #### Android / WebView 适配（1.5.5 起）
 
 WebView 不是浏览器：它能把 `window.prompt` 保留成函数却永不弹框，能暴露 `<a download>` 却没有
-下载管线，也要宿主自己实现文件选择器。这三处以前都是**点了没反应、也不报错**，而它们恰好是手机上
-唯一的数据进出口。现在插件侧这样处理：
+下载管线。这两处以前都是**点了没反应、也不报错**，而它们恰好是手机上数据进出口的一半。现在插件侧
+这样处理：
 
 | 场景 | WebView 上的行为 | 依据 |
 | --- | --- | --- |
 | 导出 | 不再点击一个必然失败的链接，直接把完整 JSON 渲染在面板里（全选即可复制） | `client.js` 的 `isAndroidWebView()` + `exportFallback` 分支 |
-| 导入 / 从备份恢复 | 面板常驻一行提示：文件选择器不弹时改用「源码模式」粘贴 JSON（这条通道不依赖任何原生能力） | `import.webviewHint` |
+| 导入 / 从备份恢复 | **壳已实现文件选择**（`island_handle.dart:197` 的 `_files.attach()` → `web_file_chooser.dart:26` 的 `setOnShowFileSelector` → 原生 `dsh/web-files` 通道，content:// 校验 + 按文档代际取消）；面板那行提示只是兜底：页面不是 http(s)、`canChoose()` 为假、或旧版 App 时，请改用「源码模式」粘贴 JSON | 2026-11-12 读 DSH Go 源码确认 |
 | 批量加标签 | 不再调用 `window.prompt`：WebView 返回的 `null` 被判为"问不了"，直接走内联输入框 | `batchTagOutcome(..., { nullMeansUnavailable: true })` |
 | 实时更新 | 连续 6 次（≈30 秒）订阅失败后显示「实时更新已断开，请重新载入」；收到下一帧自动清除 | `source.onerror` 计数 |
 | 字号 / 手势条 | `text-size-adjust:100%` 挡住系统字号重排；挂载失败提示避开安全区 | CSS |
 
-**插件侧做不到、必须平台提供的**：`DownloadListener`（WebView 拿不到 `blob:` 的字节，
-插件无法自救）、`WebChromeClient.onShowFileChooser`、`onJsPrompt`、`env -i` 白名单
-（否则备份目录那个开关永远设不上）、以及 WebView 销毁/后台时显式关闭 SSE
-（否则半开连接会占满 32 条上限）。
+**插件侧做不到、必须平台提供的**（逐条都已核对 DSH Go 源码）：
+
+1. **保存/分享桥**：`<a download>` 的 `blob:` 字节 WebView 不会交给 `DownloadListener`，插件无法
+   自救。壳已有 `DshGoIsland` 通道和 `share_plus`，但没有任何"把这段文本存成文件"的消息类型 →
+   要新增一条（注意 island 消息协议上限只有 **16 KB**，`IslandMessageLimits.maxBytes`，而一次导出
+   可达 MB 级，必须分块）。
+2. **`onJsPrompt`**：webview_flutter 不暴露 JS 对话框，壳也没包 `WebChromeClient`；插件已改走内联
+   表单，所以**这是可选项**，不做也不影响功能。
+3. **环境变量白名单**：壳会 `environment().clear()` 后逐项填（`DshProcess.kt:172-188`），加一个
+   `DSH_INSTRUCTION_MEMORY_ALLOW_EXTERNAL_BACKUP=1` 就能让备份目录走出 rootfs。
+4. **WebView 销毁/后台时关闭 SSE**，否则半开连接会占满 32 条上限。
 
 **纵深开关**：Android 的回环是全机共享的，没有宿主鉴权门时"仅回环"不构成边界。设置
 `DSH_INSTRUCTION_MEMORY_REQUIRE_AUTH_FENCE=1` 后，缺少 `connection` 服务的 profile **直接

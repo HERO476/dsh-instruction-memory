@@ -7,6 +7,33 @@
 > 1.0.13 起由 CI 经 OIDC Trusted Publishing 发布（首个带 provenance 的版本）。
 > 这些历史 tag **不应回填**——npm 上的版本号已被占用。
 
+## [1.5.6] — 2026-11-13
+
+### 新增
+
+- **导出可以真正落到文件（仅在 DSH Go 里生效）**：`doExport()` 现在先探测 `window.DshGoIsland`
+  ——那是 DSH Go 的 island 桥。存在时把 JSON 按 6,000 字符一块（不切断代理对）`postMessage` 给 App，
+  由 App 写文件并唤起系统分享面板，面板提示「已交给 DSH Go 保存」。不存在时行为不变：普通 WebView
+  回退到面板内 JSON，浏览器/Electron 仍是 `<a download>`。
+  壳侧需要配套补丁（island 协议新增 `t:'save'` 分块消息），已在仓库外单独产出，见
+  `D:\Users\34332\AI\dsh-go-patch\README-PATCH.md`；本仓库不含任何上游代码。
+
+### 文档更正
+
+只改文档的部分，**更正 1.5.5 发布说明里两处对 DSH Go 壳的描述**——都是读源码（`ccch1mneyyy/dsh-go`，2026-11-12）后确认写错的：
+
+- **引擎环境不是 `/usr/bin/env -i`**：壳用 `ProcessBuilder`，`environment().clear()` 后逐项填
+  `PATH/HOME/TMPDIR/ANDROID_ROOT/ANDROID_DATA/PROOT_TMP_DIR`，再合并运行时清单的 `launchEnv`。
+  `HOME` 是 App 的 `filesDir`，不是 `/root`。结论不变（宿主变量不继承、备份开关仍不可达），
+  但机制与取值之前写错了。
+- **文件选择器壳里已经实现**：`island_handle.dart:197` 的 `_files.attach()` →
+  `web_file_chooser.dart:26` 的 `setOnShowFileSelector` → 原生 `dsh/web-files` 通道
+  （content:// 校验、按文档代际取消）。所以 1.5.5 里"导入依赖文件选择器、壳没实现"的说法不成立；
+  面板那行提示保留为兜底（非 http(s) 页面、`canChoose()` 为假、旧版 App）。
+
+仍未实现、且确实在壳侧的只有三件：**导出用的保存/分享桥**（island 消息协议上限 16 KB，需分块）、
+`onJsPrompt`（webview_flutter 不暴露，插件已绕开，可不做）、**备份开关的环境变量**（壳能加，现未加）。
+
 ## [1.5.5] — 2026-11-12
 
 DSH Go（Android / WebView）适配。**没有真机验证**（本机 `adb devices` 为空），所以这一版只做
