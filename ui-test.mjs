@@ -538,8 +538,8 @@ tree = await click(tree, '保存')
 check('panel: the entry was saved into the active set', hasText(tree, '只在工作集'))
 check('panel: injection now carries only the active set',
   injected().includes('只在工作集') && !injected().includes('回答语言'), injected().slice(0, 200))
-check('panel: the saved entry kept its 按需 mode and scenario',
-  injected().includes('适用场景：编写或修改配置文件时'), injected().slice(0, 240))
+check('panel: the saved entry kept its 条件必做 mode and scenario',
+  injected().includes('出现以下情形时必须执行，不得跳过：编写或修改配置文件时'), injected().slice(0, 240))
 
 // ---- F17: the local preview highlights a matching on-demand entry ----
 tree = await click(tree, '本地预演')

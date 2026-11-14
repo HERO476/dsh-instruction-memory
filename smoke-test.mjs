@@ -72,8 +72,8 @@ const auto = buildBlock({
   ...base,
   entries: [entry({ mode: 'auto', when: '编写代码时', priority: 2, content: 'X' })],
 })
-check('auto entry renders 按需 + 适用场景 + 高优先级',
-  auto, (v) => v.includes('[按需｜优先级 高]') && v.includes('适用场景：编写代码时'))
+check('auto entry renders 条件必做 + 必须执行 + 高优先级',
+  auto, (v) => v.includes('[条件必做｜优先级 高]') && v.includes('出现以下情形时必须执行，不得跳过：编写代码时'))
 
 // 始终 entries are ordered before 按需 ones regardless of recency.
 const mixed = buildBlock({
@@ -83,7 +83,7 @@ const mixed = buildBlock({
     entry({ id: 'b', title: 'ALWAYS', mode: 'always', priority: 0, updatedAt: 1 }),
   ],
 })
-check('始终 block precedes 按需 block',
+check('始终 block precedes 条件必做 block',
   mixed, (v) => v.indexOf('ALWAYS') !== -1 && v.indexOf('ALWAYS') < v.indexOf('AUTO'))
 
 // Priority ordering within a mode.
@@ -188,7 +188,7 @@ check('truncation is labelled', huge, (v) => v.includes('被截断'))
       entry({ id: 'always1', title: 'ALWAYS', mode: 'always', priority: 0, updatedAt: 1 }),
     ],
   })
-  check('plan: included order is 始终 first then 按需',
+  check('plan: included order is 始终 first then 条件必做',
     modePlan.included.map((x) => x.id).join(','), (v) => v === 'always1,auto1')
 
   const tight = planInjection(many)
@@ -364,7 +364,7 @@ check('an explicitly multi-line title is collapsed',
   sanitizeEntry({ title: 'A\nB\n\nC', content: 'x' }).title,
   (v) => v === 'A B C')
 
-check('a multi-line 适用场景 is collapsed',
+check('a multi-line 适用情形 is collapsed',
   sanitizeEntry({ title: 't', content: 'c', when: '写代码时\n或改配置时' }).when,
   (v) => v === '写代码时 或改配置时')
 

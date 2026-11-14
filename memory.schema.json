@@ -115,7 +115,13 @@
             "description": "是否启用该条目。",
             "default": true
           },
-          "tags": {
+          "triggers": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "type": "string", "maxLength": 24 },
+          "description": "触发词：本回合用户消息中出现其一即把该条提升为「本轮强制」；仅 mode=auto 有意义，留空则从不提升。"
+        },
+        "tags": {
             "type": "array",
             "maxItems": 8,
             "description": "标签：仅用于设置页分组与筛选，**不会**进入注入文本，也不影响注入顺序与取舍。",
