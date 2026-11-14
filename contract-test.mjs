@@ -83,7 +83,15 @@ await rm(SCRATCH_HOME, { recursive: true, force: true })
 // loopback one whenever the server is bound to loopback (see the DNS-rebinding
 // note on requestOriginVerdict in lib/index.js). The doubles must therefore
 // carry it, or every scenario below would be answered with 403.
-const DEFAULT_HEADERS = { 'content-type': 'application/json', host: '127.0.0.1:8080' }
+//
+// `origin` is here for the same reason since A9: with no `connection` service in
+// these doubles, a MUTATION without a browser origin marker is refused (403) —
+// a real settings page always sends one, and these doubles stand in for it.
+const DEFAULT_HEADERS = {
+  'content-type': 'application/json',
+  host: '127.0.0.1:8080',
+  origin: 'http://127.0.0.1:8080',
+}
 
 function makeRequest(body, headers) {
   const listeners = {}
@@ -684,6 +692,23 @@ async function statusFor(headers, body) {
     await statusFor({ 'content-type': 'application/json', host: '127.0.0.1:8080', 'sec-fetch-site': 'same-origin' }, JSON.stringify({ method: 'state' })) === 200)
   check('Sec-Fetch-Site: same-site is refused (same-site is not same-origin)',
     await statusFor({ 'content-type': 'application/json', host: '127.0.0.1:8080', 'sec-fetch-site': 'same-site' }, JSON.stringify({ method: 'state' })) === 403)
+
+  // A9: on a profile with NO `connection` fence (the doubles have none), a
+  // MUTATION must carry a browser origin marker. A bare process — curl, a
+  // script, another app — sends neither, and before this rule it could rewrite
+  // the memory injected into every later prompt simply by being on loopback.
+  check('A9: a mutation with no browser origin marker is refused with 403',
+    await statusFor({ 'content-type': 'application/json', host: '127.0.0.1:8080' }, hostile) === 403)
+  check('A9: the refusal names the fail-closed switch',
+    (await rawRoute(handler, hostile, { 'content-type': 'application/json', host: '127.0.0.1:8080' }))
+      .body.includes('REQUIRE_AUTH_FENCE'))
+  check('A9: read-only methods still work with no origin marker',
+    await statusFor({ 'content-type': 'application/json', host: '127.0.0.1:8080' }, JSON.stringify({ method: 'state' })) === 200)
+  check('A9: Sec-Fetch-Site: same-origin is enough for a mutation',
+    await statusFor({ 'content-type': 'application/json', host: '127.0.0.1:8080', 'sec-fetch-site': 'same-origin' },
+      JSON.stringify({ method: 'save-entry', args: { entry: null } })) === 200)
+  check('A9: an origin-less write never reached the store',
+    !injectedText().includes('PWNED'))
   check('Sec-Fetch-Site: none is accepted (user-driven navigation)',
     await statusFor({ 'content-type': 'application/json', host: '127.0.0.1:8080', 'sec-fetch-site': 'none' }, JSON.stringify({ method: 'state' })) === 200)
 

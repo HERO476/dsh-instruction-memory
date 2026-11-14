@@ -87,7 +87,14 @@ async function rawRoute(body) {
   const listeners = {}
   const req = {
     method: 'POST',
-    headers: { 'content-type': 'application/json', host: '127.0.0.1:8080' },
+    // `origin` mirrors what the real settings page sends: since A9 a mutation
+    // without a browser origin marker is refused on a fence-less route, and this
+    // double stands in for the panel, not for a bare script.
+    headers: {
+      'content-type': 'application/json',
+      host: '127.0.0.1:8080',
+      origin: 'http://127.0.0.1:8080',
+    },
     setEncoding() {},
     destroy() {},
     on(event, callback) { (listeners[event] = listeners[event] || []).push(callback); return this },

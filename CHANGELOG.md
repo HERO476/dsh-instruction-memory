@@ -7,6 +7,86 @@
 > 1.0.13 起由 CI 经 OIDC Trusted Publishing 发布（首个带 provenance 的版本）。
 > 这些历史 tag **不应回填**——npm 上的版本号已被占用。
 
+## [1.5.7] — 2026-11-14
+
+针对**最新版桌面端（`dsh-desktop-runtime 0.2.2-rc.3`，Electron）与网页端**全量审查后的修复轮。
+审查结论先说清楚：**功能性缺陷只有 1 条**（测试守卫读错宿主），其余是注入链路的加固、一处
+无鉴权无确认的自动写路径、以及若干"声明/文档与实现不符"。审查同时**撤回了一条看起来该改、
+实测不该改**的建议（见末节）。
+
+### 修复
+
+- **回归守卫读错宿主，对着错误的版本虚假通过（B1）**：`host-range-test.mjs` 的 LIVE GUARD
+  只在 `profiles/*/node_modules`、`/usr/lib…`、`/usr/local/lib…` 和 TRAE 字面路径里找宿主。
+  桌面端把 dsh 打包进 `app.asar`，这些路径**永远不命中**；本机因此命中一条与本机无关的软链
+  （TRAE 捆绑的 `0.2.2-alpha.2`），并在桌面端实际运行 `0.2.2-rc.3` 时打印
+  `PASS LIVE GUARD: the installed host 0.2.2-alpha.2 ...`。这正是该守卫注释里声称要防的
+  false negative。现在优先读取 `resources/runtime/primary-runtime/runtime.json` 的
+  `desktopVersion`（可选 `DSH_DESKTOP_RUNTIME_ROOT` 覆盖），桌面证据存在时以它为准，
+  `profiles/node_modules` 的软链树降级为"没有桌面安装时"的证据；标签里**打印版本来源路径**，
+  免得下次读错树又是静默通过。
+- **`systemPrompt` 一次性捕获，服务重发布后注入静默死亡（A1）**：`apply()` 里
+  `const systemPrompt = ctx.systemPrompt` 只取一次。宿主 dispose 并重新 publish 该服务后
+  （宿主重启、fiber 重挂、profile 重载），旧实例仍然接受 `section()` 并返回 disposer、
+  不抛错，新实例一个 section 都收不到 —— 于是此后整轮对话都不再有指令记忆，且没有任何报错。
+  改为可变引用 + 非阻塞 `ctx.inject(['systemPrompt'], …)`（与 `webServer` 注册同构）：
+  服务换实例时先 dispose 旧注册再在新实例上重建；服务下线时把
+  `注入服务已重新发布/下线` 写进 `injection.error`，而不是假装无事发生。
+
+### 安全
+
+- **旧位置文件不再自动采纳（A4）**：`process.cwd()` 下的 `.dsh-instruction-memory.json`
+  过去会被**直接写进 memory.json 并在下一轮注入**——没有鉴权门、没有确认，是全插件唯一
+  这样的写路径。`cwd` 不属于插件：任何同权限进程在那里放一份 store 形状的 JSON，就能变成
+  "用户的长期指令"。现在只**检出**（`storage.legacyPending`，设置页显示条数与路径），
+  由用户点「导入旧位置数据」才采纳（`adopt-legacy`，走与其他写入相同的门禁，且在接纳前
+  重新读取并复核该路径**仍是**本插件的 store）；「忽略」为 `dismiss-legacy`，原文件不动。
+- **注入文本剥离不可见字符（A3）**：`cleanText` 过去只归一 `\r`。现在剥离 C0 控制符
+  （保留 `\n`/`\t`）、DEL、`U+200B–U+200F`、`U+202A–U+202E`、`U+2066–U+2069`、`U+FEFF`，
+  并把 `U+2028/2029` 归一成换行。理由是**设置页所见必须等于模型所读**：bidi override 能让
+  一行显示成另一个词（Trojan-Source 类），零宽字符能拆词躲过关键词与去重检查。
+- **注入块加不可伪造定界（A2）**：整段现在由 `<user-instruction-memory>` /
+  `</user-instruction-memory>` 包裹，且 `content` 中同形的标签、本插件自己的段头
+  （`## 用户长期指令记忆`、`## 关于用户（用户形象）`）与条目前缀（`[始终｜优先级`/`[按需｜优先级`）
+  会被换成全角近似字符，无法再冒充系统段头或伪造优先级。普通 Markdown 标题
+  （如 `## 实验步骤`）不受影响。
+- **无鉴权门时，写方法要求浏览器来源标记（A9/A12）**：`requestOriginVerdict` 的每条分支都以
+  "有 Origin"为前提，因此**本机脚本/curl 不带 Origin 就能在无 `connection` 服务的 profile 上
+  直接改记忆**。回环在"同机任意程序都以该用户身份运行"的机器上不再是边界。现在：
+  ① 无鉴权门且主机名白名单被放宽（`hostGuarded === false` + `trustedHostCount > 0`）时，
+  写方法一律 **503**；② 无鉴权门时，写方法必须带 `Origin` 或 `Sec-Fetch-Site: same-origin`
+  （浏览器必发其一，设置页不受影响），否则 **403**。只读方法（`state`、`history-list`、
+  `read-source`、`export-data`、`export-to-dir`、`reload`、`send-feedback`）不受限制。
+  `DSH_INSTRUCTION_MEMORY_REQUIRE_AUTH_FENCE=1` 仍可让整条路由 fail closed。
+- **崩溃残留的临时副本会被清理（A13）**：原子写用
+  `memory.json.tmp-<pid>-<uuid>`，在 `open` 与 `rename` 之间崩溃会留下**一份完整的记忆明文**，
+  且永不清理。载入时按插件自己的命名模式清扫；记录里的 pid 仍存活则跳过（那是另一个进程
+  正在写，不是垃圾）。
+
+### 变更
+
+- 新字段 `injection.envelopeChars`：`chars` 里有多少是定界包裹。面板的用量条改为
+  `entryChars + profileChars + envelopeChars`（旧宿主不发该字段，按 0 计），这样条上的数字
+  与宿主真正执行的预算一致。
+- 新字段 `storage.legacyPending`（`{ path, entries, profiles }` 或 `null`）与
+  `security.routeRegistered`（设置页路由是否真的挂上了 —— 没有 `webServer` 的 profile 里过去
+  只有一行 `console.error`，面板无法自述其缺席）。
+- 新方法 `adopt-legacy` / `dismiss-legacy`。
+- `peerDependenciesMeta` 把 `@deepseek-ai/dsh-system-prompt` 标为 **optional**：插件代码
+  全文只 import `node:` 内置模块，服务靠 `inject = ['systemPrompt']` 与鸭子类型取得，
+  把 peer 标成强制只会在 `strict-peer-dependencies` 下误伤安装。
+- `description` 措辞更正：从"模型没有任何写入口"改为"**插件不注册任何面向模型的工具**，
+  模型没有插件内的写入口"——原话与本仓库 README 自述（同权限进程可直接改文件）自相矛盾。
+
+### 未改动（审查建议过，复核后撤回）
+
+- **冗余区间段不能删（A14 撤回）**：`>=0.2.1-alpha.0`、`>=0.2.2-alpha.0` 在
+  `includePrerelease: true`（宿主门）下确实被 `>=0.2.0-0 <0.3.0-0` 吸收，但在**默认 semver
+  语义**（pnpm / npm 的 peer 解析）下，预发布版本要求**同一 tuple** 的比较器存在，删掉这两段
+  会让 `0.2.1-alpha.x` / `0.2.2-alpha.x` 被判不兼容。宿主门用 includePrerelease、包管理器用
+  默认语义，两套并存，所以每一段都是必需的。README 的兼容性小节据此更正了
+  `peerDependencies` 被称作"真正的门禁"的说法。
+
 ## [1.5.6] — 2026-11-13
 
 ### 新增
@@ -15,8 +95,9 @@
   ——那是 DSH Go 的 island 桥。存在时把 JSON 按 6,000 字符一块（不切断代理对）`postMessage` 给 App，
   由 App 写文件并唤起系统分享面板，面板提示「已交给 DSH Go 保存」。不存在时行为不变：普通 WebView
   回退到面板内 JSON，浏览器/Electron 仍是 `<a download>`。
-  壳侧需要配套补丁（island 协议新增 `t:'save'` 分块消息），已在仓库外单独产出，见
-  `D:\Users\34332\AI\dsh-go-patch\README-PATCH.md`；本仓库不含任何上游代码。
+  壳侧需要配套补丁（island 协议新增 `t:'save'` 分块消息），已在仓库外单独产出
+  （`dsh-go-patch` 的 `README-PATCH.md`，放在本机独立目录，未随本仓库或 npm 包分发）；
+  本仓库不含任何上游代码。
 
 ### 文档更正
 

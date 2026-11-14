@@ -229,7 +229,10 @@ DSH 就会得到第二份空记忆，看起来像"记忆消失"。相对的 `$DS
 没有理由读得到。
 
 > 1.0.0 之前的构建曾把数据写在宿主进程 cwd 下（`.dsh-instruction-memory.json`）。
-> 首次启动新版本时会自动迁移到上述位置，并把原文件改名为 `*.migrated` 保留。
+> **1.5.7 起不再自动迁移**：启动时只**检出**该文件并在设置页提示（「导入旧位置数据 / 忽略」两项），
+> 由用户确认后才写入正式位置，并把原文件改名为 `*.migrated` 保留。原因是这条旧路径**既没有鉴权门、
+> 也没有人在回路里**：`process.cwd()` 不属于插件，任何同权限进程在那里放一份 store 形状的 JSON，
+> 下一轮就会被注入成"用户的长期指令"。检出状态在 `storage.legacyPending` 里，未确认前不读入、不注入。
 
 **当前存储格式为版本 2**（1.1.0 及更早写的是版本 1，见下文「多情境配置集」）。
 两者都能载入：版本 1 的文件会**平滑迁移**——其中的条目与用户形象全部归入一个名为
@@ -820,7 +823,7 @@ DSH Go 给官方 Web 服务器包了一层**构建期补丁** `runtime/patches/r
 
 | 位置 | 谁读它 | 作用 |
 | --- | --- | --- |
-| **`peerDependencies`**（`@deepseek-ai/dsh-system-prompt`） | **宿主**：`evaluatePluginCompatibility()`（`dsh-app-boot/lib/index.js`），在**安装**与 **profile 启动**时执行 | **真正的门禁**。不满足即拒绝（或要求显式授予精确版本豁免：`dsh plugin allow-version`）。门禁把 peer 的**范围值**与宿主版本（`dsh --version`）比较，peer 的**包名不参与解析**，只用来点名报错 |
+| **`peerDependencies`**（`@deepseek-ai/dsh-system-prompt`） | **宿主**：`evaluatePluginCompatibility()`（`dsh-app-boot`），在**安装**与 **profile 启动**时执行 | **门禁之一**，不是唯一。1.5.7 起两处实测结论必须同时写在这里：① 门禁读的是**宿主自身版本**（`getDshRuntimeVersion()` → `dsh-app-boot` 的 package.json），并用 `{ includePrerelease: true }` 求值，所以预发布行不会被误判；② 在 `0.2.2-rc.3` 的宿主实现里**存在 `engines.dsh` 时 `peerDependencies` 的区间被忽略**（`dsh-app-boot/src/plugin-compatibility.ts:52`）——也就是说这段 peer 区间可能完全不参与判定，只用来在报错时点名。本仓库仍让三处**逐字节同值**，就是为了不依赖"到底哪一处生效"。这条已从"真正的门禁"更正：**能证明它生效的只有实测，不能靠读声明推断** |
 | `dsh.engines.dsh` | 插件市场（第三方，服务端读取） | 市场卡片上的兼容性判定与展示 |
 | `dsh.compatibility.dsh` | 未找到读取方（官方文档与 DSH 树内均无） | 仅作人类可读的重复声明 |
 

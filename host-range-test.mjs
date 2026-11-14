@@ -288,18 +288,102 @@ function hostPackageCandidates() {
 //
 // Returns null (→ SKIP, not FAIL) when none is present: this suite has to stay
 // runnable on a bare checkout and in CI, where no DSH is installed.
-function readInstalledHostVersion() {
+/**
+ * Where a DESKTOP install records the host version it actually runs.
+ *
+ * The desktop distribution does not ship the host as a resolvable package: the
+ * whole `@deepseek-ai/dsh` tree lives inside `app.asar`, so not one path in
+ * hostPackageCandidates() can point at the host that is really serving the
+ * user. That turned the LIVE GUARD into a false green on this very machine — it
+ * found an unrelated TRAE-bundled `0.2.2-alpha.2` behind a stale
+ * `profiles/node_modules` symlink and printed
+ *
+ *     PASS  LIVE GUARD: the installed host 0.2.2-alpha.2 is admitted ...
+ *
+ * while the desktop app was serving `0.2.2-rc.3`. A host upgrade to an
+ * uncovered prerelease line would have kept printing PASS, which is precisely
+ * the false negative this guard exists to prevent.
+ *
+ * `resources/runtime/primary-runtime/runtime.json` carries `desktopVersion`
+ * next to the Node/pnpm versions the app launches with — a supported, readable
+ * fact, unlike guessing at asar internals.
+ */
+function desktopRuntimeManifests() {
+  const out = []
+  const override = process.env.DSH_DESKTOP_RUNTIME_ROOT
+  if (typeof override === 'string' && override !== '') {
+    out.push(join(override, 'primary-runtime', 'runtime.json'))
+    out.push(join(override, 'runtime.json'))
+  }
+  const localAppData = process.env.LOCALAPPDATA
+  if (typeof localAppData === 'string' && localAppData !== '') {
+    const programs = join(localAppData, 'Programs')
+    try {
+      // Harness-shaped install names only: one readdir plus a few stats, not a
+      // directory walk.
+      for (const name of readdirSync(programs).sort()) {
+        if (!/harness|deepseek/i.test(name)) continue
+        out.push(join(programs, name, 'resources', 'runtime', 'primary-runtime', 'runtime.json'))
+      }
+    } catch {
+      // No per-user Programs directory: the fixed paths below still apply.
+    }
+  }
+  out.push(join('/Applications', 'DeepSeek Harness.app', 'Contents', 'Resources',
+    'runtime', 'primary-runtime', 'runtime.json'))
+  out.push(join(homedir(), 'Applications', 'DeepSeek Harness.app', 'Contents', 'Resources',
+    'runtime', 'primary-runtime', 'runtime.json'))
+  return out
+}
+
+/**
+ * The host versions this machine can evidence, each with the file it came from,
+ * plus which kind of install supplied them.
+ *
+ * Desktop evidence WINS when present, and that precedence is the fix: a desktop
+ * app is the thing actually running, while `profiles/node_modules/@deepseek-ai/
+ * dsh` is frequently a leftover symlink into some editor-bundled runtime that
+ * has nothing to do with the user's host. Asserting the leftover instead of the
+ * live host is how the guard went green for the wrong version.
+ *
+ * With no desktop install (a plain `npm i -g` or a checkout-only machine) the
+ * package trees remain the only evidence, so they are used as before.
+ */
+function installedHostEvidence() {
+  const desktop = []
+  for (const path of desktopRuntimeManifests()) {
+    try {
+      const parsed = JSON.parse(readFileSync(path, 'utf8'))
+      const version = parsed.desktopVersion
+      if (typeof version === 'string' && semver.valid(version) !== null) {
+        desktop.push({ version, source: path })
+      }
+    } catch {
+      // not a desktop install at this path
+    }
+  }
+  if (desktop.length > 0) return { kind: 'desktop', items: desktop }
+
+  const packages = []
   for (const path of hostPackageCandidates()) {
     try {
       const parsed = JSON.parse(readFileSync(path, 'utf8'))
-      if (typeof parsed.version === 'string' && semver.valid(parsed.version) !== null) {
-        return parsed.version
-      }
+      const version = parsed.version
+      if (typeof version !== 'string' || semver.valid(version) === null) continue
+      if (packages.some((item) => item.version === version)) continue
+      packages.push({ version, source: path })
     } catch {
       // try the next candidate
     }
   }
-  return null
+  return { kind: packages.length > 0 ? 'package' : 'none', items: packages }
+}
+
+// Kept for the "no semver implementation" diagnostic above, which only needs to
+// know that SOME host exists.
+function readInstalledHostVersion() {
+  const evidence = installedHostEvidence()
+  return evidence.items.length === 0 ? null : evidence.items[0].version
 }
 
 /* ---------------- the matrix ---------------- */
@@ -416,10 +500,12 @@ for (const host of ['0.1.6-alpha.2', '0.1.7-rc.2', '0.2.1-alpha.1', '0.2.1-alpha
 // facts; this one is a live check, so a host upgrade to an uncovered
 // prerelease line fails here instead of shipping as a false negative.
 {
-  const installed = readInstalledHostVersion()
-  if (installed === null) {
+  const evidence = installedHostEvidence()
+  if (evidence.items.length === 0) {
     console.log('SKIP  no installed DSH found to check against')
-  } else {
+  }
+  for (const item of evidence.items) {
+    const installed = item.version
     const plain = semver.satisfies(installed, declared)
     const pre = semver.satisfies(installed, declared, { includePrerelease: true })
     const admitted = plain === true && pre === true
@@ -439,8 +525,13 @@ for (const host of ['0.1.6-alpha.2', '0.1.7-rc.2', '0.2.1-alpha.1', '0.2.1-alpha
         ? '  [verified: that edit admits ' + installed + ']'
         : '  [WARNING: that suggested edit does NOT admit ' + installed + ' — fix remedyFor()]'
     }
-    check('LIVE GUARD: the installed host ' + installed + ' is admitted by both modes',
-      admitted, admitted ? '' : detail)
+    // The source is part of the label, not a comment: a version read from the
+    // wrong tree is indistinguishable from a correct one in the old output, and
+    // that is exactly how this guard printed PASS for 0.2.2-alpha.2 while the
+    // desktop app ran 0.2.2-rc.3.
+    check('LIVE GUARD (' + evidence.kind + '): the installed host ' + installed
+      + ' is admitted by both modes  [' + item.source + ']',
+    admitted, admitted ? '' : detail)
   }
 }
 
