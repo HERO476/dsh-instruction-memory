@@ -35,7 +35,11 @@ const check = (label, ok, detail) => {
 /* ---------------- the value this plugin declares ---------------- */
 
 const pluginSource = readFileSync(new URL('./lib/index.js', import.meta.url), 'utf8')
-const declaredMatch = /\nconst SECTION_ORDER = (\d+)\n/.exec(pluginSource)
+// Normalise line endings first: CI checks the repo out with core.autocrlf on
+// Windows, so the same file arrives as CRLF there and LF on Linux. A regex
+// anchored on `\n` alone passed locally and failed only on the Windows runner —
+// the worst possible place to discover it.
+const declaredMatch = /^const SECTION_ORDER = (\d+)$/m.exec(pluginSource.replace(/\r\n/g, '\n'))
 const declared = declaredMatch === null ? null : Number(declaredMatch[1])
 check('lib/index.js still declares a numeric SECTION_ORDER', declared !== null,
   'the declaration moved or changed shape; update this test rather than deleting it')

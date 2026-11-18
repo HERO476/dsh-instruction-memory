@@ -11,6 +11,9 @@
 
 ### 修复
 
+- **`section-order-test.mjs` 兼容 CRLF 检出**。CI 在 Windows 上用 `core.autocrlf` 检出，同一份
+  `lib/index.js` 到那边是 CRLF；测试里按 `\n` 锚定的正则本地全绿、只在 Windows runner 上失败。
+  读取后先归一化行尾。这是 1.6.1 自己引入的测试缺陷，不是被测代码的问题。
 - **存储写入：临时文件在 rename 前消失时重写一次**。CI（Node 22）上出现过一次
   `保存失败：ENOENT … rename 'memory.json.tmp-…' -> 'memory.json'`：临时文件在 `close()` 与
   `rename()` 之间被本进程之外的清理者删掉了（安全扫描器、索引器、runner 清理 `/tmp`），
