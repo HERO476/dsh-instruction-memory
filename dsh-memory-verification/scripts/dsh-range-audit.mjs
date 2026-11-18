@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 宿主声明审计：dsh.engines.dsh / dsh.compatibility.dsh 是否**超范围承诺**。
  *
  * 动机：1.0.10 起插件新增了两个硬依赖 —— `ctx.inject()`（非阻塞注册路由）与
@@ -22,7 +22,10 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..')
 const PKG = JSON.parse(readFileSync(join(ROOT, '..', 'package.json'), 'utf8'))
 const DECLARED = PKG.dsh?.engines?.dsh
-const COMPAT = PKG.dsh?.compatibility?.dsh
+// 1.6.1 removed `dsh.compatibility.dsh` — no consumer ever read it, and keeping
+// a third copy only invited it to drift. The enforced declaration is the peer
+// entry, so that is what this audit compares against.
+const PEER = PKG.peerDependencies?.['@deepseek-ai/dsh-system-prompt']
 const CLIENT_INJECT = PKG.dsh?.client?.inject ?? []
 const PLUGIN_VERSION = PKG.version
 
@@ -52,7 +55,8 @@ const meta = (n) => gjson(REG + n.replace('/', '%2F'))
 
 console.log('插件版本    : ' + PLUGIN_VERSION)
 console.log('engines.dsh : ' + DECLARED)
-console.log('compat 一致 : ' + (DECLARED === COMPAT))
+console.log('peer 声明   : ' + PEER)
+console.log('两处一致    : ' + (DECLARED === PEER))
 
 const dsh = await meta('@deepseek-ai/dsh')
 const times = dsh.time
@@ -170,7 +174,7 @@ for (const r of overclaim) {
 mkdirSync(join(ROOT, 'out'), { recursive: true })
 writeFileSync(join(ROOT, 'out', 'dsh-range-audit.json'), JSON.stringify({
   generatedAt: new Date().toISOString(), pluginVersion: PLUGIN_VERSION,
-  declared: DECLARED, compatibility: COMPAT, declaredIdentical: DECLARED === COMPAT,
+  declared: DECLARED, peer: PEER, declaredIdentical: DECLARED === PEER,
   publishedVersionCount: ALL.length, rows,
   summary: {
     accepted: accepted.length,

@@ -7,6 +7,74 @@
 > 1.0.13 起由 CI 经 OIDC Trusted Publishing 发布（首个带 provenance 的版本）。
 > 这些历史 tag **不应回填**——npm 上的版本号已被占用。
 
+## [1.6.1] — 2026-11-18
+
+一次针对"桌面端 / 网页端两个宿主"的缺陷审计（架构、授权安全、验收边界三方独立复查 + 代码级复核）
+之后的修复批次。没有新功能：改动集中在**声明与实际不一致**、**失败被静默**、**门禁够不到真实宿主**三类。
+
+### 修复（安全）
+
+- **`send-feedback` 与 `export-to-dir` 移出只读方法集合**。两者从来不是"读"：一个用操作者自己的
+  SMTP 账号发信，一个往备份目录落盘。在没有 `connection` 服务的 profile 上，`READ_ONLY_METHODS`
+  是写门唯一的豁口，等于允许本机任意进程（含 Android 上任何装了 App 的程序）用用户邮箱发信
+  （冷却期内每分钟 2 封）并持续落盘。现在两者与其它写方法一致：无鉴权门时需 `Origin` 或
+  `Sec-Fetch-Site: same-origin`。浏览器设置页不受影响。
+- **`reload` 有意留在只读集合**：它只重读磁盘，首次落盘是幂等的；而桌面壳的转发层会剥掉
+  `Origin`，把它移出会让"无鉴权门的桌面 profile"上这一按钮直接 403。
+
+### 修复（面板行为）
+
+- **桌面端导出不再无条件报"已保存"**。`<a download>` + blob 点击后立刻显示成功，而 Electron
+  主窗口的 `will-download` 只处理 `#dsh-download=` 前缀的 URL，其余（含 blob）交给默认行为——
+  用户取消保存框或下载被策略拦下时，面板和用户都不会知道。文案改为"已请求保存"，并说明
+  取消 / 被拦时不会产生文件。
+- **导入加了确认**。整库恢复（restore）一直有确认，导入没有；于是别人递来的一份"记忆备份"
+  可以静默成为此后每轮注入的指令。现在导入走同一套 `askConfirm`，没有对话框的环境按
+  fail-closed 处理（拒绝而不是静默合并）。
+
+### 修复（声明与实际不一致）
+
+- **删除 `dsh.compatibility.dsh`**。宿主 `dsh-app-boot` 的 `unmetRequirements()` 只读 **顶层**
+  `engines.dsh`，缺失则回落 `peerDependencies`（两处都用 `includePrerelease: true` 求值）；
+  本包 `engines` 只有 `node`，`engines.dsh` 写在 `dsh` 命名空间下，宿主**不读**。
+  `dsh.compatibility.dsh` 在已安装运行时树（`dsh-app-boot`、`dsh-client-ui-plugin-manager`、
+  `dshmarket`）里 grep 无读取方。三份"逐字节一致"的副本，实际只有 peer 那份生效。
+- **区间补洞**：`>=0.1.5-alpha.1` 作为起点把 `0.1.5-alpha.0` / `0.1.5-0` 漏在区间外，
+  改为 `>=0.1.5-0`。`host-range-test.mjs` 矩阵新增这两个版本，并新增
+  "`dsh.compatibility.dsh` 必须不存在"断言（防第三份副本长回来）。
+- **桌面端 Origin 围栏的文档说反了**：桌面壳对所有非静态路径调用 `forwardWebRequest()`，
+  转发前删除 `host` / `origin` / `cookie` / `sec-fetch-site` 并注入宿主 cookie。因此插件的
+  `requestOriginVerdict()` 在桌面端**根本不执行**，桌面端的边界是"回环绑定 + 宿主 cookie"。
+  README 与 `TRUSTED_HOSTS` 注释按此更正；旧版"渲染器改用 `dsh-app://` 会整片 403"的推演已被证伪。
+- **Windows 上的 `0o600` 不再被当作权限承诺**：Windows 文件系统忽略 `mode`，文件只是继承目录
+  ACL。README 补上 `memory.json` 的 `icacls` 收紧命令（与 `feedback.json` 既有说明对齐）。
+- **反馈披露补齐**：面板声明与真实发送字段对齐（补上界面语言、时区、User-Agent 的说明）。
+
+### 修复（测试与门禁）
+
+- **新增 `section-order-test.mjs`**：从**已安装宿主**（profile 树优先，其次桌面 `app.asar`）读出
+  `SECTION_ORDERS`，断言 `SECTION_ORDER = 950` 未被占用、严格落在 `FILE_REFERENCE(900)` 与
+  `TOOL_BASH(1000)` 之间，且紧邻下方仍是 `FILE_REFERENCE`。宿主换表时注入块会静默移位，
+  此前没有任何断言兜住。解析兼容 `1e3` 形式的字面量（0.2.2 起宿主用科学计数法写表）。
+- **CI 新增 `host-smoke`（`workflow_dispatch`，self-hosted）**：真实宿主端到端（注入 / SSE /
+  路由 / 跨端快照）此前不在任何门禁里，只有 `smoke:hosts` 这个没人记得跑的手动脚本。该作业在
+  缺少 `DSH_GUI_URL` / `DSH_GUI_TOKEN` 时打印 notice 并跳过，不会让 fork 变红。
+
+### 兼容性
+
+- 存储格式不变（`version: 2`）。**唯一的行为收紧**：在没有 `connection` 服务、也没有浏览器
+  来源标记的环境里，`send-feedback` 与 `export-to-dir` 现在会被 **403**。让宿主发布
+  `connection`（桌面 / 网页端默认如此）或设 `DSH_INSTRUCTION_MEMORY_REQUIRE_AUTH_FENCE=1` 均可。
+- 声明上界仍是 `<0.3.0-0`：0.3.x（含预发布）**不在**声明范围内，宿主升级后本插件会被
+  `skipping profile bundle` 跳过。**本次没有放宽**——没有在 0.3.x 上做过任何实测，
+  不放宽未验证的声明。
+
+### 未做（明确记录，不是"已验证"）
+
+- 真实宿主上的点击级验证（面板渲染、SSE 重连、导出取消分支）**未执行**：GUI 需 launch token，
+  本轮无凭据。`host-smoke` 作业与 token 留给有宿主的环境。
+- 跨进程并发写仍保留"锁超时后继续写"的活性优先策略；契约测试里那条并发用例是进程内模拟。
+
 ## [1.6.0] — 2026-11-14
 
 让「按需（auto）」条目第一次真正有机会被执行。此前的 auto 只在会话开头注入一次、措辞是「参考」，

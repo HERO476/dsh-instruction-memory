@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Manual entry point for the live-host job at the bottom: it needs a running
+  # GUI and its launch token, which a hosted runner cannot provide.
+  workflow_dispatch:
 
 jobs:
   test:
@@ -59,3 +62,30 @@ jobs:
           node-version: 22
       - run: npm install --no-save semver@${{ matrix.semver }}
       - run: node host-range-test.mjs
+
+  # Everything above is stub-hosted: `npm test` drives the real route in-process
+  # but never a real host process, so three release problems sailed through a
+  # green board — "both hosts verified" while only one host existed, EventSource
+  # under the desktop `dsh-app:` scheme untested, and an export that reported
+  # success it never checked. This job is the missing rung. It is manual because
+  # it needs a running GUI plus its launch token; it runs on a self-hosted
+  # runner, and skips loudly (rather than failing) when the secrets are absent so
+  # a fork cannot go red for a gate it cannot satisfy.
+  host-smoke:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Live host smoke (injection, SSE, route, cross-host snapshot)
+        env:
+          DSH_GUI_URL: ${{ secrets.DSH_GUI_URL }}
+          DSH_GUI_TOKEN: ${{ secrets.DSH_GUI_TOKEN }}
+        run: |
+          if [ -z "$DSH_GUI_URL" ] || [ -z "$DSH_GUI_TOKEN" ]; then
+            echo "::notice::DSH_GUI_URL / DSH_GUI_TOKEN are not configured; the live host smoke did not run."
+            exit 0
+          fi
+          node live-host-smoke.mjs --base "$DSH_GUI_URL" --token "$DSH_GUI_TOKEN" --rounds 30 --require-pulls

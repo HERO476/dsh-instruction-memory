@@ -178,11 +178,24 @@ function mountHost() {
 
 let handler = mountHost()
 
-async function rawRoute(body) {
+/**
+ * Drive the real route.
+ *
+ * The headers default to what the settings page sends: a browser always
+ * attaches `Origin` (or `Sec-Fetch-Site`), and since 1.6.1 `send-feedback` is a
+ * gated mutation rather than a read-only method, so a request without that
+ * marker is refused when no `connection` gate is mounted. Callers that mean
+ * "a bare process on this machine" pass their own headers.
+ */
+async function rawRoute(body, headers = {
+  'content-type': 'application/json',
+  host: '127.0.0.1:8080',
+  origin: 'http://127.0.0.1:8080',
+}) {
   const listeners = {}
   const req = {
     method: 'POST',
-    headers: { 'content-type': 'application/json', host: '127.0.0.1:8080' },
+    headers,
     setEncoding() {},
     destroy() {},
     on(event, callback) { (listeners[event] = listeners[event] || []).push(callback); return this },
@@ -208,6 +221,20 @@ async function rawRoute(body) {
 }
 
 const send = async (args) => rawRoute(JSON.stringify({ method: 'send-feedback', args }))
+
+// 1.6.1 regression guard: `send-feedback` left READ_ONLY_METHODS because sending
+// mail through the operator's SMTP account is not a read. On a profile with no
+// `connection` gate the only thing in front of it is the origin rule, so a
+// process that sends no origin marker must be refused — otherwise any local
+// script could use the user's mail account as a relay.
+{
+  const bare = await rawRoute(
+    JSON.stringify({ method: 'send-feedback', args: { type: 'bug', title: 'no-origin probe', body: 'no origin probe' } }),
+    { 'content-type': 'application/json', host: '127.0.0.1:8080' },
+  )
+  check('route: send-feedback without an origin marker is refused', bare.status === 403,
+    'status=' + bare.status + ' body=' + String(bare.body && bare.body.message))
+}
 
 /* ---------------- unit: validation rules ---------------- */
 

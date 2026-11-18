@@ -64,9 +64,10 @@ profile 的解析顺序是 **`$DSH_PROFILE_DIR` → `--profile <名字>` → `$D
 | `ui-test.mjs` | 设置页行为测试：用一个 ~60 行的 React 垫片真实渲染面板、点按钮/填输入框，再断言注入内容随之变化（不出图、不依赖浏览器） |
 | `verify.mjs` | 装载验证：按 DSH 的方式加载两半，并逐项断言 `memory.schema.json` 与代码中的上限一致 |
 | `smoke-test.mjs` | 注入渲染逻辑的单元测试（含「只渲染激活配置集」的隔离断言与 cwd 红线） |
-| `host-range-test.mjs` | 宿主版本范围契约测试：固定矩阵 × 两种 semver 判定模式，并把 `peerDependencies`（**被执行的那个**）、`dsh.engines.dsh`、`dsh.compatibility.dsh` 三处声明锁到同一个生成值 |
+| `host-range-test.mjs` | 宿主版本范围契约测试：固定矩阵 × 两种 semver 判定模式，把 `peerDependencies`（**被执行的那个**）与 `dsh.engines.dsh` 锁到同一个生成值，并断言第三处副本 `dsh.compatibility.dsh` **不存在**（1.6.1 删除：宿主不读它，留着只会让人以为"改了这里就放宽了兼容"） |
+| `section-order-test.mjs` | 注入位置契约测试：从**已安装宿主**（profile 树优先，其次桌面 `app.asar`）读出 `SECTION_ORDERS`，断言 `SECTION_ORDER = 950` 未被占用、严格落在 `FILE_REFERENCE(900)` 与 `TOOL_BASH(1000)` 之间、且紧邻下方仍是 `FILE_REFERENCE`。宿主换表时注入块会**静默移位**，这条断言是唯一护栏 |
 | `lint.mjs` | 静态门禁，已并入 `npm test`：`node --check` 解析所有随包发布与本仓库运行的 JS 文件，并断言 `lib/` 里不出现 `@deepseek-ai/*` 的包名导入（插件只该通过宿主传进来的上下文对象接触宿主，按包名 import 会把插件钉死在某个安装位置，在 headless / CI / 检出目录里直接解析失败） |
-| `live-host-smoke.mjs` | 双端冒烟（**1.4.8 起宿主有鉴权门，需 `--token <启动 token>` 换会话 cookie**，否则全 401）：对**正在运行**的 web / 桌面宿主各测 `state` p50/p95、SSE 首事件、注入注册与字符数，并比对两端快照（除 `injection.pulls` 外须逐字段相同）；`npm run smoke:hosts`，`--require-pulls` 可把「从未经历真实 Agent 回合」判为失败。单宿主拓扑（桌面应用自己服务 `11685`）用 `--base http://127.0.0.1:11685`，parity 会**显式跳过**而不是假装比过；`--web` / `--desktop` 各选一端，同时给直接报错、零探测时打印 `NO HOST PROBED` 而不是 `ALL CHECKS PASSED`。**刻意不进 `npm test`**——CI 没有桌面端。请求走 Node `http` 直连，绕开 `http_proxy`（否则回环请求也会被代理转发，读数虚高） |
+| `live-host-smoke.mjs` | 双端冒烟（**1.4.8 起宿主有鉴权门，需 `--token <启动 token>` 换会话 cookie**，否则全 401）：对**正在运行**的 web / 桌面宿主各测 `state` p50/p95、SSE 首事件、注入注册与字符数，并比对两端快照（除 `injection.pulls` 外须逐字段相同）；`npm run smoke:hosts`，`--require-pulls` 可把「从未经历真实 Agent 回合」判为失败。单宿主拓扑（桌面应用自己服务 `11685`）用 `--base http://127.0.0.1:11685`，parity 会**显式跳过**而不是假装比过；`--web` / `--desktop` 各选一端，同时给直接报错、零探测时打印 `NO HOST PROBED` 而不是 `ALL CHECKS PASSED`。**刻意不进 `npm test`**——CI 没有桌面端。1.6.1 起 CI 另有 `workflow_dispatch` 的 `host-smoke` 作业（self-hosted，读 `DSH_GUI_URL` / `DSH_GUI_TOKEN`）；缺凭据时它打印 notice 并跳过，不会让 fork 变红。请求走 Node `http` 直连，绕开 `http_proxy`（否则回环请求也会被代理转发，读数虚高） |
 | `docs/demo.html` | 离线演示页：桩掉 DSH 外壳、加载真实 Client 半渲染设置页（1.5.5 起随 npm 包发布，手机上也能直接打开预演布局） |
 | `memory.schema.json` | 手改存储文件用的 JSON Schema（随包发布，并被宿主复制到 `memory.json` 旁边） |
 
@@ -626,6 +627,18 @@ smtp://用户:密码@smtp.example.com:587?secure=0&from=bot@example.com
 文件权限请自行收紧（Windows 可用 `icacls feedback.json /inheritance:r /grant:r "%USERNAME%:R"`）。
 凭据缺失时只报"未配置"，不会把已配置的密码回显到页面或日志。
 
+> **`memory.json` 同理，而且更值得收紧（1.6.1 更正）**：插件写存储时传的是 `0o600`，
+> 但那只在 **POSIX 上是边界**——Windows 文件系统**忽略 `mode`**，文件只是继承目录 ACL。
+> 也就是说 Windows 上"只有你能读"成不成立，取决于 `%USERPROFILE%` 那条 ACL，而不是插件。
+> 多用户共用一台机器时请自己收一次（先备份，再改）：
+>
+> ```
+> icacls "%USERPROFILE%\.dsh\instruction-memory\memory.json" /inheritance:r /grant:r "%USERNAME%:(R,W)"
+> icacls "%USERPROFILE%\.dsh\instruction-memory" /inheritance:r /grant:r "%USERNAME%:(OI)(CI)(F)"
+> ```
+>
+> 面板也不会再暗示"已设为 0600"——那是 `open(…, 0o600)` 的解释器参数，不是 Windows 上的权限事实。
+
 ### 收件邮箱加密（可选）
 
 如果不想让收件邮箱以明文留在 `feedback.json` 里（例如担心截图、误提交或备份泄漏），
@@ -724,6 +737,14 @@ DNS 重绑定恰好推翻了它**：`evil.com` 解析到 `127.0.0.1` 之后，�
 `Sec-Fetch-Site` 不是 `cross-site`），本插件不再重复判——重复判会把反代域名全部 403；
 没有门时非回环绑定直接 503，根本走不到这里。
 
+**没有 `connection` 时，哪些方法还算"只读"（1.6.1 更正）**：写门把方法分成两拨——只读集合
+（`state`、`history-list`、`read-source`、`export-data`）直接放行，其余一律要求浏览器来源标记
+（`Origin` 或 `Sec-Fetch-Site: same-origin`），否则 403。`export-to-dir` 与 `send-feedback`
+**不在**只读集合里：前者往备份目录写文件，后者用**你自己的 SMTP 账号**发信，两者都是需要来源
+确认的写操作。1.6.0 及以前它们被错放进只读集合，等于让本机任意进程（Android 上则是任何装了
+App 的程序）绕过写门发信。`reload` 仍留在只读集合内，这是有意的：它只重读磁盘、首次落盘幂等，
+而桌面壳转发时会剥掉 `Origin`，移出去会让"重新读取"在无门 profile 上直接 403。
+
 ### 宿主的鉴权门（connection）：非回环绑定没有它就直接拒绝
 
 路由挂载后会向宿主申请 `connection` 服务（DSH 的 Web / Go 端都提供，负责把浏览器会话换成
@@ -797,11 +818,15 @@ nginx / Caddy 等反向代理之后远程访问，需要注意：
 > 后，"没有 `connection` 服务"直接变成 **503**，而不再退回"仅回环"。桌面单用户机器上回环还能
 > 当边界用；Android 上不能——整机共享回环命名空间，任何装了 App 的程序都能连 127.0.0.1。
 
-> **桌面端渲染器 origin 的一个已知边界**（2026-11-12 实测）：宿主对 `Origin: dsh-app://app`
-> 的请求返回 **403**，本插件在没有 `connection` 服务时的自判（`requestOriginVerdict`）同样拒绝
-> 该 origin（它按 Origin ↔ Host 同源比较）。当前桌面窗口发的是 `http://127.0.0.1:<port>`，
-> 所以不受影响；但如果将来的渲染器改用 `dsh-app://` 作为 document origin，设置页会整片 403，
-> 届时需要在两侧各放行该 scheme——这不是配置问题，是代码问题。
+> **桌面端为什么看不到 `Origin: dsh-app://app`**（1.6.1 更正；2026-11-18 复核桌面壳源码）：
+> 桌面窗口的 document origin 确实是 `dsh-app://app`，但主进程只把固定静态路径当资源，
+> **其余所有路径都经 `forwardWebRequest()` 转发到宿主回环端口**，转发前**删掉 `host` /
+> `origin` / `cookie` / `sec-fetch-site` 四个头**，再注入宿主自己的 cookie
+> （`resources/app/lib/main.js` 的 `forwardWebRequest`）。因此到达本插件的请求**没有 `Origin`**，
+> `requestOriginVerdict()` 里"origin 为空即放行"那一条生效——插件的同源判定在桌面端**根本不执行**。
+> 桌面端的真实边界是**回环绑定 + 宿主 cookie**，不是插件自己的 origin 判定。
+> 上一版这里写的"渲染器若改用 `dsh-app://` 会让设置页整片 403"属于推演，**已被证伪**：该
+> scheme 的请求压根到不了插件路由。若将来壳层不再剥离 `Origin`，这一段需要重验。
 
 ### 在 DSH Go（Android）上：鉴权来自平台补丁，不是本插件
 
@@ -819,21 +844,27 @@ DSH Go 给官方 Web 服务器包了一层**构建期补丁** `runtime/patches/r
 
 ## 兼容性
 
-同一串范围写在**三处**，而**只有一处会被宿主强制执行**——这一点以前写错过，现在按实测更正：
+同一串范围写在**两处**（1.6.1 删掉了无人读取的第三处），而**宿主只强制其中一处**：
 
 | 位置 | 谁读它 | 作用 |
 | --- | --- | --- |
-| **`peerDependencies`**（`@deepseek-ai/dsh-system-prompt`） | **宿主**：`evaluatePluginCompatibility()`（`dsh-app-boot`），在**安装**与 **profile 启动**时执行 | **门禁之一**，不是唯一。1.5.7 起两处实测结论必须同时写在这里：① 门禁读的是**宿主自身版本**（`getDshRuntimeVersion()` → `dsh-app-boot` 的 package.json），并用 `{ includePrerelease: true }` 求值，所以预发布行不会被误判；② 在 `0.2.2-rc.3` 的宿主实现里**存在 `engines.dsh` 时 `peerDependencies` 的区间被忽略**（`dsh-app-boot/src/plugin-compatibility.ts:52`）——也就是说这段 peer 区间可能完全不参与判定，只用来在报错时点名。本仓库仍让三处**逐字节同值**，就是为了不依赖"到底哪一处生效"。这条已从"真正的门禁"更正：**能证明它生效的只有实测，不能靠读声明推断** |
+| **`peerDependencies`**（`@deepseek-ai/dsh-system-prompt`） | **宿主**：`evaluatePluginCompatibility()`（`dsh-app-boot`），在**安装**与 **profile 启动**时执行 | **门禁之一**，不是唯一。1.5.7 起两处实测结论必须同时写在这里：① 门禁读的是**宿主自身版本**（`getDshRuntimeVersion()` → `dsh-app-boot` 的 package.json），并用 `{ includePrerelease: true }` 求值，所以预发布行不会被误判；② 在 `0.2.2-rc.3` 的宿主实现里**存在 `engines.dsh` 时 `peerDependencies` 的区间被忽略**（`dsh-app-boot/src/plugin-compatibility.ts:52`）——也就是说这段 peer 区间可能完全不参与判定，只用来在报错时点名。本仓库仍让两处**逐字节同值**（1.6.1 删掉了无人读取的第三处），就是为了不依赖"到底哪一处生效"。这条已从"真正的门禁"更正：**能证明它生效的只有实测，不能靠读声明推断** |
 | `dsh.engines.dsh` | 插件市场（第三方，服务端读取） | 市场卡片上的兼容性判定与展示 |
-| `dsh.compatibility.dsh` | 未找到读取方（官方文档与 DSH 树内均无） | 仅作人类可读的重复声明 |
+| ~~`dsh.compatibility.dsh`~~ | **1.6.1 已删除**：`dsh-app-boot`、`dsh-client-ui-plugin-manager`、`dshmarket` 全树 grep 无读取方 | 曾经只是人类可读的重复声明，留在包里只会让人以为"改了这里就放宽了兼容" |
 
 **1.0.14 之前这里只有后两处，没有 `peerDependencies`**——而宿主的门禁在读到缺失的 `peerDependencies` 时会直接 `return undefined`（`if (!Object.hasOwn(fields, "peerDependencies")) return void 0`），也就是**跳过检查**。换句话说，范围之外的宿主在此之前可以装上而**没有任何拦截或警告**；那串范围当时只是市场元数据，不是门禁。1.0.14 补上 peer 之后，它才真正生效。
 
-同一串范围（三处逐字节一致，由测试锁定）：
+同一串范围（两处逐字节一致，由 `host-range-test.mjs` 锁定；第三处 `dsh.compatibility.dsh` 已于 1.6.1 删除）：
 
 ```
->=0.1.3-alpha.2 <0.1.4 || >=0.1.4-0 <0.1.5-0 || >=0.1.5-alpha.1 <0.1.6-0 || >=0.1.6-alpha.0 <0.1.7-0 || >=0.1.7-alpha.0 <0.2.0-0 || >=0.2.1-alpha.0 <0.3.0-0 || >=0.2.2-alpha.0 <0.3.0-0 || >=0.2.0-0 <0.3.0-0
+>=0.1.3-alpha.2 <0.1.4 || >=0.1.4-0 <0.1.5-0 || >=0.1.5-0 <0.1.6-0 || >=0.1.6-alpha.0 <0.1.7-0 || >=0.1.7-alpha.0 <0.2.0-0 || >=0.2.1-alpha.0 <0.3.0-0 || >=0.2.2-alpha.0 <0.3.0-0 || >=0.2.0-0 <0.3.0-0
 ```
+
+**1.6.1 更正一处机制描述**：上面第 ② 条说的"存在 `engines.dsh` 时 peer 被忽略"，读的是
+`package.json` **顶层**的 `engines.dsh`。本包的 `engines` 字段只有 `node`，`engines.dsh` 是写在
+`dsh` 命名空间下的（`dsh.engines.dsh`），宿主**不读**后者。所以在本包当前的写法下，真正生效的
+永远是 `peerDependencies` 那一条；`dsh.engines.dsh` 只是市场卡片用的展示副本。0.1.5 行的下界
+同时从 `>=0.1.5-alpha.1` 改为 `>=0.1.5-0`（旧写法把 `0.1.5-alpha.0` 漏在区间外，是枚举时的一处空洞）。
 
 **验证范围与证据等级**——三者不可混为一谈，下面每一行都标了它到底证明了什么：
 

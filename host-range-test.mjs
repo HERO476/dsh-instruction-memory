@@ -47,18 +47,22 @@ const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
 const declared = pkg.dsh?.engines?.dsh
 const compatibility = pkg.dsh?.compatibility?.dsh
 
-// The range is written in three places, and only ONE of them is enforced by the
-// host. `evaluatePluginCompatibility` (dsh-app-boot/lib/index.js) reads
-// `manifest.peerDependencies`, filters the names to `@deepseek-ai/dsh*`, and
-// returns early when the field is absent:
+// The range is live in two places, and the host enforces exactly one of them.
+// `dsh-app-boot` decides inside `unmetRequirements(manifest, runtimeVersion)`:
 //
-//     if (!Object.hasOwn(fields, "peerDependencies")) return void 0;
+//     if (Object.hasOwn(engines, "dsh")) return satisfies(runtimeVersion, engines.dsh) ? {} : {...}
+//     if (!Object.hasOwn(fields, "peerDependencies")) return {}
+//     for (const [name, range] of Object.entries(fields.peerDependencies))
+//       if (name === "@deepseek-ai/dsh" || name.startsWith("@deepseek-ai/dsh-")) ...
 //
-// So without the peer entry the range is pure documentation — the host will
-// happily start on a version this plugin never claimed to support. With it, an
-// out-of-range host is refused (or needs an explicitly acknowledged
-// exact-version exemption). `dsh.engines.dsh` / `dsh.compatibility.dsh` are read
-// by the plugin market for its card verdict, not by dsh itself.
+// Both calls pass `{ includePrerelease: true }`. Note WHAT is read: the
+// manifest's TOP-LEVEL `engines.dsh`, not this package's nested
+// `dsh.engines.dsh` — no host code reads the nested one, and this package has
+// no top-level `engines.dsh` (its top-level `engines` only carries `node`), so
+// in practice `peerDependencies` is the enforced gate. That is why the peer
+// entry must never disagree with the nested copy the market shows on the card,
+// and why 1.6.1 deleted the third copy (`dsh.compatibility.dsh`) rather than
+// pretend all three were load-bearing.
 //
 // Peer names are compared against the RUNTIME version, not the named package's
 // own version, so the name only has to be the service this plugin hard-depends
@@ -69,13 +73,19 @@ const peerNames = Object.keys(pkg.peerDependencies ?? {})
 const peer = pkg.peerDependencies?.[PEER_NAME]
 
 check('package.json declares dsh.engines.dsh', typeof declared === 'string' && declared !== '')
-check('package.json declares dsh.compatibility.dsh', typeof compatibility === 'string' && compatibility !== '')
+// 1.6.1 removed the third copy. `dsh.compatibility.dsh` had no consumer at all:
+// dsh-app-boot decides from `engines.dsh`, else `peerDependencies` (see
+// unmetRequirements below), and dshmarket was grepped for the field with zero
+// hits. A declaration nothing reads is worse than no declaration — it let us
+// believe a range had been widened when only the dead copy had changed.
+check('package.json no longer ships dsh.compatibility.dsh', compatibility === undefined,
+  'found a third copy: it has no reader, so an edit there changes nothing')
 check('package.json declares the ENFORCED peerDependencies entry', typeof peer === 'string' && peer !== '',
   'without it the host skips its compatibility gate entirely')
 check('peerDependencies names exactly ' + PEER_NAME, peerNames.length === 1 && peerNames[0] === PEER_NAME,
   JSON.stringify(peerNames))
-check('all three declarations are identical', declared === compatibility && declared === peer,
-  JSON.stringify({ engines: declared, compatibility, peer }))
+check('the two live declarations are identical', declared === peer,
+  JSON.stringify({ engines: declared, peer }))
 
 /* ---------------- the range's single source of truth ---------------- */
 
@@ -91,7 +101,12 @@ const COVERED_LINES = [
   // Each line covers [floor, below); RANGE_TAIL is the unbounded tail.
   { floor: '0.1.3-alpha.2', below: '0.1.4' },
   { floor: '0.1.4-0', below: '0.1.5-0' },
-  { floor: '0.1.5-alpha.1', below: '0.1.6-0' },
+  // 1.6.1: this read `0.1.5-alpha.1`, which left `0.1.5-alpha.0` (and
+  // `0.1.5-0`) outside every line while the rest of the 0.1.5 prereleases were
+  // inside — a hole in the floor of an otherwise contiguous line. `-0` is the
+  // lowest possible prerelease, so it catches every 0.1.5 prerelease that
+  // exists or ever will.
+  { floor: '0.1.5-0', below: '0.1.6-0' },
   { floor: '0.1.6-alpha.0', below: '0.1.7-0' },
   { floor: '0.1.7-alpha.0', below: '0.2.0-0' },
   // 0.2.0 prereleases are reached by the tail's own tuple; the 0.2.1
@@ -118,12 +133,11 @@ const generateRange = (lines, tail) =>
 
 const generated = generateRange(COVERED_LINES, RANGE_TAIL)
 
-// All three copies are checked against the generated value, so a hand-edit of
-// any one of them — including the peer that the host actually enforces — fails
-// here instead of shipping.
+// Both live copies are checked against the generated value, so a hand-edit of
+// either one — including the peer that the host actually enforces — fails here
+// instead of shipping.
 const drift = [
   ['dsh.engines.dsh', declared],
-  ['dsh.compatibility.dsh', compatibility],
   ['peerDependencies', peer],
 ].filter(([, value]) => value !== generated)
 
@@ -400,6 +414,10 @@ function readInstalledHostVersion() {
 const MUST_PASS = [
   // verified on Windows / Node 22 (README's tested table)
   '0.1.3-alpha.2',
+  // 1.6.1: both were rejected before — the 0.1.5 line started at `-alpha.1`,
+  // so the lowest 0.1.5 prereleases fell outside every line.
+  '0.1.5-0',
+  '0.1.5-alpha.0',
   '0.1.5-alpha.1',
   '0.1.5-alpha.2',
   '0.1.5-rc.1',
