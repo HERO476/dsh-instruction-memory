@@ -109,11 +109,17 @@ function readFromAsar(archivePath, relativePath, cache) {
       node = node?.files?.[segment]
       if (node === undefined) break
     }
-    if (node === undefined || node.files !== undefined || typeof node.offset !== 'number') {
-      throw new Error('not a file entry')
-    }
-    const start = 8 + headerPickleSize + Number(node.offset)
-    result = handle.subarray(start, start + Number(node.size)).toString('utf8')
+    if (node === undefined || node.files !== undefined) throw new Error('not a file entry')
+    // `offset` is serialised as a STRING by the asar writer (size is a number).
+    // An earlier version of this file required a numeric offset, so every asar
+    // lookup threw and returned null — the desktop branch was dead code that
+    // never once ran, which is why the profile-tree copy silently stood in for
+    // the host. Accept both spellings.
+    const offset = Number(node.offset)
+    const size = Number(node.size)
+    if (!Number.isFinite(offset) || !Number.isFinite(size)) throw new Error('unreadable entry bounds')
+    const start = 8 + headerPickleSize + offset
+    result = handle.subarray(start, start + size).toString('utf8')
   } catch {
     result = null
   }
@@ -123,22 +129,58 @@ function readFromAsar(archivePath, relativePath, cache) {
 
 const asarCache = new Map()
 const ASAR_MEMBER = 'dsh/node_modules/@deepseek-ai/dsh-system-prompt/lib/index.js'
+const ASAR_PACKAGE_MEMBER = 'dsh/node_modules/@deepseek-ai/dsh-system-prompt/package.json'
 
-function loadHostSystemPromptSource() {
-  for (const path of profileCandidates()) {
-    if (!existsSync(path)) continue
+/** The host version recorded beside a `lib/index.js` in a normal package tree. */
+function versionBeside(path) {
+  try {
+    return JSON.parse(readFileSync(join(path, '..', '..', 'package.json'), 'utf8')).version ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Every readable copy of the host's system-prompt module on this machine.
+ *
+ * The order matters, and 1.6.2 fixed it. The profile tree used to be asked
+ * first, and on this machine `profiles/node_modules/@deepseek-ai/
+ * dsh-system-prompt` is a junction into an editor-bundled 0.2.2-alpha.2 while
+ * the host actually serving the user is 0.2.2-rc.5 inside `app.asar`. The test
+ * printed seven green lines about a host nobody was running.
+ *
+ * Two changes, because "pick a better first candidate" would leave the same
+ * trap: the desktop install is asked first, AND every copy that exists is
+ * asserted instead of stopping at the first hit. Each result is labelled with
+ * its kind and version, so a stale copy can never stand in for the live one
+ * again without being visible in the output.
+ */
+function hostCopies() {
+  const copies = []
+  const seen = new Set()
+  for (const archive of desktopAsarCandidates()) {
+    if (!existsSync(archive) || seen.has(archive)) continue
+    seen.add(archive)
+    const text = readFromAsar(archive, ASAR_MEMBER, asarCache)
+    if (typeof text !== 'string' || text === '') continue
+    let version = null
     try {
-      return { source: readFileSync(path, 'utf8'), where: path }
+      version = JSON.parse(readFromAsar(archive, ASAR_PACKAGE_MEMBER, asarCache)).version ?? null
     } catch {
-      // try the next candidate
+      version = null
+    }
+    copies.push({ source: text, where: archive + '!' + ASAR_MEMBER, kind: 'asar', version })
+  }
+  for (const path of profileCandidates()) {
+    if (!existsSync(path) || seen.has(path)) continue
+    seen.add(path)
+    try {
+      copies.push({ source: readFileSync(path, 'utf8'), where: path, kind: 'profile', version: versionBeside(path) })
+    } catch {
+      // unreadable copy: skip it, the others still get asserted
     }
   }
-  for (const archive of desktopAsarCandidates()) {
-    if (!existsSync(archive)) continue
-    const text = readFromAsar(archive, ASAR_MEMBER, asarCache)
-    if (typeof text === 'string' && text !== '') return { source: text, where: archive + '!' + ASAR_MEMBER }
-  }
-  return null
+  return copies
 }
 
 /* ---------------- parse the host's table ---------------- */
@@ -181,27 +223,31 @@ function parseSectionOrders(source) {
   return Object.keys(table).length === 0 ? null : table
 }
 
-const host = loadHostSystemPromptSource()
-if (host === null) {
+const hosts = hostCopies()
+if (hosts.length === 0) {
   console.log('SKIP  no installed host exposes @deepseek-ai/dsh-system-prompt (bare checkout or CI)')
   console.log('\nALL PASS (skipped)')
   process.exit(0)
 }
+console.log('#       asserting ' + hosts.length + ' host copy/copies found on this machine\n')
 
-const table = parseSectionOrders(host.source)
-check('the installed host exposes a parseable SECTION_ORDERS table', table !== null,
-  'read from ' + host.where + '; the table moved or changed shape — update parseSectionOrders()')
+for (const host of hosts) {
+  const tag = '[' + host.kind + (host.version === null ? '' : ' v' + host.version) + ']'
+  const table = parseSectionOrders(host.source)
+  check(tag + ' exposes a parseable SECTION_ORDERS table', table !== null,
+    'read from ' + host.where + '; the table moved or changed shape — update parseSectionOrders()')
+  if (table === null || declared === null) continue
 
-if (table !== null && declared !== null) {
   const anchors = { FILE_REFERENCE: 900, TOOL_BASH: 1000 }
   for (const [name, expected] of Object.entries(anchors)) {
-    check('the host still places ' + name + ' at ' + expected, table[name] === expected,
+    check(tag + ' still places ' + name + ' at ' + expected, table[name] === expected,
       name + ' = ' + String(table[name]) + ' in ' + host.where)
   }
 
   const occupants = Object.entries(table).filter(([, value]) => value === declared)
-  check('SECTION_ORDER ' + declared + ' is not occupied by a host section', occupants.length === 0,
-    'taken by ' + occupants.map(([name]) => name).join(', ') + ' — move SECTION_ORDER to a free gap')
+  check(tag + ' does not occupy SECTION_ORDER ' + declared, occupants.length === 0,
+    'taken by ' + occupants.map(([name]) => name).join(', ') + ' in ' + host.where
+      + ' — move SECTION_ORDER to a free gap')
 
   const below = Object.entries(table)
     .filter(([, value]) => value < declared)
@@ -210,18 +256,17 @@ if (table !== null && declared !== null) {
     .filter(([, value]) => value > declared)
     .sort((left, right) => left[1] - right[1])[0]
 
-  check('SECTION_ORDER ' + declared + ' sits strictly between ' + anchors.FILE_REFERENCE
-    + ' (FILE_REFERENCE) and ' + anchors.TOOL_BASH + ' (TOOL_BASH)',
-  below !== undefined && above !== undefined
-    && below[1] >= anchors.FILE_REFERENCE && above[1] <= anchors.TOOL_BASH,
-  'nearest neighbours are ' + (below === undefined ? 'none' : below[0] + '@' + below[1])
-    + ' and ' + (above === undefined ? 'none' : above[0] + '@' + above[1]))
+  check(tag + ' keeps SECTION_ORDER ' + declared + ' between FILE_REFERENCE and TOOL_BASH',
+    below !== undefined && above !== undefined
+      && below[1] >= anchors.FILE_REFERENCE && above[1] <= anchors.TOOL_BASH,
+    'nearest neighbours are ' + (below === undefined ? 'none' : below[0] + '@' + below[1])
+      + ' and ' + (above === undefined ? 'none' : above[0] + '@' + above[1]))
 
   // The intent is "after the file-reference block, before the tool
   // descriptions". A free slot outside that neighbourhood would still pass a
   // bare uniqueness check while moving the block somewhere the docs do not
   // describe.
-  check('the gap above SECTION_ORDER is still FILE_REFERENCE (the documented intent)',
+  check(tag + ' still has FILE_REFERENCE directly below SECTION_ORDER',
     below !== undefined && below[0] === 'FILE_REFERENCE',
     'the section immediately below ' + declared + ' is ' + (below === undefined ? 'none' : below[0])
       + ' — README and lib/index.js explain the placement in terms of FILE_REFERENCE')

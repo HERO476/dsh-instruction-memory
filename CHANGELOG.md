@@ -7,20 +7,69 @@
 > 1.0.13 起由 CI 经 OIDC Trusted Publishing 发布（首个带 provenance 的版本）。
 > 这些历史 tag **不应回填**——npm 上的版本号已被占用。
 
-## [Unreleased]
+## [1.6.2] — 2026-11-19
 
-### 修复
+第二轮增量审计（桌面端 runtime 已升到 0.2.2-rc.5）的修复批次，主体是**修 1.6.1 自己引入的一个
+回归**，以及让测试真正覆盖"桌面壳转发"这种请求形状。
 
+### 修复（1.6.1 的回归）
+
+- **`reload` 放回 `READ_ONLY_METHODS`**。1.6.1 把 `export-to-dir` / `send-feedback` 移出只读集合时
+  连 `reload` 一起删掉了，而同一提交的注释、CHANGELOG、README、提交信息**四处**都写着"reload 有意
+  保留"。触发条件是「桌面壳转发（必然剥掉 `Origin` 与 `Sec-Fetch-Site`）+ profile 没有
+  `connection` 服务」，此时面板「重新载入」会永久 403。本机 3080 有 `connection` 门，所以线上看不
+  见——这正是它需要一条**不带 origin** 的用例才抓得住的原因。
+
+### 修复（说明与事实不符）
+
+- **写门的注释与拒绝文案**。原文称 `Sec-Fetch-Site` "script cannot set it"，并告诉用户
+  "本机脚本 / curl 的写入会被拒绝"。两者都错：`Origin` 与 `Sec-Fetch-Site` 是普通请求头，本机任何
+  进程都能自带一个（实测加一行 `Sec-Fetch-Site: same-origin` 即把 403 变 200）。现在注释与文案都
+  按"只挡浏览器跨站，不是身份校验"表述，并指向 `REQUIRE_AUTH_FENCE=1` 或宿主的 `connection`。
+- **只读集合的注释**。"它们只读内存、不写任何东西"对 `state` / `read-source` 不准确——两者在首次
+  运行时会物化一份默认空 store。改为"物化的内容是本插件自己的默认值，从不是调用方给的"。
+
+### 修复（测试）
+
+- **`section-order-test.mjs` 的 asar 分支此前是死代码**。asar 目录里文件的 `offset` 是**字符串**，
+  而该测试要求 `typeof offset === 'number'`，于是每次读 `app.asar` 都抛错并静默回退到 profile 树。
+  这台机器上 `profiles/node_modules/@deepseek-ai/dsh-system-prompt` 是 TRAE 打包的
+  **0.2.2-alpha.2** junction，而真正在跑的是 asar 里的 **0.2.2-rc.5**，于是测试打印了七条绿行、
+  断言的是没人使用的那份宿主。现在：`offset` 两种写法都接受；桌面安装优先；**每个存在的副本都
+  单独断言**，并在每行标出种类与版本（如 `[asar v0.2.2-rc.5]`、`[profile v0.2.2-alpha.2]`）。
+- **`contract-test.mjs` 增加「desktop-forward」形状用例组**：不带 `Origin`、不带
+  `Sec-Fetch-Site` 的请求，`reload` / `state` / `history-list` 必须 200，`save-entry` /
+  `send-feedback` / `export-to-dir` 必须 403；并把 `READ_ONLY_METHODS` 的成员从源码钉住
+  （多一个或少一个都要红）。此前全部用例的默认头都带 `origin`，这个形状从未被测过。
+- **`ui-test.mjs` 覆盖导入确认的两条分支**：取消 → 一个 rev 都不变；无对话框 → 拒绝合并并给出
+  可读提示。1.6.1 加了这个确认却没有任何测试。
 - **`section-order-test.mjs` 兼容 CRLF 检出**。CI 在 Windows 上用 `core.autocrlf` 检出，同一份
-  `lib/index.js` 到那边是 CRLF；测试里按 `\n` 锚定的正则本地全绿、只在 Windows runner 上失败。
-  读取后先归一化行尾。这是 1.6.1 自己引入的测试缺陷，不是被测代码的问题。
-- **存储写入：临时文件在 rename 前消失时重写一次**。CI（Node 22）上出现过一次
+  `lib/index.js` 到那边是 CRLF；按 `\n` 锚定的正则本地全绿、只在 Windows runner 上失败。读取后
+  先归一化行尾。
+
+### 修复（存储）
+
+- **临时文件在 rename 前消失时重写一次**。CI（Node 22）上出现过一次
   `保存失败：ENOENT … rename 'memory.json.tmp-…' -> 'memory.json'`：临时文件在 `close()` 与
   `rename()` 之间被本进程之外的清理者删掉了（安全扫描器、索引器、runner 清理 `/tmp`），
-  于是用户看到"保存失败"，而存储其实完全健康。现在遇到该 ENOENT 会重写一次临时文件再
-  rename；目标目录不存在（ENOENT 的另一种含义）仍立即失败并保留原错误信息。
-  本地 Node 24 与 Node 22 各 3 次全绿，发布作业（Node 22）当时也通过——这是对
-  "外部清理者"的加固，不是把 flaky 藏起来。
+  于是用户看到"保存失败"，而存储其实完全健康。现在遇到该 ENOENT 会重写一次临时文件再 rename；
+  目标目录不存在（ENOENT 的另一种含义）仍立即失败并保留原错误信息。
+
+### 兼容性
+
+- 存储格式不变（`version: 2`）。宿主契约复核：rc.3 → 0.2.2-rc.5 的 10 个依赖点零漂移
+  （`SECTION_ORDERS` 900/1000 未动、950 仍空；`forwardWebRequest` 仍删 4 个头并注入 cookie；
+  `will-download` 仍只认 `#dsh-download=`）。
+- 装配：`npm test` 现为 8 个脚本（新增 `section-order-test.mjs` 已在 1.6.1 加入）；本版在
+  Node 24 与 Node 22 上各自全绿。
+
+### 未做
+
+- 真实宿主点击级验证（面板渲染、SSE 重连、导出取消分支）仍未执行：GUI 需 launch token，本轮无
+  凭据。`host-smoke` 作业仍是人工项。
+- 跨进程并发写依旧是"锁超时后继续写"的活性优先策略（未改）。
+- `resources\app.reapply-failed-20261119\` 是桌面壳 reapply 失败留下的整份 rc.5 副本，属环境残留，
+  未清理（会让后续取证读错树，建议 owner 删除）。
 
 ## [1.6.1] — 2026-11-18
 

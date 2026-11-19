@@ -920,6 +920,61 @@ check('panel: reload keeps the panel alive', hasText(tree, '指令记忆') || ha
   }
 }
 
+/* ---------------- 1.6.2: import asks before it merges ---------------- */
+
+// Import used to merge a file with no confirmation at all, while the
+// whole-store restore always asked. On a fence-less desktop profile that turns
+// a file someone handed the user into instructions injected into every later
+// turn, with no user in the loop. Both branches are cheap to exercise here: the
+// ask must happen (and cancelling writes nothing), and a shell with no dialog
+// must refuse instead of merging.
+//
+// Runs BEFORE the stream-failure block below on purpose: that block trips six
+// consecutive EventSource errors, after which the panel arms a reconnect timer
+// and `settle()` can never observe three quiet passes — the suite would spin.
+{
+  // `rawRoute` returns the raw response text in `.body`; the route half of this
+  // suite parses it, so these helpers must too.
+  const routeJson = async (request) => JSON.parse((await rawRoute(JSON.stringify(request))).body)
+  const exported = await routeJson({ method: 'export-data' })
+  const payloadText = JSON.stringify(exported.export ?? {})
+  const makeFile = () => ({ size: payloadText.length, text: async () => payloadText })
+  const importInput = (node) => anyElement(node, (element) => element.props !== undefined && element.props.type === 'file')
+  const revNow = async () => (await routeJson({ method: 'state' })).snapshot.data.rev
+  const revBefore = await revNow()
+
+  let asked = 0
+  globalThis.window.confirm = () => { asked += 1; return false }
+  let tree = await settle()
+  const input = importInput(tree)
+  check('import: the panel exposes a file input for merging', input !== undefined)
+  if (input !== undefined) {
+    input.props.onChange({ target: { files: [makeFile()], value: '' } })
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    tree = await settle()
+  }
+  check('import: the merge asks for confirmation first', asked === 1, 'confirm called ' + asked + ' time(s)')
+  check('import: cancelling the confirmation writes nothing', await revNow() === revBefore)
+
+  // No dialog at all: askConfirm returns CONFIRM_UNAVAILABLE, which must refuse
+  // rather than merge silently.
+  const savedConfirm = globalThis.window.confirm
+  delete globalThis.window.confirm
+  tree = await settle()
+  const inputWithoutDialog = importInput(tree)
+  check('import: the file input is still rendered without a dialog', inputWithoutDialog !== undefined)
+  if (inputWithoutDialog !== undefined) {
+    inputWithoutDialog.props.onChange({ target: { files: [makeFile()], value: '' } })
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    tree = await settle()
+  }
+  check('import: with no dialog the merge is refused, not performed', await revNow() === revBefore)
+  check('import: the refusal explains itself',
+    texts(tree).join(' ').includes('无法弹出确认对话框'),
+    texts(tree).join(' ').slice(0, 200))
+  globalThis.window.confirm = savedConfirm
+}
+
 /* Android / Doze: a stream that never recovers must say so instead of showing
  * stale data as if it were live. Six consecutive failures ≈ 30 s. */
 {

@@ -729,21 +729,30 @@ DNS 重绑定恰好推翻了它**：`evil.com` 解析到 `127.0.0.1` 之后，�
 即使某些技巧（如 `no-cors` fetch）不带 `Origin`，`evil.com` 发来的请求仍会被标记为
 `cross-site`——命中即 **403**。在回环绑定（受保护）时 **`cross-site` 与 `same-site` 都拒绝**：
 "同站"判定不看端口，而回环上的任何其他端口都是别人跑的本地服务，放行 `same-site` 等于让任意
-本地页面改写你的长期指令。`none`（用户直接导航）放行；curl、Node 与 2020 年前的老浏览器根本
-不发这个头，也不受影响（它们由 Host 与 content-type 校验兜底）。
+本地页面改写你的长期指令。`none`（用户直接导航）放行。
+
+curl、Node 与 2020 年前的老浏览器根本不发这个头——在**有** `connection` 门时它们由宿主与
+content-type 校验兜底；在**没有**门的 profile 里，1.6.1 起「写方法必须带来源标记」这条规则会把
+它们的写请求拒成 **403**（见下一节）。
 
 注意这一整套 Host / `Origin` / `Sec-Fetch-Site` 判定**只在没有 `connection` 服务时执行**。
 有门时它由宿主做（宿主接受回环、`trustedHosts` 与监听地址，并校验 `Origin` 与 `Host` 同源、
 `Sec-Fetch-Site` 不是 `cross-site`），本插件不再重复判——重复判会把反代域名全部 403；
 没有门时非回环绑定直接 503，根本走不到这里。
 
-**没有 `connection` 时，哪些方法还算"只读"（1.6.1 更正）**：写门把方法分成两拨——只读集合
-（`state`、`history-list`、`read-source`、`export-data`）直接放行，其余一律要求浏览器来源标记
-（`Origin` 或 `Sec-Fetch-Site: same-origin`），否则 403。`export-to-dir` 与 `send-feedback`
-**不在**只读集合里：前者往备份目录写文件，后者用**你自己的 SMTP 账号**发信，两者都是需要来源
-确认的写操作。1.6.0 及以前它们被错放进只读集合，等于让本机任意进程（Android 上则是任何装了
-App 的程序）绕过写门发信。`reload` 仍留在只读集合内，这是有意的：它只重读磁盘、首次落盘幂等，
-而桌面壳转发时会剥掉 `Origin`，移出去会让"重新读取"在无门 profile 上直接 403。
+**没有 `connection` 时，哪些方法还算"只读"（1.6.2 更正）**：写门把方法分成两拨——只读集合
+（`state`、`history-list`、`read-source`、`export-data`、`reload`）直接放行，其余一律要求浏览器
+来源标记（`Origin` 或 `Sec-Fetch-Site: same-origin`），否则 403。`export-to-dir` 与
+`send-feedback` **不在**只读集合里：前者往备份目录写文件，后者用**你自己的 SMTP 账号**发信，
+两者都是需要来源确认的写操作。1.6.0 及以前它们被错放进只读集合，等于让本机任意进程（Android
+上则是任何装了 App 的程序）绕过写门发信；1.6.1 修复时又把 `reload` 一并误删，1.6.2 已放回——
+它只重读磁盘、首次落盘幂等，而桌面壳转发时会剥掉 `Origin`，删掉会让「重新载入」在无门 profile
+上直接 403。
+
+**这条规则只挡浏览器跨站，不是身份校验**：`Origin` 与 `Sec-Fetch-Site` 都是普通请求头，本机
+任何进程都能自带一个（实测：加一行 `Sec-Fetch-Site: same-origin` 就把 403 变成 200）。无门
+profile 的写入对**同机进程**不设防；真正的边界是宿主的 `connection` 服务，或
+`DSH_INSTRUCTION_MEMORY_REQUIRE_AUTH_FENCE=1`（此时整个路由 fail-closed，连只读方法都是 503）。
 
 ### 宿主的鉴权门（connection）：非回环绑定没有它就直接拒绝
 

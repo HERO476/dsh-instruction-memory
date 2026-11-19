@@ -712,6 +712,45 @@ async function statusFor(headers, body) {
   check('Sec-Fetch-Site: none is accepted (user-driven navigation)',
     await statusFor({ 'content-type': 'application/json', host: '127.0.0.1:8080', 'sec-fetch-site': 'none' }, JSON.stringify({ method: 'state' })) === 200)
 
+  // Desktop-forward shape (1.6.2). The desktop shell hands every non-static
+  // path to `forwardWebRequest`, which deletes `origin` and `sec-fetch-site`
+  // before forwarding (app.asar!lib/main.js). On a profile with no `connection`
+  // service that shape is byte-for-byte what a bare local process sends — which
+  // is exactly why the read/write split has to be right: the calls the panel
+  // makes on its own must still work, and every write must not.
+  //
+  // `reload` is here because 1.6.1 dropped it from READ_ONLY_METHODS by
+  // accident and nothing in this suite noticed: every request above carries
+  // `origin`, so the forwarded shape was never exercised. Keep one `reload`
+  // assertion and the source-level pin below, and that regression cannot come
+  // back silently.
+  const desktopForward = { 'content-type': 'application/json', host: '127.0.0.1:8080' }
+  check('desktop-forward: reload still works with no origin marker',
+    await statusFor(desktopForward, JSON.stringify({ method: 'reload' })) === 200)
+  check('desktop-forward: state still works with no origin marker',
+    await statusFor(desktopForward, JSON.stringify({ method: 'state' })) === 200)
+  check('desktop-forward: history-list still works with no origin marker',
+    await statusFor(desktopForward, JSON.stringify({ method: 'history-list' })) === 200)
+  check('desktop-forward: a write is still refused',
+    await statusFor(desktopForward, hostile) === 403)
+  check('desktop-forward: send-feedback is still refused',
+    await statusFor(desktopForward,
+      JSON.stringify({ method: 'send-feedback', args: { type: 'bug', title: 'x', body: 'xxxxx' } })) === 403)
+  check('desktop-forward: export-to-dir is still refused',
+    await statusFor(desktopForward, JSON.stringify({ method: 'export-to-dir', args: null })) === 403)
+
+  // Pin the set itself. Derived from source rather than exported state, because
+  // the point is "who is in the set", and a missing/extra member is exactly the
+  // change this test exists to catch.
+  const indexSource = readFileSync(new URL('./lib/index.js', import.meta.url), 'utf8')
+  const readOnlyBlock = /const READ_ONLY_METHODS = new Set\(\[([\s\S]*?)\]\)/.exec(indexSource)
+  const readOnlyNames = readOnlyBlock === null
+    ? []
+    : [...readOnlyBlock[1].matchAll(/'([a-z-]+)'/g)].map((match) => match[1]).sort()
+  check('READ_ONLY_METHODS lists exactly the five documented read methods',
+    JSON.stringify(readOnlyNames) === JSON.stringify(['export-data', 'history-list', 'read-source', 'reload', 'state']),
+    JSON.stringify(readOnlyNames) + ' — a method may only join this set deliberately; reload must stay in it')
+
   const after = await callRoute(handler, { method: 'state', args: null })
   check('a refused rebinding write left the store untouched',
     after.snapshot.data.entries.length === before.snapshot.data.entries.length
