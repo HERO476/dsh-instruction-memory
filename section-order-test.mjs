@@ -87,6 +87,36 @@ function desktopAsarCandidates() {
 }
 
 /**
+ * Installs whose host tree is on disk instead of inside `app.asar`.
+ *
+ * A renamed/replaced archive (an upgrade in progress, a purge/repack tool, a
+ * developer install) leaves exactly this layout, and the copy under
+ * `resources/app/dsh` is then the one actually serving the user.
+ */
+function unpackedCandidates() {
+  const out = []
+  const localAppData = process.env.LOCALAPPDATA
+  const roots = []
+  if (typeof localAppData === 'string' && localAppData !== '') {
+    const programs = join(localAppData, 'Programs')
+    try {
+      for (const name of readdirSync(programs).sort()) {
+        if (!/harness|deepseek/i.test(name)) continue
+        roots.push(join(programs, name))
+      }
+    } catch {
+      // Not a Windows desktop install.
+    }
+  }
+  for (const root of roots) {
+    out.push(join(root, 'resources', 'app', 'dsh', 'node_modules', SYSTEM_PROMPT_TAIL))
+    out.push(join(root, 'dsh', 'node_modules', SYSTEM_PROMPT_TAIL))
+    out.push(join(root, 'resources', 'app', SYSTEM_PROMPT_TAIL))
+  }
+  return out
+}
+
+/**
  * Read one file out of an Electron asar archive.
  *
  * The format is a fixed header: 16 bytes of pickle framing (sizes), then the
@@ -154,6 +184,12 @@ function versionBeside(path) {
  * asserted instead of stopping at the first hit. Each result is labelled with
  * its kind and version, so a stale copy can never stand in for the live one
  * again without being visible in the output.
+ *
+ * 1.6.3 adds the UNPACKED install (`resources/app/dsh`, `<install>/dsh`,
+ * `<install>/resources/app`) as a third kind. On this machine `app.asar` had
+ * been renamed and the host actually running is the unpacked 0.2.2-rc.5 tree —
+ * a check that only knew `app.asar` and the profile junction was asserting two
+ * copies, neither of them the live one.
  */
 function hostCopies() {
   const copies = []
@@ -170,6 +206,15 @@ function hostCopies() {
       version = null
     }
     copies.push({ source: text, where: archive + '!' + ASAR_MEMBER, kind: 'asar', version })
+  }
+  for (const path of unpackedCandidates()) {
+    if (!existsSync(path) || seen.has(path)) continue
+    seen.add(path)
+    try {
+      copies.push({ source: readFileSync(path, 'utf8'), where: path, kind: 'unpacked', version: versionBeside(path) })
+    } catch {
+      // unreadable copy: skip it, the others still get asserted
+    }
   }
   for (const path of profileCandidates()) {
     if (!existsSync(path) || seen.has(path)) continue
@@ -226,7 +271,9 @@ function parseSectionOrders(source) {
 const hosts = hostCopies()
 if (hosts.length === 0) {
   console.log('SKIP  no installed host exposes @deepseek-ai/dsh-system-prompt (bare checkout or CI)')
-  console.log('\nALL PASS (skipped)')
+  // Deliberately NOT the string `ALL PASS`: CI counted that as a green run of a
+  // test that asserted nothing. A skip has to be visible as a skip.
+  console.log('\nSKIPPED (nothing to assert on this machine)')
   process.exit(0)
 }
 console.log('#       asserting ' + hosts.length + ' host copy/copies found on this machine\n')

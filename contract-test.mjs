@@ -75,6 +75,12 @@ process.on('exit', () => {
 const SCRATCH_HOME = scratchHome('')
 const STORE_FILE = join(SCRATCH_HOME, 'instruction-memory', 'memory.json')
 process.env.DSH_HOME = SCRATCH_HOME
+// 1.6.3 made fence-less profiles fail CLOSED for mutating methods, so every
+// write assertion below would answer 503. These doubles ARE a fence-less
+// profile, and what they test is the OPT-IN behaviour: an operator who ran
+// with DSH_INSTRUCTION_MEMORY_ALLOW_UNGUARDED_WRITES=1. The default refusal has
+// its own block further down, which flips this variable off and on again.
+process.env.DSH_INSTRUCTION_MEMORY_ALLOW_UNGUARDED_WRITES = '1'
 await rm(SCRATCH_HOME, { recursive: true, force: true })
 
 /* ---------------- minimal req/res doubles ---------------- */
@@ -140,8 +146,22 @@ async function rawRoute(handler, rawBody, headers) {
   }
 }
 
+/**
+ * 1.6.3 moved the import/restore confirmation from the client to the HOST: the
+ * panel's dialog alone could not stop a caller that never showed one, and an
+ * imported entry keeps its triggers. These scenarios are all "the user did
+ * agree and the panel posted", so the confirmation is supplied here — the
+ * missing-confirmation path has its own block below, asserted through
+ * `rawRoute` with the field genuinely absent.
+ */
+const CONFIRMING_METHODS = new Set(['import-data', 'restore-data', 'adopt-legacy'])
 async function callRoute(handler, payload) {
-  const out = await rawRoute(handler, JSON.stringify(payload))
+  let body = payload
+  if (payload !== null && typeof payload === 'object' && CONFIRMING_METHODS.has(payload.method)) {
+    const args = payload.args !== null && typeof payload.args === 'object' ? payload.args : {}
+    body = { ...payload, args: { ...args, confirm: true } }
+  }
+  const out = await rawRoute(handler, JSON.stringify(body))
   return JSON.parse(out.body)
 }
 
@@ -739,17 +759,59 @@ async function statusFor(headers, body) {
   check('desktop-forward: export-to-dir is still refused',
     await statusFor(desktopForward, JSON.stringify({ method: 'export-to-dir', args: null })) === 403)
 
-  // Pin the set itself. Derived from source rather than exported state, because
-  // the point is "who is in the set", and a missing/extra member is exactly the
-  // change this test exists to catch.
+  // 1.6.3: a fence-less profile now fails CLOSED by default. The v1.6.2 rule
+  // asked the REQUEST whether it looked like a browser (`Origin`, or
+  // `Sec-Fetch-Site: same-origin`), and both of those are supplied by the
+  // caller — adding one header flipped 403 to 200. Nothing below can prove the
+  // caller's identity, so the write is simply not served unless the operator
+  // opted in explicitly.
+  delete process.env.DSH_INSTRUCTION_MEMORY_ALLOW_UNGUARDED_WRITES
+  check('1.6.3 fence-less default: a write is refused with 503',
+    await statusFor(desktopForward, hostile) === 503)
+  check('1.6.3 fence-less default: the refusal names the opt-in variable',
+    (await rawRoute(handler, hostile, desktopForward)).body.includes('ALLOW_UNGUARDED_WRITES'))
+  check('1.6.3 fence-less default: a single forged Sec-Fetch-Site cannot unlock a write',
+    await statusFor({ ...desktopForward, 'sec-fetch-site': 'same-origin' }, hostile) === 503)
+  check('1.6.3 fence-less default: a forged Origin cannot unlock a write either',
+    await statusFor({ ...desktopForward, origin: 'http://127.0.0.1:8080' }, hostile) === 503)
+  check('1.6.3 fence-less default: reads still work',
+    await statusFor(desktopForward, JSON.stringify({ method: 'state' })) === 200)
+  check('1.6.3 fence-less default: reload still works',
+    await statusFor(desktopForward, JSON.stringify({ method: 'reload' })) === 200)
+  check('1.6.3 fence-less default: the refused write never reached the store',
+    !injectedText().includes('PWNED'))
+  process.env.DSH_INSTRUCTION_MEMORY_ALLOW_UNGUARDED_WRITES = '1'
+
+  // Pin the TABLE (1.6.3), not one derived set: the table is what the write
+  // gate and dispatch both read, and the two failure directions differ wildly.
+  // A write listed as read is an unauthenticated write endpoint; a read listed
+  // as write is a panel button that answers 403 forever (the 1.6.1 `reload`
+  // regression). Parsed from source rather than imported, because the point is
+  // "who is in it" and a missing/extra member is the change to catch.
   const indexSource = readFileSync(new URL('./lib/index.js', import.meta.url), 'utf8')
-  const readOnlyBlock = /const READ_ONLY_METHODS = new Set\(\[([\s\S]*?)\]\)/.exec(indexSource)
-  const readOnlyNames = readOnlyBlock === null
-    ? []
-    : [...readOnlyBlock[1].matchAll(/'([a-z-]+)'/g)].map((match) => match[1]).sort()
-  check('READ_ONLY_METHODS lists exactly the five documented read methods',
-    JSON.stringify(readOnlyNames) === JSON.stringify(['export-data', 'history-list', 'read-source', 'reload', 'state']),
-    JSON.stringify(readOnlyNames) + ' — a method may only join this set deliberately; reload must stay in it')
+  const tableBlock = /export const METHOD_KINDS = Object\.freeze\(\{([\s\S]*?)\n\}\)/.exec(indexSource)
+  const kinds = {}
+  if (tableBlock !== null) {
+    for (const match of tableBlock[1].matchAll(/(?:'([a-z-]+)'|([a-z]+)):\s*'(read|write)'/g)) {
+      kinds[match[1] || match[2]] = match[3]
+    }
+  }
+  const readNames = Object.keys(kinds).filter((name) => kinds[name] === 'read').sort()
+  check('METHOD_KINDS lists exactly the five documented read methods',
+    JSON.stringify(readNames) === JSON.stringify(['export-data', 'history-list', 'read-source', 'reload', 'state']),
+    JSON.stringify(readNames) + ' — a method may only join this set deliberately; reload must stay in it')
+
+  const dispatchStart = indexSource.indexOf('const dispatch = async (method, args)')
+  const dispatchEnd = indexSource.indexOf('same-origin JSON route', dispatchStart)
+  const dispatchText = dispatchStart === -1 || dispatchEnd === -1
+    ? '' : indexSource.slice(dispatchStart, dispatchEnd)
+  const switchNames = [...dispatchText.matchAll(/case '([a-z-]+)':/g)].map((match) => match[1]).sort()
+  check('METHOD_KINDS and the dispatch switch cover the same methods in both directions',
+    Object.keys(kinds).length > 0
+      && JSON.stringify(Object.keys(kinds).sort()) === JSON.stringify(switchNames),
+    'table=' + Object.keys(kinds).length + ' switch=' + switchNames.length
+      + ' onlyInTable=' + Object.keys(kinds).filter((name) => !switchNames.includes(name)).join(',')
+      + ' onlyInSwitch=' + switchNames.filter((name) => kinds[name] === undefined).join(','))
 
   const after = await callRoute(handler, { method: 'state', args: null })
   check('a refused rebinding write left the store untouched',
@@ -858,6 +920,63 @@ async function statusFor(headers, body) {
       + (bound === '' ? '(unset)' : bound) + ')',
       plain.ok === true && plain.snapshot.security.authFence === false,
       JSON.stringify(plain.snapshot === undefined ? null : plain.snapshot.security))
+  }
+
+  // F6 (1.6.3): the THIRD host shape — desktop forward WITH the fence. The
+  // 1.6.2 suite only covered "desktop + no connection", a combination a factory
+  // profile never has, and so never exercised the path every real desktop user
+  // takes: the shell deletes Origin and Sec-Fetch-Site, injects its own cookie,
+  // and the fence admits — the write must SUCCEED. Its own home, because the
+  // write is real and the store-aware cases above assume a fixed entry set.
+  {
+    const DESK_HOME = scratchHome('-desktopfwd')
+    const previousHome = process.env.DSH_HOME
+    process.env.DSH_HOME = DESK_HOME
+    try {
+      let deskHandler = null
+      const fence = { requestRejection: () => null }
+      const ctx = {
+        systemPrompt: { section: () => () => {} },
+        inject: (deps, callback) => {
+          const names = Array.isArray(deps) ? deps : Object.keys(deps)
+          if (names.includes('connection')) {
+            callback({ connection: fence, effect: (fn) => { fn(); return () => {} } })
+          }
+          if (names.includes('webServer')) {
+            callback({
+              webServer: { register: (route) => { deskHandler = route.handler; return () => {} } },
+              effect: (fn) => { fn(); return () => {} },
+            })
+          }
+          return null
+        },
+        get: () => undefined,
+        effect: (fn) => { fn(); return () => {} },
+        logger: () => ({ info: () => {}, debug: () => {} }),
+      }
+      const deskMod = await import(new URL('./lib/index.js', import.meta.url).href + '?deskfwd=' + Date.now())
+      deskMod.apply(ctx)
+      // What `forwardWebRequest` actually hands the route: no Origin, no
+      // Sec-Fetch-Site, the host's own Host value.
+      const forwarded = { 'content-type': 'application/json', host: '127.0.0.1:2717' }
+      const writeOut = await rawRoute(deskHandler, JSON.stringify({
+        method: 'save-entry',
+        args: { entry: { id: '', title: 'DESKTOP-FWD', content: 'x', mode: 'always', when: '', priority: 2, enabled: true, updatedAt: 0 } },
+      }), forwarded)
+      check('desktop+fence: a forwarded write (no origin, no sec-fetch-site) is accepted',
+        writeOut.status === 200, 'status=' + writeOut.status + ' body=' + String(writeOut.body).slice(0, 160))
+      const readOut = await rawRoute(deskHandler, JSON.stringify({ method: 'state' }), forwarded)
+      check('desktop+fence: a forwarded read is accepted too', readOut.status === 200)
+      const deskSnapshot = JSON.parse(readOut.body)
+      check('desktop+fence: the snapshot reports the fence and an open write gate',
+        deskSnapshot.snapshot.security.writeGate === 'fence'
+        && deskSnapshot.snapshot.security.authFence === true,
+        JSON.stringify(deskSnapshot.snapshot.security))
+    } finally {
+      if (previousHome === undefined) delete process.env.DSH_HOME
+      else process.env.DSH_HOME = previousHome
+      await rm(DESK_HOME, { recursive: true, force: true })
+    }
   }
 
   // IPv6 loopback END TO END through the real route. The shipped defect
@@ -1061,15 +1180,29 @@ async function statusFor(headers, body) {
   check('missing primary: recovers from the backup instead of an empty store',
     recovered.snapshot.data.entries.length > 0,
     'entries=' + recovered.snapshot.data.entries.length)
-  check('missing primary: the promoting reload reports saved:true (it wrote memory.json back)',
-    recoveredRaw.saved === true, JSON.stringify(recoveredRaw.saved))
+  // 1.6.3: `reload` is a READ-ONLY method, so it must not write the recovered
+  // store back. It used to (`saved:true`), which meant a caller with no write
+  // gate could land a file through a method classified as read.
+  check('missing primary: the read-only reload reports saved:false',
+    recoveredRaw.saved === false, JSON.stringify(recoveredRaw.saved))
   check('missing primary: the recovery is disclosed',
     typeof recovered.snapshot.storage.warning === 'string' && recovered.snapshot.storage.warning.includes('memory.json.bak'),
     JSON.stringify(recovered.snapshot.storage.warning))
+  check('missing primary: the disclosure says the write-back was skipped',
+    recovered.snapshot.storage.warning.includes('只读载入')
+      && recovered.snapshot.storage.warning.includes('下次保存'),
+    JSON.stringify(recovered.snapshot.storage.warning))
   check('missing primary: the recovered data is injected',
     injectedText().length > 0)
-  check('missing primary: memory.json was written back',
-    existsSync(STORE_FILE))
+  check('missing primary: reload did NOT write memory.json back',
+    !existsSync(STORE_FILE))
+  // The next real save is what promotes the recovered data onto disk.
+  const promoted = normalize(await callRoute(handler, {
+    method: 'save-entry',
+    args: { entry: { id: '', title: 'AFTER-RECOVERY', content: 'x', mode: 'always', when: '', priority: 1, enabled: true, updatedAt: 0 } },
+  }))
+  check('missing primary: the next save writes memory.json back',
+    promoted.ok === true && existsSync(STORE_FILE), JSON.stringify(promoted.message))
 }
 
 // --- Hand-edited options must be corrected loudly, not silently. ------------
@@ -3562,6 +3695,133 @@ const callOn = async (handler, payload) => {
     if (previousFlag === undefined) delete process.env.DSH_INSTRUCTION_MEMORY_REQUIRE_AUTH_FENCE
     else process.env.DSH_INSTRUCTION_MEMORY_REQUIRE_AUTH_FENCE = previousFlag
     await rm(FENCE_HOME, { recursive: true, force: true })
+  }
+}
+
+/* ---------------- 1.6.3: promotion on the REAL user/message shape ---------- */
+//
+// v1.6.0 read `event.data.text`. The host hands over the message OBJECT —
+// `{ id, role, content: ContentBlock[], source }` (dsh-llm MessageBase, and
+// dsh-session resolves `event.type === 'user/message' ? data : data.message`) —
+// so on a real turn that read was always '' and the whole feature was dead
+// code. The suite stayed green because no fixture ever used the real shape.
+// These cases use it, and they also pin the two leaks the module-level set had:
+// cross-session promotion and the missing turn-end reset.
+{
+  const TRIG_HOME = scratchHome('-trig')
+  const previousHome = process.env.DSH_HOME
+  process.env.DSH_HOME = TRIG_HOME
+  try {
+    const handlers = {}
+    const sections = []
+    let trigHandler = null
+    const ctx = {
+      systemPrompt: { section: (spec) => { sections.push(spec); return () => {} } },
+      on: (name, callback) => { handlers[name] = callback; return () => {} },
+      inject: (deps, callback) => {
+        const names = Array.isArray(deps) ? deps : Object.keys(deps)
+        if (names.includes('webServer')) {
+          callback({
+            webServer: { register: (route) => { trigHandler = route.handler; return () => {} } },
+            effect: (fn) => { fn(); return () => {} },
+          })
+        }
+        return null
+      },
+      get: () => undefined,
+      effect: (fn) => { fn(); return () => {} },
+    }
+    const trigMod = await import(new URL('./lib/index.js', import.meta.url).href + '?trig=' + Date.now())
+    trigMod.apply(ctx)
+    check('trigger: apply registered a session/event listener', typeof handlers['session/event'] === 'function')
+
+    const saved = normalize(await callRoute(trigHandler, {
+      method: 'save-entry',
+      args: {
+        entry: {
+          id: '',
+          title: 'TRIG',
+          content: 'trigger body',
+          mode: 'auto',
+          when: '任何时候',
+          triggers: ['deploy'],
+          priority: 2,
+          enabled: true,
+          updatedAt: 0,
+        },
+      },
+    }))
+    check('trigger: the auto entry with a trigger word saved', saved.ok === true, JSON.stringify(saved.message))
+
+    const sectionTextFor = (sessionId) => {
+      const spec = sections[sections.length - 1]
+      return spec === undefined ? '' : spec.text({ sessionId })
+    }
+    const emit = (session, event) => handlers['session/event'](session, event)
+    // The exact block list the host produces for a human message.
+    const humanMessage = (text) => ({
+      type: 'user/message',
+      data: {
+        id: 'm-1',
+        role: 'user',
+        content: [{ type: 'text', text }],
+        source: { kind: 'user' },
+      },
+    })
+
+    check('trigger: before any message the entry is 条件必做',
+      sectionTextFor('s-A').includes('[条件必做｜优先级'),
+      JSON.stringify(sectionTextFor('s-A').split('\n').filter((line) => line.startsWith('['))))
+
+    emit({ id: 's-A' }, humanMessage('请帮我 deploy 一下这个服务'))
+    check('trigger: a real content-block message promotes the entry to 本轮强制',
+      sectionTextFor('s-A').includes('[本轮强制｜优先级'),
+      JSON.stringify(sectionTextFor('s-A').split('\n').filter((line) => line.startsWith('['))))
+
+    // The module-level set leaked exactly here: session B rendered session A's
+    // promotion. Each session now has its own set.
+    check('trigger: another session does not inherit the promotion',
+      sectionTextFor('s-B').includes('[条件必做｜优先级'),
+      JSON.stringify(sectionTextFor('s-B').split('\n').filter((line) => line.startsWith('['))))
+
+    // The promotion is "this turn". Without a turn-end reset it survived into
+    // whatever rendered next.
+    emit({ id: 's-A' }, { type: 'turn/end' })
+    check('trigger: the end of the turn drops the promotion',
+      sectionTextFor('s-A').includes('[条件必做｜优先级'),
+      JSON.stringify(sectionTextFor('s-A').split('\n').filter((line) => line.startsWith('['))))
+
+    // A message that does not contain the trigger must not promote, and a
+    // runtime-context block must never promote even if it does contain it.
+    emit({ id: 's-A' }, humanMessage('今天天气怎么样'))
+    check('trigger: a message without the word does not promote',
+      sectionTextFor('s-A').includes('[条件必做｜优先级'))
+    emit({ id: 's-A' }, {
+      type: 'user/message',
+      data: {
+        id: 'm-2',
+        role: 'user',
+        content: [{ type: 'text', text: 'deploy' }],
+        source: { kind: 'runtime-context' },
+      },
+    })
+    check('trigger: a runtime-context message never promotes',
+      sectionTextFor('s-A').includes('[条件必做｜优先级'),
+      JSON.stringify(sectionTextFor('s-A').split('\n').filter((line) => line.startsWith('['))))
+
+    // The fixture shape still works: a host (or test) that flattens the message
+    // to `{ text }` must keep promoting.
+    emit({ id: 's-A' }, { type: 'user/message', data: { text: 'deploy', source: { kind: 'user' } } })
+    check('trigger: a flattened { text } message still promotes',
+      sectionTextFor('s-A').includes('[本轮强制｜优先级'))
+    // A store with no triggers at all must behave exactly as before.
+    check('trigger: the injected block names the promoted tag only once per entry',
+      (sectionTextFor('s-A').match(/\[本轮强制｜优先级/g) || []).length === 1,
+      JSON.stringify(sectionTextFor('s-A').match(/\[本轮强制｜优先级/g)))
+  } finally {
+    if (previousHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previousHome
+    await rm(TRIG_HOME, { recursive: true, force: true })
   }
 }
 

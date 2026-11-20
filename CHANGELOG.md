@@ -7,6 +7,101 @@
 > 1.0.13 起由 CI 经 OIDC Trusted Publishing 发布（首个带 provenance 的版本）。
 > 这些历史 tag **不应回填**——npm 上的版本号已被占用。
 
+## [1.6.3] — 2026-11-20
+
+第三轮审计（技术方案评审团：架构 / 应用安全 / 验收三条线）的修复批次。**一条阻断级缺陷**：
+v1.6.0 的头号功能「触发词 → 本轮强制」在真实宿主上是死代码，桌面端与网页端同时失效；
+`npm test` 全绿（1065 PASS）与机制不可用并存，因为整个套件里没有任何一条用例用过宿主真实
+发送的消息形状。
+
+### 修复（阻断）
+
+- **触发词取不到文本，功能从未触发**。`lib/index.js` 的 `user/message` 处理器读
+  `event.data.text`，而宿主交给插件的是**消息对象本身**——`{ id, role, content:
+  ContentBlock[], source }`（`dsh-llm` 的 `MessageBase`；`dsh-session` 里
+  `event.type === 'user/message' ? data : data.message`）。`text` 因此在真机上恒为空，
+  处理器在 `text === ''` 处直接 return，只有手工构造 `{ text }` 的夹具能触发。现在按
+  `content` 的 text 块拼接（保留两种字符串回退供夹具与旧宿主使用）。
+- **提升赶不上本轮第一个请求**。宿主 `preStep()` 先 `systemPrompt.assemble()`、
+  `step()` 里才 `append('user/message')`，而 section 文本在 assemble 时就已求值。所以即使
+  上面那条修好，无工具调用的单步回合也拿不到提升。**文案已按事实更正**：标注与注释统一为
+  「从命中之后的下一次注入开始生效，不追溯已发出的请求，到本回合结束为止」，不再宣称「当轮
+  立刻生效」。
+
+### 修复（安全）
+
+- **无 `connection` 服务的 profile 默认停用写操作（fail-closed）**。v1.6.2 的写门判据是
+  「请求像不像浏览器」（`Origin` 或 `Sec-Fetch-Site: same-origin`），而这两个头都由调用方
+  自带——注释自己写着"只加一行 `Sec-Fetch-Site: same-origin` 即从 403 变 200"。这条路径能
+  改写每轮注入的指令，等于把持久化提示注入放在一个自证头之后。现在没有宿主 `connection`
+  服务时，所有修改方法一律 503（读操作照常，设置页可打开查看）；单用户设备可显式
+  `DSH_INSTRUCTION_MEMORY_ALLOW_UNGUARDED_WRITES=1` 恢复旧的宽松判据（重启生效）。
+  设置页会读取快照里的 `security.writeGate`（`fence` / `opt-in` / `refused`）**在用户动手
+  之前**就把这件事说出来。
+- **`reload` 真正只读**。它列在只读集合里，但 `readFromDisk()` 的 `.bak` 提升分支会
+  `writeToDisk()`——一个被归为"读"的方法能落盘。现在 `reload` 传 `write: false`：备份被载入
+  内存、注入照常，但写回留给下一次真实保存，且 `saved` 恒为 `false`（字段含义保持"本次操作
+  是否持久化了存储"）。
+- **导入 / 整体恢复 / 迁移旧文件的确认从客户端移到宿主**。v1.6.1 只加了面板对话框，任何能
+  通过写门的调用方都可以不经确认直接 POST 同一份 payload，而导入的条目会保留 `triggers`
+  与 `when`——配合 1.6.0 的语义，一行文本就能变成"每轮必执行"。现在
+  `import-data` / `restore-data` / `adopt-legacy` 要求 `args.confirm === true`，面板在用户
+  同意后发送该字段；确认文案也补上了"会保留触发词"这一句。
+- **`本轮强制` 纳入防伪造白名单**。`FORGED_ENTRY_PREFIX` 只列了「始终 / 条件必做 / 按需」，
+  而 1.6.0 开始输出「本轮强制」——条目正文里手写的同名行可以原样通过，读起来与本插件自己的
+  结构行完全一样。标签列表改为 `ENTRY_TAGS` 一处定义，"打印的标签 ⊆ 中立化的标签"这条不变式
+  由测试逐项枚举。
+- **临时文件改为独占创建（`wx`）**。`.bak` 提升或重试路径会用 `open(tmpPath, 'w')` 在原路径
+  重建临时文件；同一路径若被放置符号链接，会写到链接目标。`ensureSchemaFile` 同型。
+- **请求体并发上限**。单个请求体有上限，但同时在途的数量没有，同用户进程可以并行打开多个大包
+  压宿主堆。现在最多 8 个在途（`MAX_BODY_IN_FLIGHT`），按"仍在累积字节"计时，body 读完即
+  释放，不会让慢写饿死面板自己的 `state` 轮询。
+
+### 修复（正确性 / 可观测）
+
+- **`FORCED_IDS` 不再是模块级全局**。它被同进程内所有会话共享，A 会话命中触发词会把该条在
+  B 会话里也提升为「本轮强制」（实测：同进程两个实例，驱动 A 的监听器，A 与 B 同时变红）；
+  且全文没有任何回合结束清理，提升会一直残留。现在按会话键存 `Map`，`turn/end` /
+  `turn/abort` 清理；section 渲染时从装配上下文取会话键，取不到才回退到"最近一次"，因此单
+  会话宿主行为不变。上下文明确给出会话时，无记录即"该会话没有提升"，绝不借用别人的。
+- **提升只作用于激活集合**。匹配与键都改用 `setId\0id`（库内其它地方一致的去重键），排序前先
+  过 `activeScope`/`inScope`：非激活集合里的触发词不再能改写激活集合的同 id 条目（F13）。
+- **`refreshSection` 不再 dispose + 重注册**。section 文本本来就是活 thunk，每次装配都会被
+  重新求值，重注册既多余又危险：它发生在 `session/event` 处理器里（与当轮装配并发），且
+  dispose 抛异常时句柄已被置空，`syncSection()` 会再注册一份而旧的仍然活着——同一 prompt 里
+  两份记忆块。现在只做 `syncSection()`（处理呈现/移除边沿）与快照推送。
+- **`injection.forced`**：快照发布当前被提升的条目 id，面板不再"标签变了但界面什么都不说"。
+- **`maxTriggers` / `maxTriggerLength` 进入 `limits`**：面板此前硬编码 `slice(0, 8)` 并复用
+  标签上限，8/24 与标签上限相等只是数值巧合。schema 与代码的两侧漂移也进了 `verify.mjs` 的
+  比对清单。
+- **客户端能区分桌面壳**（`location.protocol === 'dsh-app:'`）。桌面导出此前没有分支，全部落
+  通用 `blob:` 下载，而宿主的下载处理只认自己标记的链接——现在桌面导出会同时给出"完整 JSON"
+  这条保底通道，不再声称文件一定落地。
+
+### 测试
+
+- `contract-test.mjs`：新增真实 `user/message` 形状用例组（真实形状提升、另一会话不继承、
+  `turn/end` 回落、非人类来源不提升、扁平 `{ text }` 兼容、同一条目只出现一次提升标签）；
+  新增 `desktop + fence` 形状（无 `Origin`、无 `Sec-Fetch-Site`、注入 cookie、门放行 → 写
+  必须 200）——此前只测了"桌面 + 无 connection"这种出厂 profile 不存在的组合；
+  新增 fence-less 默认 fail-closed 的六条断言（写 503、伪造单头无效、读仍 200）；
+  `READ_ONLY_METHODS` 的源码钉改为 `METHOD_KINDS` 表 + 与 dispatch switch 的**双向**差集断言。
+- `smoke-test.mjs`：四种标签（含「本轮强制」）逐项枚举中立化；`planInjection` 的 forced 参数
+  与跨集合键的用例。
+- `section-order-test.mjs`：候选集加入**未打包安装**（本机 `app.asar` 已改名，真正在跑的是
+  `resources/app/dsh` 的 0.2.2-rc.5）；无宿主时打印 `SKIPPED` 而不是 `ALL PASS`，CI 不再把
+  "什么都没断言"计成绿。
+- `verify.mjs`：`triggers.maxItems` / `trigger.maxLength` 进入 schema ↔ 代码漂移比对。
+
+### 已知边界
+
+- 「本轮强制」的生效时机是**下一次注入**（原：当轮）。若要做到真正的同回合，需要把提升改由
+  runtime-context provider 承载，并在 `agent/pre-step` waterfall 里用本轮消息计算——那是宿主
+  侧装配顺序的改动，需要单独验证，本版只把语义写诚实。
+- 插件仍不注册任何面向模型的工具，模型没有"被注入后自己调用工具持久化"的写入面。
+- `reload`、`state`、`read-source` 仍会物化一份**本插件自己的默认空 store**（首次运行、设置页
+  打开时），但物化内容从不是调用方给的。
+
 ## [1.6.2] — 2026-11-19
 
 第二轮增量审计（桌面端 runtime 已升到 0.2.2-rc.5）的修复批次，主体是**修 1.6.1 自己引入的一个

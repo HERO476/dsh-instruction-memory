@@ -19,6 +19,11 @@ import { join } from 'node:path'
 // note in contract-test.mjs).
 const SCRATCH = mkdtempSync(join(tmpdir(), 'dsh-im-feedback-'))
 process.env.DSH_HOME = SCRATCH
+// 1.6.3 defaults a fence-less profile to "no writes" (503). This suite mounts
+// without a `connection` service, so it stands for the explicit opt-in shape an
+// operator creates with DSH_INSTRUCTION_MEMORY_ALLOW_UNGUARDED_WRITES=1 — the
+// send path is what it tests. The default refusal is covered in contract-test.
+process.env.DSH_INSTRUCTION_MEMORY_ALLOW_UNGUARDED_WRITES = '1'
 
 const PACKAGE_VERSION = JSON.parse(await readFile(new URL('./package.json', import.meta.url), 'utf8')).version
 

@@ -236,6 +236,7 @@ check('package.json declares no runtime dependencies (self-dependency regression
     const profileProps = (props.profiles && props.profiles.items && props.profiles.items.properties) || {}
     const setProps = (props.sets && props.sets.items && props.sets.items.properties) || {}
     const tagItems = (entryProps.tags && entryProps.tags.items) || {}
+    const triggerItems = (entryProps.triggers && entryProps.triggers.items) || {}
     const pairs = [
       ['version enum', props.version && props.version.enum, [1, L.formatVersion]],
       ['budgetChars.minimum', props.budgetChars && props.budgetChars.minimum, L.minBudget],
@@ -251,6 +252,10 @@ check('package.json declares no runtime dependencies (self-dependency regression
       ['mode enum', entryProps.mode && entryProps.mode.enum, ['always', 'auto']],
       ['tags.maxItems', entryProps.tags && entryProps.tags.maxItems, L.maxTagsPerEntry],
       ['tag.maxLength', tagItems.maxLength, L.maxTagLength],
+      // v1.6.0 added triggers with their own ceilings; 1.6.3 publishes them and
+      // pins them here, because 8/24 matching the tag limits was a coincidence.
+      ['triggers.maxItems', entryProps.triggers && entryProps.triggers.maxItems, L.maxTriggers],
+      ['trigger.maxLength', triggerItems.maxLength, L.maxTriggerLength],
       ['profiles.maxItems', props.profiles && props.profiles.maxItems, L.maxProfiles],
       ['profile name.maxLength', profileProps.name && profileProps.name.maxLength, L.maxProfileName],
       ['profile content.maxLength', profileProps.content && profileProps.content.maxLength, L.maxProfileContent],

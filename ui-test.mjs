@@ -26,6 +26,11 @@ const PLUGIN_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.
 const SCRATCH_HOME = mkdtempSync(join(tmpdir(), 'dsh-im-ui-'))
 const STORE_FILE = join(SCRATCH_HOME, 'instruction-memory', 'memory.json')
 process.env.DSH_HOME = SCRATCH_HOME
+// 1.6.3: a fence-less profile refuses mutating methods unless the operator
+// opted in with DSH_INSTRUCTION_MEMORY_ALLOW_UNGUARDED_WRITES=1. This suite
+// drives the panel against such a mount to test UI behaviour, so it takes the
+// opt-in shape; contract-test asserts the default refusal.
+process.env.DSH_INSTRUCTION_MEMORY_ALLOW_UNGUARDED_WRITES = '1'
 // Own-pid scratch cleanup on every exit path (crash, throw, failed check);
 // the green-path rm at the end covers the normal case.
 process.on('exit', () => {
