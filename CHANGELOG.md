@@ -7,6 +7,160 @@
 > 1.0.13 起由 CI 经 OIDC Trusted Publishing 发布（首个带 provenance 的版本）。
 > 这些历史 tag **不应回填**——npm 上的版本号已被占用。
 
+## [1.6.5] — 2026-11-25
+
+第三轮手机适配（1.6.4）的**回归修复**。1.6.4 把八处确认改成了"confirmThen + 重放处理函数"的形态，
+其中条目删除把动作写进了重放闭包、调用点后面没有语句 —— 在有真对话框的**桌面端与网页端**点"删除→
+确定"什么都不发生（0 次 POST、无撤销条、无报错），而手机（无对话框）反而正常。本轮把这个状态机
+**重写成不可能再犯的契约**，并给三处缺失的护栏补上用例。
+
+### 修复（阻断）
+
+- **桌面/网页的单条删除恢复**（`lib/client.js` 条目行按钮）。根因不是一处笔误，而是 1.6.4 的
+  `confirmThen` 契约本身反直觉：它在"真对话框点了确定"时返回 `false`（意思是"调用方继续执行
+  自己的动作"），却**不调用** `run`。八个调用点里七个把动作放在 `if` 之后、只有删除把动作塞进
+  `run`，于是那一处静默失效。**新契约（1.6.5）**：`confirmThen(message, action)` **总是**返回
+  "调用方应停止"——有对话框就直接执行 `action`，没有就把它停到面板内确认条，用户点【确认】后执行；
+  动作只有一份，不再有"重放处理函数"。八处全部改为 `confirmed` 参数 / 局部函数形态，
+  批量删除的确认移到工具栏调用点（`doBatch` 内部不再问）。
+- **测试门禁不再短路**（`test-all.mjs`）。`npm test` 原来是 `a && b && c …`：本机装了第二份 DSH
+  时 host-range 一段红，后面七段（含 1.6.4 新增的 25 条移动端断言）**一条都没跑**，
+  这条 P0 就藏在"看起来只有兼容性一条问题"的日志后面。现在九段各自独立跑、逐段报退出码、
+  最后汇总；任一段失败整体仍失败，但**不会再隐藏后面的结论**。
+- **确认按钮双击只执行一次**。1.6.4 的按钮点击后没有一次性闸门，两次激活（双击/触摸抖动）会
+  发两条 `delete-entry`（服务端幂等救下），而 `import-data` / `restore-data` 从未验证过。
+  现在 `confirmFiringRef` 在同一个问题生命周期内只放行一次，下一次排队时才重置。
+- **island 分块按"转义后"长度**。1.6.4 按原始 UTF-8 字节 12 KiB 切，忽略了 JSON 转义：
+  `"` 与 `\` 各翻一倍、C0 控制符变 6 单位。实测 `"`×20000 → 单帧 **24678** UTF-16 单位、
+  控制符载荷 → **73830**，都超过壳的 16 KiB（`island_messages.dart` 用 `raw.length` 计），
+  连一段真实的配置片段也到 **16396**。现在 `splitForBridge()` 逐 code point 计
+  `islandJsonCost`（引号/反斜杠 2、控制符 6、代理对 2、其余 1），把信封本身也计入预算；
+  `mobile-shape-test` 增加引号/反斜杠/换行/控制符/真实配置片段五组用例，并静态断言
+  `sendToAppBridge` 必须使用它（只测 helper 会在实现被换回时仍然绿——这正是 1.6.4 漏检的原因）。
+
+### 修复（授权与数据面）
+
+- **跨目标免确认（arm 泄漏）被根除**。1.6.4 用"文案字符串"当一次性凭据：重放处理函数时若在到达
+  `confirmThen` 之前早退（`busy`、空选择、体积判定），凭据会残留，下一次**同一文案**的动作
+  （删快照 / 整体恢复 / 导入的文案都是常量）会直接执行、不再确认。新契约没有"凭据"，确认时
+  直接执行那一次动作，因此不存在可泄漏状态。
+- **批量删除的目标锁定**。排队期间改动选择时，文案写"删除 3 条"、实际可能删 N 条；现在批量
+  动作把 ids 固定进闭包（`doBatch(op, value, ids)`）。
+- **`window.DshGoIsland` 判据要求可调用**。`window.DshGoIsland = {}`（任意脚本，或共享设置页的
+  其它插件）以前会把整条移动分支打开：不发 blob 下载、反馈表单换成说明、确认走面板。
+  现在判据是 `typeof postMessage === 'function'`，与 `sendToAppBridge` 一致。
+- **导出面板的 JSON 会自清**。全量 store（全部配置集 + 形象）渲染后常驻屏幕，会被任务切换
+  缩略图/共享屏幕看到，Android ≤9 还会留在剪贴板。现在 3 分钟后自动清空，卸载时也清。
+- **冲突覆盖保存改为正常确认**。`editor.conflictOverwrite` 是唯一在 WebView 上从"静默拒绝"变成
+  "静默同意"的 `allow` 回退（会覆盖另一窗口的修改），现在走面板确认；取消编辑与源码重载
+  仍保留"无法弹框就放行"的语义（不丢已保存数据）。
+- **打开编辑器时收起待确认条**。1.6.4 的确认条只在列表视图渲染，排队后点编辑会让动作"悬空"。
+
+### 修复（兼容性守卫）
+
+- **LIVE GUARD 不再把"桌面壳版本"当成运行时版本**。`runtime.json` 的 `desktopVersion` 是**壳**
+  版本；宿主自己的兼容门比较的是 `@deepseek-ai/dsh`。官方装两者相等所以从未暴露，而本机的
+  `DeepSeek Harness Uncensored` 用日历号 `2026.1123.0` 包着一个区里看不到的运行时，
+  guard 于是报 `NOT COVERED` 并建议往 `COVERED_LINES` 插一行 2026 —— 那会把"从未启动过的宿主"
+  写进 `peerDependencies`/`dsh.engines.dsh` 与市场卡片。
+  现在 guard 只读 `resources/app/dsh/node_modules/@deepseek-ai/dsh/package.json`；读不到（运行时
+  在 `app.asar` 里）就打印 `SKIP … runtime version unavailable`，**不**断言一个宿主门不使用的数字。
+  声明区间没有改：`2026.1123.0` 仍是**未声明**宿主。
+
+### 可访问性
+
+- 条目行的删除按钮补 `aria-label`（含条目标题）。此前页面里同时有集合删除、快照删除、批量删除
+  与条目删除，四个按钮的可见文本都是"删除"，屏幕阅读器无法区分——测试也因此点错过目标。
+
+### 测试
+
+- `ui-test.mjs` +2 组：可信对话框点删除 → 条目恰减 1；无对话框 → 确认条出现、连点两次仍只删 1 条。
+- `mobile-shape-test.mjs` +7 组：转义密集载荷的帧长度、拼回一致性、旧预算的回归护栏、
+  `sendToAppBridge` 的静态连线断言、桥 stub 与可调用桥的判据。
+- `lint.mjs` 新增**形状门禁**：`confirmThen(` 的第二个实参不得含 `send(`（动作不得写在重放闭包里）。
+  这条规则直接对应 1.6.4 的 P0，静态可拦。
+- 三处变异验证（改坏必须变红，均已还原）：把动作写回闭包 → lint 红；把分块换回原始字节 →
+  帧断言红；新契约下删除用例本身即护栏。
+
+### 已知边界
+
+- 真实 Electron 渲染进程的点击仍是未验证项：本报告的证据链是"真实 React shim + 真实路由 +
+  真实 store"，不是真窗口录制。代码路径已由 lint + ui-test 双向锁定。
+- `2026.1123.0`（Uncensored 安装）**未声明支持**：要支持它必须在那个宿主上真跑一次
+  （装载、注入进组装后的提示、路由应答、设置页下发）再扩声明；本轮只把 guard 的假红改成 SKIP。
+- 无 Android 真机：手机侧仍为代码级结论（帧预算现在按壳的真实口径计算，但壳侧丢弃行为未在
+  设备上确认）。
+- 工作区仍未提交（`mobile-shape-test.mjs` 与 `test-all.mjs` 是新增文件）；不提交则别的机器/CI
+  的 `npm test` 会 `MODULE_NOT_FOUND`，`prepublishOnly` 会拒绝发布。
+
+## [1.6.4] — 2026-11-21
+
+DSH Go（Android + WebView island）适配批次（技术方案评审团三条线的结论）。**没有引入新的手机功能，
+而是把三处"看起来能用、实际静默失效"的路径修掉**，并把 Android 分支第一次纳入自动化门禁。
+
+先说一条被证实**不是**问题的事：1.6.3 的写门 fail-closed 在 DSH Go 上不可达。Go 跑的是 `dsh web`，
+`dsh-web-app` 必然注入 `connection`，`writeGateRefusal` 在第一行就放行，手机端保存/删除/导入不受影响。
+真机上唯一要确认的是面板没有出现「写操作已停用」警示条（或快照 `security.writeGate === 'fence'`）。
+
+### 修复（阻断）
+
+- **手机端八类确认操作静默无效**。DSH Go 的 WebView 没有 `WebChromeClient.onJsConfirm`
+  （`island_handle.dart` 只设 NavigationDelegate 与 `DshGoIsland` 通道），`window.confirm` 因此
+  **存在、不抛错、恒返回 false**；`askConfirm` 把它判成"用户点了取消"，于是删除条目、批量删除、
+  删除形象、删除配置集、历史恢复、历史删除、从备份恢复、导入全都变成零反应的 no-op，连
+  `confirm.unavailable` 那句提示都永远走不到（它只在 `CONFIRM_UNAVAILABLE` 分支）。
+  1.6.3 把导入确认搬到宿主后更糟：客户端在 `askConfirm` 就 return，`confirm:true` 发不出去。
+  **修复**：新增 `confirmDialogsAreTrustworthy()`（UA 与 `DshGoIsland` 双判据）；不可信时
+  `askConfirm` 返回 `CONFIRM_UNAVAILABLE` 而不是 `no`；八处调用点改走 `confirmThen()`，
+  把问题停到面板内确认条（【确认】/【取消】）并在确认后**重放同一个处理函数**（
+  用一次性 `armedConfirmRef` 放行，避免在无对话框环境里自我排队）。
+
+- **手机端导出是假成功**。`sendToAppBridge` 只要 `postMessage` 不抛就 `return true`，面板随即显示
+  "已交给 DSH Go 保存"并 `return`——而 stock DSH Go 的 `parseIslandMessage` 没有 `save` 分支
+  （未知 `t` 返回 null 被丢弃），保底 JSON 也被跳过。用户以为有备份，卸载 App 时 rootfs 随包清空。
+  **修复**：桥改为"附加通道"——先渲染面板内完整 JSON，再尝试桥；文案改成"已发送 N 条消息，
+  无法确认文件是否落地，若分享面板没出现或没保存成功请用下面的完整 JSON"。
+
+- **island 分块按字符、上限是字节**。`CHUNK = 6000` 是 JS code unit，协议上限是
+  `IslandMessageLimits.maxBytes` = 16 KB；实测 6000 个汉字序列化后 **18098 字节**（超 1714），
+  同长度 ASCII 只有 6098 字节。手机上的记忆几乎必然含中文，所以就算壳以后支持 `save`，第一块就超限。
+  **修复**：`splitByBytes()` 按 UTF-8 字节切、单块 12 KiB（留出 JSON 信封与 `"`/`\` 转义余量），
+  按 code point 迭代因此永不切开代理对；中文安全上限落在约 4 千字/块。
+
+### 修复（正确性 / 可观测）
+
+- **`writeGate` 的启动竞态**：`connection` 服务 attach / detach 时只写日志，不推快照，面板可能长期
+  显示过期的"写操作已停用"（而写入其实已可用）。现在两个边沿各推一次快照。
+- **导出范围披露**：一次导出携带**全部配置集 + 用户形象**，而面板本身只显示激活集合。文案现在
+  写明「含 N 个配置集 / M 条指令 / K 个形象」。
+- **手机上的反馈入口**：`send-feedback` 需要 SMTP 配置从环境变量进来，而 DSH Go 的壳
+  `environment().clear()` 后只填固定几项，按钮必然失败。Android 上改为一段说明，不再渲染表单。
+- **fence-less 的 503 文案**补一句平台现实：DSH Go 里设不了环境变量，请在 App 内重启/升级 App，
+  或让 App 提供带该开关的构建。
+
+### 测试
+
+- 新增 **`mobile-shape-test.mjs`**（并入 `npm test`，27 条断言）：按字节分块的三条不变量
+  （每块 ≤ 上限、可逐字节拼回、不切代理对）+ 回归护栏（旧的 6000 code unit 分块确实超限）+
+  对话框信任矩阵（普通浏览器 / `; wv)` WebView / 注入 `DshGoIsland` / confirm 缺失 / confirm 抛错 /
+  无 window），以及"WebView 回答 unavailable 而不是 no""unsaved-draft 仍然放行"。
+- 该文件是本仓库第一次真正执行 Android 分支：此前 `grep isAndroidWebView|DshGoIsland` 在所有
+  `*.mjs` 里零命中。
+
+### 已知边界（本轮不修，理由记在此）
+
+- **无 `connection` 时"读"仍无闸门**：`export-data` / `read-source` 属只读方法，返回全量 store。
+  正确的收紧方式是"挂载时生成一次性 nonce 注入面板、读写都要求携带"，但插件无法向宿主渲染的
+  客户端 bundle 注入秘密（`settings.section` 只给 React 组件，不给 HTML），因此本轮不采用。
+  手机上的实际边界是平台补丁 + 宿主 `connection`，两者都在时这条不成立。
+- **SSE 32 条上限在 WebView 后台不关连接时可能被耗尽**：需要壳在 `onPause`/销毁时关闭 SSE
+  （README 已列为平台待办），插件侧无法区分"同一个 WebView 重连"与"新客户端"。
+- **真机未验证**：`sharing` 面板取消后的临时文件清理、`AndroidManifest` 的 `allowBackup`
+  （决定 rootfs 里的指令与形象是否会被自动备份上云）、cleartext 配置、Doze 下的 SSE、字号与深色。
+- README 里「无 `--patch` 时鉴权回退成仅回环、无鉴权」这句现在限定为**宿主自带路由**：
+  1.6.3 起插件自己也会调 `connection.requestRejection`，只要 `connection` 服务在树里，
+  本插件路由仍要求登录 cookie。
+
 ## [1.6.3] — 2026-11-20
 
 第三轮审计（技术方案评审团：架构 / 应用安全 / 验收三条线）的修复批次。**一条阻断级缺陷**：

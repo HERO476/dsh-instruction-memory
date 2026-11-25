@@ -1,6 +1,6 @@
 {
   "name": "dsh-instruction-memory",
-  "version": "1.6.3",
+  "version": "1.6.5",
   "description": "User-only instruction memory for DSH: long-term instructions maintained in the settings UI and auto-injected into every conversation — the plugin registers no model-facing tool, so the model has no in-plugin write path (a same-permission process can still edit the file directly). 指令记忆：只由用户在设置页维护的长期指令，自动注入此后每轮对话；插件不注册任何面向模型的工具，模型没有插件内的写入口。",
   "license": "MIT",
   "type": "module",
@@ -65,7 +65,7 @@
   "author": "huangpeiyan",
   "scripts": {
     "lint": "node lint.mjs",
-    "test": "node lint.mjs && node host-range-test.mjs && node section-order-test.mjs && node smoke-test.mjs && node contract-test.mjs && node verify.mjs && node feedback-test.mjs && node ui-test.mjs",
+    "test": "node test-all.mjs",
     "prepublishOnly": "node check-metadata.mjs && npm test",
     "smoke:hosts": "node live-host-smoke.mjs"
   },

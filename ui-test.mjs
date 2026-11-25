@@ -942,7 +942,24 @@ check('panel: reload keeps the panel alive', hasText(tree, '指令记忆') || ha
   // suite parses it, so these helpers must too.
   const routeJson = async (request) => JSON.parse((await rawRoute(JSON.stringify(request))).body)
   const exported = await routeJson({ method: 'export-data' })
-  const payloadText = JSON.stringify(exported.export ?? {})
+  // The probe file is the plugin's own export PLUS one entry that is not in the
+  // store yet: importing a verbatim export de-duplicates to "nothing new" and
+  // never bumps rev, which would make "the merge happened" unobservable.
+  const payload = exported.export !== undefined && exported.export !== null ? exported.export : {}
+  const withProbe = JSON.parse(JSON.stringify(payload))
+  if (withProbe.data === undefined || withProbe.data === null) withProbe.data = {}
+  if (!Array.isArray(withProbe.data.entries)) withProbe.data.entries = []
+  withProbe.data.entries.push({
+    id: '',
+    title: 'IMPORT-CONFIRM-PROBE',
+    content: 'probe body',
+    mode: 'always',
+    when: '',
+    priority: 1,
+    enabled: true,
+    updatedAt: 0,
+  })
+  const payloadText = JSON.stringify(withProbe)
   const makeFile = () => ({ size: payloadText.length, text: async () => payloadText })
   const importInput = (node) => anyElement(node, (element) => element.props !== undefined && element.props.type === 'file')
   const revNow = async () => (await routeJson({ method: 'state' })).snapshot.data.rev
@@ -961,8 +978,10 @@ check('panel: reload keeps the panel alive', hasText(tree, '指令记忆') || ha
   check('import: the merge asks for confirmation first', asked === 1, 'confirm called ' + asked + ' time(s)')
   check('import: cancelling the confirmation writes nothing', await revNow() === revBefore)
 
-  // No dialog at all: askConfirm returns CONFIRM_UNAVAILABLE, which must refuse
-  // rather than merge silently.
+  // No dialog at all: askConfirm returns CONFIRM_UNAVAILABLE. Since 1.6.4 that
+  // no longer means "refused and forgotten" — the question moves into the panel
+  // (the DSH Go WebView cannot show window.confirm but must still be able to
+  // import). What must NOT happen is a silent merge.
   const savedConfirm = globalThis.window.confirm
   delete globalThis.window.confirm
   tree = await settle()
@@ -973,10 +992,90 @@ check('panel: reload keeps the panel alive', hasText(tree, '指令记忆') || ha
     await new Promise((resolve) => setTimeout(resolve, 150))
     tree = await settle()
   }
-  check('import: with no dialog the merge is refused, not performed', await revNow() === revBefore)
-  check('import: the refusal explains itself',
-    texts(tree).join(' ').includes('无法弹出确认对话框'),
+  check('import: with no dialog the merge is not performed silently', await revNow() === revBefore)
+  // The in-panel confirmation: the action is parked, visible, and needs a tap.
+  check('import: the question is parked in the panel instead of dropped',
+    buttons(tree, '确认').length === 1,
+    JSON.stringify(texts(tree).filter((line) => line.includes('导入')).slice(0, 2)))
+  check('import: the parked question carries the import wording',
+    texts(tree).join(' ').includes('触发词'),
     texts(tree).join(' ').slice(0, 200))
+  // Answering it runs the action through the same path (confirm:true reaches
+  // the host), which is what a phone user could never reach before.
+  tree = await click(tree, '确认')
+  const afterConfirm = await routeJson({ method: 'state' })
+  check('import: confirming in the panel performs the merge',
+    afterConfirm.snapshot.data.rev !== revBefore,
+    'rev=' + afterConfirm.snapshot.data.rev + ' before=' + revBefore
+      + ' entries=' + afterConfirm.snapshot.data.entries.length
+      + ' panel=' + texts(tree).filter((line) => line.includes('导入') || line.includes('失败') || line.includes('确认')).slice(0, 3).join(' | '))
+  globalThis.window.confirm = savedConfirm
+}
+
+/* ---------------- 1.6.5: the delete button really deletes ---------------- */
+
+// 1.6.4 shipped `if (confirmThen(msg, () => { …send… })) return` with nothing
+// after the guard. `confirmThen` returns false when a REAL dialog said yes and
+// does not call the closure, so on desktop and in the browser the button became
+// a silent no-op — and 140 other assertions stayed green because not one of them
+// clicked delete. These two cases are that guard: with a dialog (one delete) and
+// without (parked question, one delete even when the button is hit twice).
+{
+  const routeJson = async (request) => JSON.parse((await rawRoute(JSON.stringify(request))).body)
+  const entriesNow = async () => (await routeJson({ method: 'state' })).snapshot.data.entries
+  const savedConfirm = globalThis.window.confirm
+
+  // A working dialog: the action must run from inside confirmThen, not from a
+  // closure the guard is supposed to call (1.6.4's silent no-op).
+  globalThis.window.confirm = () => true
+  const before = await entriesNow()
+  check('delete: the store has an entry to remove', before.length > 0, String(before.length))
+  let tree = await settle()
+  // "删除" alone is ambiguous here (set delete, snapshot delete, batch delete):
+  // the row button carries an aria-label naming its target. Match the label
+  // PREFIX, not a title — earlier cases switch the active set, so the rows on
+  // screen are the "工作" set's, not the first fixture's.
+  const rowDelete = (node) => anyElement(node, (el) => el.type === 'button'
+    && typeof el.props['aria-label'] === 'string'
+    && el.props['aria-label'].startsWith('删除指令'))
+  const rowDeletes = rowDelete(tree) === undefined ? [] : [rowDelete(tree)]
+  check('delete: a row exposes the delete button', rowDeletes.length > 0, String(rowDeletes.length))
+  if (rowDeletes.length > 0) {
+    rowDeletes[0].props.onClick({ target: {}, preventDefault() {} })
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    tree = await settle()
+  }
+  const afterConfirmed = await entriesNow()
+  check('delete: a confirmed delete removes exactly one entry',
+    afterConfirmed.length === before.length - 1,
+    'before=' + before.length + ' after=' + afterConfirmed.length)
+
+  // B) no dialog: the question parks, and ONE activation runs the action once —
+  // even when the button is activated twice in the same tick.
+  delete globalThis.window.confirm
+  tree = await settle()
+  const beforeNoDialog = await entriesNow()
+  const noDialogDeletes = rowDelete(tree) === undefined ? [] : [rowDelete(tree)]
+  if (noDialogDeletes.length > 0) {
+    noDialogDeletes[0].props.onClick({ target: {}, preventDefault() {} })
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    tree = await settle()
+  }
+  const parked = buttons(tree, '确认')
+  check('delete: with no dialog the question is parked in the panel',
+    parked.length === 1, String(parked.length))
+  if (parked.length === 1) {
+    const target = parked[0]
+    target.props.onClick({ target: {}, preventDefault() {} })
+    target.props.onClick({ target: {}, preventDefault() {} })
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    tree = await settle()
+  }
+  const afterInPanel = await entriesNow()
+  check('delete: a double activation still removes exactly one entry',
+    afterInPanel.length === beforeNoDialog.length - 1,
+    'before=' + beforeNoDialog.length + ' after=' + afterInPanel.length)
+
   globalThis.window.confirm = savedConfirm
 }
 

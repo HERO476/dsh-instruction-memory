@@ -771,9 +771,12 @@ content-type 校验兜底；在**没有**门的 profile 里，1.6.1 起「写方
 - 没有 `connection` 服务时，**所有修改方法返回 503**，拒绝文案说明原因；读操作照常，设置页能
   打开查看。设置页读取快照里的 `security.writeGate`（`fence` / `opt-in` / `refused`），在用户
   动手之前就把这件事显示出来。
-- 单用户设备（Android / DSH Go / 沙箱）若接受该暴露面，设
+- 单用户设备（沙箱 / 自建 headless）若接受该暴露面，设
   `DSH_INSTRUCTION_MEMORY_ALLOW_UNGUARDED_WRITES=1` 后重启，恢复原来的来源标记判据（仍只挡
   浏览器跨站，不是身份校验）。
+  **DSH Go（Android）不适用这一条**：App 内的宿主进程由壳以 `environment().clear()` 启动、
+  只填固定几项变量，用户设不了这个开关（见下文「DSH Go」一节）；手机上的写操作依赖宿主
+  `connection` 服务 + 平台补丁，两者都在时写门是 `fence`，根本不需要这个变量。
 - 真正的边界仍是宿主的 `connection` 服务；或设 `DSH_INSTRUCTION_MEMORY_REQUIRE_AUTH_FENCE=1`
   让整条路由 fail-closed（连只读方法都是 503）。
 
@@ -800,7 +803,7 @@ content-type 校验兜底；在**没有**门的 profile 里，1.6.1 起「写方
 恢复可写时，才设：
 
 ```bash
-# 单用户设备 / 沙箱 / Android，接受该风险时才设
+# 沙箱 / 自建 headless，接受该风险时才设（DSH Go 的 App 内进程设不了这个变量）
 DSH_INSTRUCTION_MEMORY_ALLOW_UNGUARDED_WRITES=1
 ```
 
@@ -886,8 +889,13 @@ DSH Go 给官方 Web 服务器包了一层**构建期补丁** `runtime/patches/r
 上面几节描述的"无鉴权"缺口只适用于桌面端 / 网页端的端口。
 
 ⚠️ 这层保护是**平台属性，不是插件属性**：在 guest shell 里手动 `dsh web`（不带 `--patch`），
-或在 guest 内把内核升级到补丁锚点对不上的版本，鉴权就回退成"仅回环、无鉴权"。判断装机是否
-仍受保护，只看启动命令行里有没有 `--patch /etc/dsh-app/dsh-web.patch.yml`。
+或在 guest 内把内核升级到补丁锚点对不上的版本，**宿主自带路由**的鉴权就回退成"仅回环、无鉴权"。
+判断装机是否仍受保护，只看启动命令行里有没有 `--patch /etc/dsh-app/dsh-web.patch.yml`。
+
+> **1.6.4 更正**：上面这句过去被读成"本插件路由也随之失守"，那是错的。插件拿到 `connection`
+> 服务后**自己**也会对每个请求调用 `connection.requestRejection(req)`（`rejectUntrustedCaller`），
+> 所以只要 `connection` 在服务树里，即使壳层补丁缺席，`/instruction-memory/api` 仍然要求登录
+> cookie；无补丁影响的是宿主自己的路由。真正的兜底仍是 `REQUIRE_AUTH_FENCE=1` 与平台补丁。
 
 ## 兼容性
 
@@ -897,6 +905,14 @@ DSH Go 给官方 Web 服务器包了一层**构建期补丁** `runtime/patches/r
 | --- | --- | --- |
 | **`peerDependencies`**（`@deepseek-ai/dsh-system-prompt`） | **宿主**：`evaluatePluginCompatibility()`（`dsh-app-boot`），在**安装**与 **profile 启动**时执行 | **门禁之一**，不是唯一。1.5.7 起两处实测结论必须同时写在这里：① 门禁读的是**宿主自身版本**（`getDshRuntimeVersion()` → `dsh-app-boot` 的 package.json），并用 `{ includePrerelease: true }` 求值，所以预发布行不会被误判；② 在 `0.2.2-rc.3` 的宿主实现里**存在 `engines.dsh` 时 `peerDependencies` 的区间被忽略**（`dsh-app-boot/src/plugin-compatibility.ts:52`）——也就是说这段 peer 区间可能完全不参与判定，只用来在报错时点名。本仓库仍让两处**逐字节同值**（1.6.1 删掉了无人读取的第三处），就是为了不依赖"到底哪一处生效"。这条已从"真正的门禁"更正：**能证明它生效的只有实测，不能靠读声明推断** |
 | `dsh.engines.dsh` | 插件市场（第三方，服务端读取） | 市场卡片上的兼容性判定与展示 |
+
+> **1.6.5：LIVE GUARD 只断言"运行时版本"，读不到就 SKIP。** `runtime.json` 里的
+> `desktopVersion` 是**桌面壳**版本，而宿主自己的兼容门比较的是 `@deepseek-ai/dsh`。官方装两者
+> 相等，所以这个区别一直没暴露；`DeepSeek Harness Uncensored` 用日历号 `2026.1123.0` 包着一个
+> 在 `app.asar` 里的运行时，guard 曾据此报 `NOT COVERED` 并建议往 `COVERED_LINES` 插一行 2026
+> ——那会把从未启动过的宿主写进声明与市场卡片。现在读不到运行时版本就打印
+> `SKIP … runtime version unavailable`，声明区间不变：**2026.1123.0 属未声明宿主**，
+> 要支持它必须在那个宿主上真跑一次再扩声明。
 | ~~`dsh.compatibility.dsh`~~ | **1.6.1 已删除**：`dsh-app-boot`、`dsh-client-ui-plugin-manager`、`dshmarket` 全树 grep 无读取方 | 曾经只是人类可读的重复声明，留在包里只会让人以为"改了这里就放宽了兼容" |
 
 **1.0.14 之前这里只有后两处，没有 `peerDependencies`**——而宿主的门禁在读到缺失的 `peerDependencies` 时会直接 `return undefined`（`if (!Object.hasOwn(fields, "peerDependencies")) return void 0`），也就是**跳过检查**。换句话说，范围之外的宿主在此之前可以装上而**没有任何拦截或警告**；那串范围当时只是市场元数据，不是门禁。1.0.14 补上 peer 之后，它才真正生效。
@@ -1063,7 +1079,7 @@ DSH Go（Android 客户端）内置的引擎就是**真实 DSH**，锁定 `@deep
 - **双端记忆不共享**：手机与"遥控 PC"各自维护自己的 `memory.json`，没有同步——这是当前形态，
   不是缺陷。
 
-#### Android / WebView 适配（1.5.5 起）
+#### Android / WebView 适配（1.5.5 起，1.6.4 补齐确认与导出）
 
 WebView 不是浏览器：它能把 `window.prompt` 保留成函数却永不弹框，能暴露 `<a download>` 却没有
 下载管线。这两处以前都是**点了没反应、也不报错**，而它们恰好是手机上数据进出口的一半。现在插件侧
@@ -1071,7 +1087,8 @@ WebView 不是浏览器：它能把 `window.prompt` 保留成函数却永不弹�
 
 | 场景 | WebView 上的行为 | 依据 |
 | --- | --- | --- |
-| 导出 | 不再点击一个必然失败的链接，直接把完整 JSON 渲染在面板里（全选即可复制） | `client.js` 的 `isAndroidWebView()` + `exportFallback` 分支 |
+| 导出 | **先**把完整 JSON 渲染在面板里（全选即可复制），再尝试岛通道；桥只算附加通道，提示语是"已发送 N 条、无法确认是否落地"，不再谎报"已交给 DSH Go 保存"。分块按 UTF-8 **字节**（12 KiB/条），中文不再超过 16 KB 上限 | `client.js` 的 `isAndroidWebView()` / `splitByBytes()` / `exportFallback` 分支 |
+| 删除 / 导入 / 恢复 / 历史回滚 | `window.confirm` 在该形态下**存在但恒返回 false**（不弹框），旧代码把它读成"用户取消"，八类操作因此静默无效且没有提示。1.6.4 起判为"问不了"，把问题**停到面板内确认条**（【确认】/【取消】），确认后重放同一处理函数——手机上现在真的能删、能导入 | `confirmDialogsAreTrustworthy()` + `confirmThen()` + `pendingConfirm` |
 | 导入 / 从备份恢复 | **壳已实现文件选择**（`island_handle.dart:197` 的 `_files.attach()` → `web_file_chooser.dart:26` 的 `setOnShowFileSelector` → 原生 `dsh/web-files` 通道，content:// 校验 + 按文档代际取消）；面板那行提示只是兜底：页面不是 http(s)、`canChoose()` 为假、或旧版 App 时，请改用「源码模式」粘贴 JSON | 2026-11-12 读 DSH Go 源码确认 |
 | 批量加标签 | 不再调用 `window.prompt`：WebView 返回的 `null` 被判为"问不了"，直接走内联输入框 | `batchTagOutcome(..., { nullMeansUnavailable: true })` |
 | 实时更新 | 连续 6 次（≈30 秒）订阅失败后显示「实时更新已断开，请重新载入」；收到下一帧自动清除 | `source.onerror` 计数 |
@@ -1082,16 +1099,25 @@ WebView 不是浏览器：它能把 `window.prompt` 保留成函数却永不弹�
 1. **保存/分享桥**：`<a download>` 的 `blob:` 字节 WebView 不会交给 `DownloadListener`，插件无法
    自救。壳已有 `DshGoIsland` 通道和 `share_plus`，但没有任何"把这段文本存成文件"的消息类型 →
    要新增一条（注意 island 消息协议上限只有 **16 KB**，`IslandMessageLimits.maxBytes`，而一次导出
-   可达 MB 级，必须分块）。
-2. **`onJsPrompt`**：webview_flutter 不暴露 JS 对话框，壳也没包 `WebChromeClient`；插件已改走内联
-   表单，所以**这是可选项**，不做也不影响功能。
+   可达 MB 级，必须分块）。**1.6.4 已完成插件侧的一半**：分块改为按 UTF-8 字节（12 KiB/条，
+   不再按 6000 字符，后者对中文是 18 KB）、导出**先**把完整 JSON 渲染在面板里、桥只作为附加通道
+   并如实显示"已发送 N 条，无法确认是否落地"。**壳侧仍然缺 `{t:'save'}` 的处理**，所以 stock App
+   上导出依旧只能走面板复制；`island_messages.dart` 对未知 `t` 返回 null 并丢弃。
+2. **`onJsPrompt` / `onJsConfirm`**：webview_flutter 不暴露 JS 对话框，壳也没包 `WebChromeClient`。
+   1.6.4 起插件不再依赖它们：`window.confirm` 在该形态下**存在但恒返回 false**，插件用
+   `confirmDialogsAreTrustworthy()`（UA + `DshGoIsland` 双判据）把它判成"问不了"，
+   删除/导入/恢复改走**面板内确认条**并在确认后重放同一处理函数。壳补对话框已非必需。
 3. **环境变量白名单**：壳会 `environment().clear()` 后逐项填（`DshProcess.kt:172-188`），加一个
    `DSH_INSTRUCTION_MEMORY_ALLOW_EXTERNAL_BACKUP=1` 就能让备份目录走出 rootfs。
+   `DSH_INSTRUCTION_MEMORY_ALLOW_UNGUARDED_WRITES` / `REQUIRE_AUTH_FENCE` 同理——**这三个变量
+   在手机上用户设不了**，文档里不能再把它们当作手机的补救手段。
 4. **WebView 销毁/后台时关闭 SSE**，否则半开连接会占满 32 条上限。
 
 **纵深开关**：Android 的回环是全机共享的，没有宿主鉴权门时"仅回环"不构成边界。设置
 `DSH_INSTRUCTION_MEMORY_REQUIRE_AUTH_FENCE=1` 后，缺少 `connection` 服务的 profile **直接
 503**（fail-closed），宁可设置页打不开，也不留一个可被同机任何 App 改写的长期指令入口。
+**但这个变量在手机上设不了**（壳清空环境变量），所以手机端真实生效的边界仍是平台补丁 +
+宿主 `connection`；`REQUIRE_AUTH_FENCE` 只对自建部署有意义。
 
 > **证据等级**：以上为代码级适配，`adb devices` 在本机为空，**没有任何真机验证**。
 > 真机验收顺序见 `dsh-memory-verification/DSH-VERSION-COMPAT.md`；第一条永远先确认平台门在位

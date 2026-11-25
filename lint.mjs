@@ -81,7 +81,64 @@ for (const file of libFiles) {
   })
 }
 
+/**
+ * R1 (1.6.5): the replay closure must not carry the action's side effect.
+ *
+ * `confirmThen(message, run)` returns FALSE when a real dialog said yes — and it
+ * does NOT call `run`; the caller is expected to continue with its own copy of
+ * the action. So this shape
+ *
+ *     if (confirmThen(msg, () => { send('delete-entry', …) })) return
+ *     }                       // nothing else in the block
+ *
+ * makes the button a silent no-op on every surface with a working dialog
+ * (desktop + browser) while still working on the dialog-less one. That is
+ * exactly what shipped in 1.6.4 for entry delete, and no test caught it because
+ * nothing clicked that button.
+ *
+ * The mechanical rule: `run` may only be a REPLAY entry point (a bare handler
+ * reference or `() => handler(...)`); it may not hold the side effect itself.
+ * A `send(` inside the second argument is therefore a policy failure. Every
+ * call site in this repo passes a replay (`() => handler(...)` or a named local
+ * that the caller also invokes after the guard).
+ */
+function confirmGuardViolations(source) {
+  const out = []
+  const marker = 'confirmThen('
+  let at = source.indexOf(marker)
+  while (at !== -1) {
+    const line = source.slice(0, at).split('\n').length
+    let depth = 0
+    let end = -1
+    for (let i = at + marker.length - 1; i < source.length; i += 1) {
+      const ch = source[i]
+      if (ch === '(') depth += 1
+      else if (ch === ')') {
+        depth -= 1
+        if (depth === 0) {
+          end = i
+          break
+        }
+      }
+    }
+    if (end === -1) {
+      out.push({ line, reason: 'unbalanced confirmThen( call' })
+    } else if (/send\s*\(/.test(source.slice(at, end))) {
+      out.push({ line, reason: 'the action (send) lives inside the replay closure — put it after the guard' })
+    }
+    at = source.indexOf(marker, at + 1)
+  }
+  return out
+}
+
+const clientSource = readFileSync(join(LIB_DIR, 'client.js'), 'utf8')
+const guardViolations = confirmGuardViolations(clientSource)
+for (const violation of guardViolations) {
+  policyFailed += 1
+  console.log('FAIL  lib/client.js:' + violation.line + ' ' + violation.reason)
+}
+
 console.log(failed === 0 && policyFailed === 0
-  ? '\nALL PARSE (' + files.length + ' files)' + (policyFailed === 0 ? ', lib/ host-import free' : '')
-  : '\n' + failed + ' FAILED TO PARSE' + (policyFailed === 0 ? '' : ', ' + policyFailed + ' host import(s) in lib/'))
+  ? '\nALL PARSE (' + files.length + ' files)' + (policyFailed === 0 ? ', lib/ host-import free, confirm guards sound' : '')
+  : '\n' + failed + ' FAILED TO PARSE' + (policyFailed === 0 ? '' : ', ' + policyFailed + ' policy problem(s)'))
 process.exit(failed === 0 && policyFailed === 0 ? 0 : 1)

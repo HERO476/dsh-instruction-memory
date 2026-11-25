@@ -33,7 +33,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 
 let failures = 0
 const check = (label, ok, detail) => {
@@ -370,7 +370,20 @@ function installedHostEvidence() {
       const parsed = JSON.parse(readFileSync(path, 'utf8'))
       const version = parsed.desktopVersion
       if (typeof version === 'string' && semver.valid(version) !== null) {
-        desktop.push({ version, source: path })
+        // `desktopVersion` is the DESKTOP SHELL version, not the runtime one the
+        // host's own gate compares (README: the compatibility check reads
+        // `@deepseek-ai/dsh`). An official install keeps the two equal, so this
+        // distinction never showed; a fork can ship a calendar-versioned shell
+        // (`2026.1123.0`) around a runtime that is still inside the range, and
+        // then asserting the shell number is a false negative that also blocks
+        // `prepublishOnly`.
+        const runtime = runtimeVersionBesideManifest(path)
+        desktop.push({
+          version: runtime === null ? version : runtime,
+          shellVersion: version,
+          runtimeKnown: runtime !== null,
+          source: path,
+        })
       }
     } catch {
       // not a desktop install at this path
@@ -385,12 +398,40 @@ function installedHostEvidence() {
       const version = parsed.version
       if (typeof version !== 'string' || semver.valid(version) === null) continue
       if (packages.some((item) => item.version === version)) continue
-      packages.push({ version, source: path })
+      packages.push({ version, shellVersion: version, runtimeKnown: true, source: path })
     } catch {
       // try the next candidate
     }
   }
   return { kind: packages.length > 0 ? 'package' : 'none', items: packages }
+}
+
+/**
+ * The RUNTIME version of the install a `runtime/primary-runtime/runtime.json`
+ * belongs to, or null when this install keeps it inside an archive.
+ *
+ * Layouts seen on this machine: an official install has an unpacked
+ * `resources/app/dsh/node_modules/@deepseek-ai/dsh/package.json` (equal to the
+ * shell version); a fork has only `resources/app.asar` plus
+ * `app.asar.unpacked`, so the number cannot be read without parsing the archive.
+ * Returning null is the honest answer — the LIVE GUARD then says SKIP instead
+ * of asserting a number that is not the one the host gate uses.
+ */
+function runtimeVersionBesideManifest(manifestPath) {
+  const resources = resolve(dirname(manifestPath), '..', '..')
+  // ONLY the runtime package. `resources/app/package.json` is the Electron app
+  // package: on an official build its version equals the runtime's (0.2.2-rc.5),
+  // so reading it looked correct — but a fork ships a calendar-versioned app
+  // package (`2026.1123.0`) around a runtime we cannot see, and that number is
+  // exactly what this guard must NOT feed into the range.
+  const runtime = join(resources, 'app', 'dsh', 'node_modules', '@deepseek-ai', 'dsh', 'package.json')
+  try {
+    const parsed = JSON.parse(readFileSync(runtime, 'utf8'))
+    if (typeof parsed.version === 'string' && semver.valid(parsed.version) !== null) return parsed.version
+  } catch {
+    // unpacked runtime not present: the install keeps it inside app.asar
+  }
+  return null
 }
 
 // Kept for the "no semver implementation" diagnostic above, which only needs to
@@ -523,6 +564,18 @@ for (const host of ['0.1.6-alpha.2', '0.1.7-rc.2', '0.2.1-alpha.1', '0.2.1-alpha
     console.log('SKIP  no installed DSH found to check against')
   }
   for (const item of evidence.items) {
+    // A install whose RUNTIME version cannot be read must not be asserted. Its
+    // `runtime.json` only carries the desktop shell number, and the host's own
+    // gate compares `@deepseek-ai/dsh`; asserting the shell number produced a
+    // false negative on a fork that ships a calendar-versioned shell around a
+    // runtime we cannot see — and that false negative blocked `prepublishOnly`.
+    // Saying "not declared here" is honest; inventing a 2026 range line to make
+    // this green would advertise a host nobody has ever booted.
+    if (item.runtimeKnown === false) {
+      console.log('SKIP  LIVE GUARD (' + evidence.kind + '): runtime version unavailable for [' + item.source + ']'
+        + ' (shell ' + item.shellVersion + ') — not asserting a number the host gate does not use')
+      continue
+    }
     const installed = item.version
     const plain = semver.satisfies(installed, declared)
     const pre = semver.satisfies(installed, declared, { includePrerelease: true })
